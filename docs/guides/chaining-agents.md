@@ -225,6 +225,8 @@ chapter_agent = FlockFactory.create_default_agent(
 
 For truly advanced workflows, you might even chain routers themselves (though this requires careful design). For example, a `FeedbackRetryRouter` could handle immediate retries, and if no feedback is present (success), it could hand off to an `LLMRouter` to decide the *next different* agent.
 
+Just create a new router which is calling both routers in sequence! And even more wild shenanigans are possible!
+
 ---
 
 By understanding and utilizing these different router types, you can move beyond simple linear sequences and build dynamic, intelligent, and robust agent workflows with Flock! 🚀
