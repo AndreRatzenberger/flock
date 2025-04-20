@@ -162,17 +162,25 @@ Version 0.4.0 brings significant enhancements focused on usability, deployment, 
 
 Easily deploy your Flock agents as scalable REST API endpoints. Interact with your agent workflows via standard HTTP requests.
 
+--------------------------------
+
 ### 🖥️ Web UI - Test Flock Agents in the Browser
 
 Test and interact with your Flock agents directly in your browser through an integrated web interface.
+
+--------------------------------
 
 ### ⌨️ CLI Tool - Manage Flock Agents via the Command Line
 
 Manage Flock configurations, run agents, and inspect results directly from your command line.
 
+--------------------------------
+
 ### 💾 Enhanced Serialization - Share, Deploy, and Run Flock Agents by human readable yaml files
 
 Define and share entire Flock configurations, including agents and components, using human-readable YAML files. Load flocks directly from these files for easy deployment and versioning.
+
+--------------------------------
 
 ### ⏱️ Robust Temporal Integration
 
@@ -232,6 +240,8 @@ content_agent = FlockFactory.create_default_agent(
 )
 ```
 
+--------------------------------
+
 ### ✨ Utility: @flockclass Hydrator
 
 Flock also provides conveniences. The @flockclass decorator allows you to easily populate Pydantic models using an LLM:
@@ -262,6 +272,8 @@ async def create_character():
 
 # asyncio.run(create_character())
 ```
+
+--------------------------------
 
 ## 📚 Examples & Tutorials
 
