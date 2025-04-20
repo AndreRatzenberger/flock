@@ -147,8 +147,25 @@ asyncio_default_fixture_loop_scope = "function"
 _sync = "uv sync --dev --all-groups --all-extras"
 _build = "uv build"
 _install = "uv pip install -e ."
+_init = ["_ensure-uv", "_sync-submodules", "_build"]
+_ensure-uv = "python scripts/ensure_uv.py"
+_sync-submodules = "git submodule update --init --recursive"
+_docs-serve = "mkdocs serve"
+_docs-build = "mkdocs build"
+install-showcase = "uv pip install -r examples/requirements.txt"
+update-showcase = """
+cd examples/showcase && \
+git checkout main && \
+git pull origin main && \
+cd ../..
+"""
+
+setup-all = ["_init", "update-showcase", "install-showcase"]
 build = ["_sync", "_build", "_install"]
 collect-code = "python scripts/code_collector.py"
+lint = "ruff check src/flock/* tests/*"
+format = "ruff format src/flock/* tests/*"
+docs = ["_docs-build", "_docs-serve"]
 
 
 [tool.poe.tasks.clean]
