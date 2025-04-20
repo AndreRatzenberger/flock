@@ -182,6 +182,12 @@ Define and share entire Flock configurations, including agents and components, u
 
 --------------------------------
 
+### 💾 New execution flows
+
+Run Flock in batch mode to process multiple inputs at once or in evaluation mode to test agents with different inputs.
+
+--------------------------------
+
 ### ⏱️ Robust Temporal Integration
 
 Flock 0.4.0 introduces first-class support for Temporal.io, enabling you to build truly production-grade, reliable, and scalable agent workflows. Move beyond simple local execution and leverage Temporal's power for:
