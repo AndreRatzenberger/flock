@@ -188,6 +188,49 @@ Flock makes this easy with:
 *   **Declarative Configuration:** Define Temporal timeouts, retry policies, and task queues directly within your `Flock` and `FlockAgent` configurations (YAML or Python).
 *   **Correct Patterns:** Uses Temporal's recommended granular activity execution for better control and visibility.
 *   **Clear Worker Separation:** Provides guidance and flags for running dedicated Temporal workers, separating development convenience from production best practices.
+  
+Visit the [Temporal Documentation](https://learn.temporal.io/python/workflows/) for more information on how to use Temporal.
+
+Or check out the [Flock Showcase](https://github.com/whiteducksoftware/flock-showcase) for a complete example of a Flock that uses Temporal or our [docs](https://whiteducksoftware.github.io/flock/guides/temporal-configuration/) for more information.
+
+Here's an example of how to configure a Flock to use Temporal:
+
+```python
+from flock.core import Flock, FlockFactory
+
+from flock.workflow.temporal_config import (
+    TemporalActivityConfig,
+    TemporalRetryPolicyConfig,
+    TemporalWorkflowConfig,
+)
+
+# Flock-scoped temporal config
+flock = Flock(
+    enable_temporal=True,
+    temporal_config=TemporalWorkflowConfig(
+        task_queue="flock-test-queue",
+        workflow_execution_timeout=timedelta(minutes=10),
+        default_activity_retry_policy=TemporalRetryPolicyConfig(
+            maximum_attempts=2
+        ),
+    ),
+)
+
+# Agent-scoped temporal config
+content_agent = FlockFactory.create_default_agent(
+    name="content_agent",
+    input="funny_title, funny_slide_headers",
+    output="funny_slide_content",
+    temporal_activity_config=TemporalActivityConfig(
+        start_to_close_timeout=timedelta(minutes=1),
+        retry_policy=TemporalRetryPolicyConfig(
+            maximum_attempts=4,
+            initial_interval=timedelta(seconds=2),
+            non_retryable_error_types=["ValueError"],
+        ),
+    ),
+)
+```
 
 ### ✨ Utility: @flockclass Hydrator
 
