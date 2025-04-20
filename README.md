@@ -65,7 +65,7 @@ Flock's power comes from a few key ideas (Learn more in the [Full Documentation]
 6. **Tool Integration:** Equip agents with standard or custom Python functions (`@flock_tool`) registered via the `FlockRegistry`.
 7. **Registry:** A central place (`@flock_component`, `@flock_type`, `@flock_tool`) to register your custom classes, types, and functions, enabling robust serialization and dynamic loading.
 
-## 💾 Installation (using flock)
+## 💾 Installation - Use Flock in your project
 
 Get started with the core Flock library:
 
@@ -87,7 +87,7 @@ uv pip install flock-core[tools]
 uv pip install flock-core[all]
 ```
 
-## Installation (developing Flock)
+## 🔑 Installation - Develop Flock
 
 ```bash
 git clone https://github.com/whiteducksoftware/flock.git
