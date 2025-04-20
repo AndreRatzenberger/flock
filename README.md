@@ -132,7 +132,7 @@ DEFAULT_MODEL="openai/gpt-4o" # Default LLM if agent doesn't specify
 # VARS_PER_PAGE="20"
 ```
 
-Remember to add .env to your .gitignore!
+Be sure that the .env file is added to your .gitignore!
 
 ## ⚡ Quick Start Syntax
 
