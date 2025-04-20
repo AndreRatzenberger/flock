@@ -94,7 +94,17 @@ git clone https://github.com/whiteducksoftware/flock.git
 cd flock
 
 # One-liner dev setup after cloning
-pip install poethepoet && poe setup-all
+pip install poethepoet && poe install
+```
+
+Additional provided `poe` tasks and commands:
+
+```bash
+poe install # Install the project
+poe build # Build the project
+poe docs # Serve the docs
+poe format # Format the code
+poe lint # Lint the code
 ```
 
 ## 🔑 Environment Setup
