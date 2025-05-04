@@ -3,12 +3,14 @@
 from asyncio import Lock
 from typing import Annotated
 import anyio
-from mcp import ClientNotification, ClientSession
+from mcp import ClientNotification, ClientSession, ListToolsResult
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
 
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
+
+from flock.core.mcp.flock_mcp_tool import FlockMCPTool
 
 logger = get_logger("mcp_client")
 tracer = trace.get_tracer(__name__)
@@ -106,9 +108,50 @@ class FlockMCPCLient(BaseModel):
         async with self.lock:
             self.error_message = message
 
+    # --- MCP Functionality ---
+    async def get_tools(self) -> list[FlockMCPTool] | None:
+        """Get available tools from the server."""
+        # TODO: Tools list changed callback tomorrow (or rather on tuesday).
+        async with self.lock:
+            tools: list[FlockMCPTool] = []
+            try:
+                logger.debug(f"Retrieving tools through client {self}")
+                if self.client_session:
+                    results: ListToolsResult = await self.client_session.list_tools()
+
+                    # Convert the tools into a list of FlockMCPTools
+                    if results.tools:
+                        for t in results.tools:
+                            converted_tool = FlockMCPTool.try_from_mcp_tool(t)
+                            if converted_tool:
+                                tools.append(converted_tool)
+
+                return tools
+            except anyio.ClosedResourceError as closed_on_our_side:
+                logger.error(
+                    f"Exception ocurred during list_tools call for client {self} (Stream closed on our side): {closed_on_our_side}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
+                # TODO: close session. (or reopen it?)
+            except anyio.BrokenResourceError as closed_on_remote_side:
+                logger.error(
+                    f"Exception ocurred during list_tools call for client {self} (Stream closed by remote): {closed_on_remote_side}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
+                # TODO: close session (or reopen it?)
+            except Exception as e:
+                logger.error(
+                    f"Unexpected Exception occurred while attempting to retrieve tools with client {self}: {e}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
+                # TODO: close session. (or reopen it?)
+
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""
-        # TODO: Callback notifcation handling tomorrow.
+        # TODO: Callback notifcation handling tomorrow (or rather on tuesday).
         async with self.lock:
             try:
                 logger.debug(f"Setting roots for client {self} to: {roots}")
@@ -120,6 +163,9 @@ class FlockMCPCLient(BaseModel):
                     )
                     # The actual update will be handled by the list_roots_callback
                     await self.client_session.send_roots_list_changed()
+                # else:
+                    # TODO: Connection reinitialization. (IF needed.)
+                    # await self.init_connection()
             except anyio.ClosedResourceError as closed_on_our_end:
                 # This error indicates that the connection to the remote has been closed from our side.
                 logger.error(
@@ -140,3 +186,4 @@ class FlockMCPCLient(BaseModel):
                 self.is_alive = False
                 self.has_error = True
                 self.error_message = str(e)
+                # TODO: Close connection immediately
