@@ -2,6 +2,7 @@
 
 from asyncio import Lock
 from typing import Annotated
+import anyio
 from mcp import ClientNotification, ClientSession
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
@@ -73,6 +74,38 @@ class FlockMCPCLient(BaseModel):
         """Closes the connection and cleans up. Placeholder for now."""
         pass
 
+    async def get_is_busy(self) -> bool:
+        async with self.lock:
+            return self.is_busy
+
+    async def set_is_busy(self, status: bool) -> None:
+        async with self.lock:
+            self.is_busy = status
+
+    async def get_is_alive(self) -> bool:
+        async with self.lock:
+            return self.is_alive
+
+    async def set_is_alive(self, status: bool) -> None:
+        async with self.lock:
+            self.is_alive = status
+
+    async def get_has_error(self) -> bool:
+        async with self.lock:
+            return self.has_error
+
+    async def set_has_error(self, status: bool) -> None:
+        async with self.lock:
+            self.has_error = status
+
+    async def get_error_message(self) -> str | None:
+        async with self.lock:
+            return self.error_message
+
+    async def set_error_message(self, message: str | None) -> None:
+        async with self.lock:
+            self.error_message = message
+
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""
         # TODO: Callback notifcation handling tomorrow.
@@ -85,4 +118,25 @@ class FlockMCPCLient(BaseModel):
                     self.client_session.send_notification(
                         ClientNotification()
                     )
-                    result = await self.client_session.send_roots_list_changed()
+                    # The actual update will be handled by the list_roots_callback
+                    await self.client_session.send_roots_list_changed()
+            except anyio.ClosedResourceError as closed_on_our_end:
+                # This error indicates that the connection to the remote has been closed from our side.
+                logger.error(
+                    f"Exception Occurred during setting of roots for client {self} (Send stream closed): {closed_on_our_end}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
+            except anyio.BrokenResourceError as broken_on_remote_end:
+                # This error indicates that the connection was terminated from the other side.
+                logger.error(
+                    f"Exception Occurred during setting of roots for client {self} (Remote closed send stream): {broken_on_remote_end}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
+            except Exception as e:
+                logger.error(
+                    f"Unexpected Excpetion occurred during setting of roots for client {self}: {e}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)

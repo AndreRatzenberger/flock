@@ -126,19 +126,20 @@ class FlockMCPConnectionManager(BaseModel):
                 # Let manager handle retries initially
                 await client.connect(retries=0)
 
-                if client.is_alive and not client.has_error:
+                if await client.get_is_alive() and not await client.get_has_error():
                     logger.info(
                         f"Successfully created and connected: {client}")
                     return client
                 else:
+                    message = await client.get_error_message()
                     logger.warning(
-                        f"Connection attempt {attempt + 1} failed for client {client}. Error: {client.error_message}")
+                        f"Connection attempt {attempt + 1} failed for client {client}. Error: {message}")
 
-                    if client.error_message:
-                        last_exception = Exception(client.error_message)
+                    if message := await client.get_error_message():
+                        last_exception = Exception(message)
 
-                    client.is_alive = False
-                    client.has_error = True
+                    await client.set_is_alive(False)
+                    await client.set_has_error(False)
 
                     # Close potentially partially opened resources if client has a close method
                     if hasattr(client, "close") and asyncio.iscoroutinefunction(client.close):
@@ -228,7 +229,7 @@ class FlockMCPConnectionManager(BaseModel):
 
                         if new_client:
                             # Successfully created one
-                            new_client.is_busy = False
+                            await client.set_is_busy(False)
                             self.available_connections.append(new_client)
                             logger.info(
                                 f"Immediately added new client {new_client} to pool.")
@@ -253,17 +254,18 @@ class FlockMCPConnectionManager(BaseModel):
                 client = self.available_connections.pop(0)
 
                 # Check if the client we just retrieved is alive.
-                if client.is_alive and not client.has_error:
+                if await client.get_is_alive() and not await client.get_has_error():
                     # It's alive. Mark it as busy and return it.
-                    client.is_busy = True
+                    await client.set_is_busy(True)
                     self.busy_connections.append(client)
                     logger.debug(f"Handing out client: {client}")
 
                     return client
                 else:
+                    message = await client.get_error_message()
                     # Client is dead/has errors, discard it and trigger replenishment check
                     logger.warning(
-                        f"Found dead/error client {client} in available pool. Discarding: Error: {client.error_message}"
+                        f"Found dead/error client {client} in available pool. Discarding: Error: {message}"
                     )
                     # Don't put it back, just let it be garbage collected
                     # Ensure replenishment is triggered
@@ -284,32 +286,33 @@ class FlockMCPConnectionManager(BaseModel):
                     logger.warning(
                         f"Attempted to release client not in busy list: {client}")
                     # If it's healthy, and somehow not available add it back
-                    if client.is_alive and not client.has_error and client not in self.available_connections:
+                    if await client.get_is_alive() and not await client.get_has_error() and client not in self.available_connections:
                         logger.warning(
                             f"Adding released client {client} back to available pool as it was healthy and not busy/available")
-                        client.is_busy = False
+                        await client.set_is_busy(False)
                         # IMPORTANT: Reset roots
                         await client.set_roots(self.original_roots)
                         self.available_connections.append(client)
                         self.condition.notify(1)
-                    elif not client.is_alive or client.has_error:
+                    elif not await client.get_is_alive() or await client.get_has_error():
                         logger.warning(
                             f"Discarding unhealthy client {client} released but not found in busy list.")
                         self._trigger_replenishment_check()
                     return  # Exit early if not found in busy.
 
                 # If we removed it from busy, proceed to check health
-                client.is_busy = False
+                await client.set_is_busy(False)
 
-                if client.is_alive and not client.has_error:
+                if await client.get_is_alive() and not await client.get_has_error():
                     # Return healthy clients to the pool
                     self.available_connections.append(client)
                     logger.debug(f"Client returned to pool: {client}")
                     self.condition.notify(1)
 
                 else:
+                    message = await client.get_error_message()
                     logger.warning(
-                        f"Released client {client} is dead/has error. Discarding. Error: {client.error_message}")
+                        f"Released client {client} is dead/has error. Discarding. Error: {message}")
                     self._trigger_replenishment_check()
             except Exception as e:
                 logger.error(
