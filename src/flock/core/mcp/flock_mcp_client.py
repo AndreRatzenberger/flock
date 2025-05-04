@@ -1,9 +1,13 @@
 """Wrapper Class for a mcp ClientSession Object"""
 
 from asyncio import Lock
-from typing import Annotated
+import asyncio
+from datetime import timedelta
+from typing import Annotated, Any
 import anyio
-from mcp import ClientNotification, ClientSession, ListToolsResult
+import httpx
+from mcp import ClientNotification, ClientSession, ListToolsResult, McpError
+from mcp.types import CallToolResult
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
 
@@ -11,6 +15,14 @@ from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
 from flock.core.mcp.flock_mcp_tool import FlockMCPTool
+
+# TODO: fine-grained error handling
+# Standard JSON-RPC error codes
+PARSE_ERROR = -32700
+INVALID_REQUEST = -32600
+METHOD_NOT_FOUND = -32601
+INVALID_PARAMS = -32602
+INTERNAL_ERROR = -32603
 
 logger = get_logger("mcp_client")
 tracer = trace.get_tracer(__name__)
@@ -68,6 +80,11 @@ class FlockMCPCLient(BaseModel):
         description="Roots to operate under."
     )
 
+    read_timeout_seconds: timedelta = Field(
+        ...,
+        description="How many seconds to wait until the request times out."
+    )
+
     model_config = {
         "arbitrary_types_allowed": True,
     }
@@ -109,7 +126,21 @@ class FlockMCPCLient(BaseModel):
             self.error_message = message
 
     # --- MCP Functionality ---
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None, read_timeout_seconds: timedelta | None = None):
+        async with self.lock:
+            try:
+                logger.debug(f"Calling tool {name} with args: {arguments}")
+                timeout = read_timeout_seconds
+                if timeout is None:
+                    timeout = self.read_timeout_seconds
+                result: CallToolResult = await self.client_session.call_tool(name=name, arguments=arguments, read_timeout_seconds=timeout)
+
+                content_type = None
+                # TODO: conversion to a format that flock can work with
+            except:
+
     async def get_tools(self) -> list[FlockMCPTool] | None:
+        # TODO: Caching
         """Get available tools from the server."""
         # TODO: Tools list changed callback tomorrow (or rather on tuesday).
         async with self.lock:
@@ -141,6 +172,27 @@ class FlockMCPCLient(BaseModel):
                 self.has_error = True
                 self.error_message = str(e)
                 # TODO: close session (or reopen it?)
+            except McpError as mcp_error:
+                if mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
+                    logger.error(
+                        f"MCP Excpetion ocurred during list_tools call for client {self} (Request timed out.): {mcp_error}")
+                    self.is_alive = True  # On Timeout we dare try again in the future
+                    self.has_error = False
+                    self.error_message = None
+                elif mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
+                    logger.error(
+                        f"MCP Exception ocurred during list_tools call for client {self} (Too many requests or too early to call again): {mcp_error}"
+                    )
+                    self.is_alive = True
+                    self.has_error = False
+                    self.error_message = None
+                else:
+                    logger.error(
+                        f"MCP Exception ocurred during list_tools call for client {self}: {mcp_error}")
+                    self.is_alive = False
+                    self.has_error = True
+                    self.error_message = str(mcp_error)
+
             except Exception as e:
                 logger.error(
                     f"Unexpected Exception occurred while attempting to retrieve tools with client {self}: {e}")
@@ -152,6 +204,7 @@ class FlockMCPCLient(BaseModel):
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""
         # TODO: Callback notifcation handling tomorrow (or rather on tuesday).
+        # TODO: Caching
         async with self.lock:
             try:
                 logger.debug(f"Setting roots for client {self} to: {roots}")
@@ -180,6 +233,26 @@ class FlockMCPCLient(BaseModel):
                 self.is_alive = False
                 self.has_error = True
                 self.error_message = str(e)
+            except McpError as mcp_error:
+                if mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
+                    logger.error(
+                        f"MCP Excpetion ocurred during list_tools call for client {self} (Request timed out.): {mcp_error}")
+                    self.is_alive = True  # On Timeout we dare try again in the future
+                    self.has_error = False
+                    self.error_message = None
+                elif mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
+                    logger.error(
+                        f"MCP Exception ocurred during list_tools call for client {self} (Too many requests or too early to call again): {mcp_error}"
+                    )
+                    self.is_alive = True
+                    self.has_error = False
+                    self.error_message = None
+                else:
+                    logger.error(
+                        f"MCP Exception ocurred during list_tools call for client {self}: {mcp_error}")
+                    self.is_alive = False
+                    self.has_error = True
+                    self.error_message = str(mcp_error)
             except Exception as e:
                 logger.error(
                     f"Unexpected Excpetion occurred during setting of roots for client {self}: {e}")
