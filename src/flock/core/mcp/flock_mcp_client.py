@@ -1,7 +1,9 @@
 """Wrapper Class for a mcp ClientSession Object"""
 
-from mcp import ClientSession
-from pydantic import BaseModel, Field
+from asyncio import Lock
+from typing import Annotated
+from mcp import ClientNotification, ClientSession
+from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
 
 from flock.core.logging.logging import get_logger
@@ -53,6 +55,34 @@ class FlockMCPCLient(BaseModel):
         description="How many times to attempt to establish the connection before giving up."
     )
 
+    lock: Lock = Field(
+        default_factory=Lock,
+        description="Lock for the client. Enabling it to act as a mutex."
+    )
+
+    current_roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None = Field(
+        default=None,
+        description="Roots to operate under."
+    )
+
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+
     async def close(self) -> None:
         """Closes the connection and cleans up. Placeholder for now."""
         pass
+
+    async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
+        """Sets the roots for this Client."""
+        # TODO: Callback notifcation handling tomorrow.
+        async with self.lock:
+            try:
+                logger.debug(f"Setting roots for client {self} to: {roots}")
+                if self.client_session:
+                    # Set the roots
+                    self.current_roots = roots
+                    self.client_session.send_notification(
+                        ClientNotification()
+                    )
+                    result = await self.client_session.send_roots_list_changed()

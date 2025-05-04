@@ -3,9 +3,10 @@
 
 from asyncio import Condition, Lock
 import asyncio
+from contextlib import asynccontextmanager
 import random
-from typing import Literal
-from pydantic import BaseModel, Field
+from typing import Annotated, AsyncIterator, Literal
+from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 from opentelemetry import trace
 
 from mcp import ClientSession
@@ -42,41 +43,60 @@ class FlockMCPConnectionManager(BaseModel):
     )
 
     # --- Internal State ---
-    _available_connections: list[FlockMCPCLient] = Field(
+    available_connections: list[FlockMCPCLient] = Field(
         default=[],
         description="Connections which are capable of handling a request at the moment.",
         exclude=True,
     )
 
-    _busy_connections: list[FlockMCPCLient] = Field(
+    busy_connections: list[FlockMCPCLient] = Field(
         default=[],
         description="Connections which are currently handling a request.",
         exclude=True,
     )
 
-    _lock: Lock = Field(
+    lock: Lock = Field(
         default_factory=Lock,
         description="Lock for mutex access.",
         exclude=True,
     )
 
-    _condition: Condition = Field(
+    condition: Condition = Field(
         default_factory=Condition,
         description="Condition variable to wait for available connections.",
         exclude=True,
     )
 
-    _replenish_task: asyncio.Task | None = Field(
+    replenish_task: asyncio.Task | None = Field(
         default=None,
         description="Task for background replenishment.",
         exclude=True,
         init_var=False,
     )
 
+    original_roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None = Field(
+        default=None,
+        description="The original roots of the managed clients",
+    )
+
     # --- Pydantic v2 Configuratioin ---
     model_config = {
         "arbitrary_types_allowed": True,
     }
+
+    async def initialize(self) -> None:
+        """
+        Initializes the connection Manager and populates the pool.
+        """
+        logger.debug(f"ConnectionManager for {self.server_name} initializing.")
+        try:
+            await self._initialize_pool(self)
+            logger.debug(
+                f"ConnectionManager for {self.server_name} initialized.")
+        except Exception as e:
+            logger.error(f"Exception occurred during pool initialization: {e}")
+            # Re-Throw any exceptions, so the caller knows that something is going on.
+            raise
 
     async def _initialize_pool(self) -> None:
         """
@@ -88,8 +108,8 @@ class FlockMCPConnectionManager(BaseModel):
 
         # Trigger an initial replenishment_check and wait for population of connection pool
         self._trigger_replenishment_check()
-        if self._replenish_task:
-            await self._replenish_task
+        if self.replenish_task:
+            await self.replenish_task
 
     async def _create_new_connection_with_retry(self) -> FlockMCPCLient | None:
         """
@@ -145,25 +165,56 @@ class FlockMCPConnectionManager(BaseModel):
             f"Failed to create connection after retries: {last_exception}") from last_exception
 
     # --- Core Pool Logic ---
+    @asynccontextmanager
+    async def get_client(self) -> AsyncIterator[FlockMCPCLient]:
+        """
+        Provides a client
+        from the pool via an async context manager, ensuring
+        release.
+
+        Usage:
+            async with manager.get_client() as client:
+                # Use the client here
+                tools = await client.get_tools()
+            # Client is automatically released back into the pool here.
+        """
+        client: FlockMCPCLient | None = None
+        try:
+            # Acquire the client using the internal logic
+            client = await self._get_available_client()
+            # Yield the client to the `async with block`
+            yield client
+        except Exception as e:
+            logger.error(
+                f"Exception within get_client context for {client}: {e}", exc_info=True)
+            # Re-raise the exception so the caller knwos something went wrong
+            raise
+        finally:
+            # No matter what happens, clients need to be returned
+            # to the pool
+            if client:
+                logger.debug(
+                    f"Releaseing client via context manager: {client}")
+                await self._release_client(client)
 
     async def _get_available_client(self) -> FlockMCPCLient:
         """
         Retrieves a non-busy, live client from the connection-pool.
         If no client is available, it waits until one is returned or created.
-        Moves the client from the availabel to the busy list.
+        Moves the client from the available to the busy list.
         """
 
-        async with self._condition:
+        async with self.condition:
             while True:
-                while not self._available_connections:
+                while not self.available_connections:
                     # Check if we can create more connections **before** waiting
                     total_connections = len(
-                        self._available_connections) + len(self._busy_connections)
+                        self.available_connections) + len(self.busy_connections)
                     if total_connections < self.max_connections:
                         logger.debug(
                             f"Pool below capacity, attempting to create new connection (current: {total_connections})")
                         # Release the condition briefly to allow creation.
-                        self._condition.release()
+                        self.condition.release()
                         new_client = None
                         try:
                             # Attempt to create one connection immediately if below max
@@ -173,39 +224,39 @@ class FlockMCPConnectionManager(BaseModel):
                                 f"Unexpected error during immediate connection creation: {e}", exc_info=True)
                         finally:
                             # We MUST re-acquire the lock, regardless of outcome
-                            await self._condition.acquire()
+                            await self.condition.acquire()
 
                         if new_client:
                             # Successfully created one
                             new_client.is_busy = False
-                            self._available_connections.append(new_client)
+                            self.available_connections.append(new_client)
                             logger.info(
                                 f"Immediately added new client {new_client} to pool.")
-                            self._condition.notify()  # Notify self/others
+                            self.condition.notify()  # Notify self/others
                         else:
                             # Creation failed or returned None, wait normally.
                             logger.warning(
                                 "Immediate connection creation failed or returned None. Waiting.")
                             # Trigger check just in case, but still wait.
                             self._trigger_replenishment_check()
-                            await self._condition.wait()
+                            await self.condition.wait()
                     else:
                         # Max connections reached, must wait for one to be returned
                         logger.debug(
                             f"Connection pool for server '{self.server_name}' is full ({total_connections}/{self.max_connections})"
                         )
-                        await self._condition.wait()
+                        await self.condition.wait()
                 # We have availabel connections now (or woke up and need to re-check)
-                if not self._available_connections:
+                if not self.available_connections:
                     continue  # Woke up, but someone else grabbed the connection, re-wait
 
-                client = self._available_connections.pop(0)
+                client = self.available_connections.pop(0)
 
                 # Check if the client we just retrieved is alive.
                 if client.is_alive and not client.has_error:
                     # It's alive. Mark it as busy and return it.
                     client.is_busy = True
-                    self._busy_connections.append(client)
+                    self.busy_connections.append(client)
                     logger.debug(f"Handing out client: {client}")
 
                     return client
@@ -224,21 +275,23 @@ class FlockMCPConnectionManager(BaseModel):
         Releases a client back into the available pool and notifies waiting tasks.
         Moves the client from busy to available list. Discards unhealthy clients.
         """
-        async with self._condition:
+        async with self.condition:
             try:
-                if client in self._busy_connections:
-                    self._busy_connections.remove(client)
+                if client in self.busy_connections:
+                    self.busy_connections.remove(client)
                 else:
                     # If not in busy, maybe it was already released or never assigned?
                     logger.warning(
                         f"Attempted to release client not in busy list: {client}")
                     # If it's healthy, and somehow not available add it back
-                    if client.is_alive and not client.has_error and client not in self._available_connections:
+                    if client.is_alive and not client.has_error and client not in self.available_connections:
                         logger.warning(
                             f"Adding released client {client} back to available pool as it was healthy and not busy/available")
                         client.is_busy = False
-                        self._available_connections.append(client)
-                        self._condition.notify(1)
+                        # IMPORTANT: Reset roots
+                        await client.set_roots(self.original_roots)
+                        self.available_connections.append(client)
+                        self.condition.notify(1)
                     elif not client.is_alive or client.has_error:
                         logger.warning(
                             f"Discarding unhealthy client {client} released but not found in busy list.")
@@ -250,9 +303,9 @@ class FlockMCPConnectionManager(BaseModel):
 
                 if client.is_alive and not client.has_error:
                     # Return healthy clients to the pool
-                    self._available_connections.append(client)
+                    self.available_connections.append(client)
                     logger.debug(f"Client returned to pool: {client}")
-                    self._condition.notify(1)
+                    self.condition.notify(1)
 
                 else:
                     logger.warning(
@@ -269,23 +322,23 @@ class FlockMCPConnectionManager(BaseModel):
         """
         logger.info(
             f"Closing all connections in the pool for {self.server_name}")
-        async with self._lock:
+        async with self.lock:
             # Cancel replenishment task first, if running
-            if self._replenish_task and not self._replenish_task.done():
+            if self.replenish_task and not self.replenish_task.done():
                 logger.info("Cancelling background replenishment task.")
-                self._replenish_task.cancel()
+                self.replenish_task.cancel()
                 try:
-                    await self._replenish_task
+                    await self.replenish_task
                 except asyncio.CancelledError:
                     logger.info("Replenishment task successfully cancelled.")
                 except Exception as e:
                     logger.error(
                         f"Error encountered while awaiting cancelled replenishment task: {e}")
-                self._replenish_task = None
+                self.replenish_task = None
 
-            all_connections = self._available_connections + self._busy_connections
-            self._available_connections.clear()
-            self._busy_connections.clear()
+            all_connections = self.available_connections + self.busy_connections
+            self.available_connections.clear()
+            self.busy_connections.clear()
             logger.debug(
                 f"Cleared internal connection lists. Found {len(all_connections)} total connections to close.")
 
@@ -311,19 +364,19 @@ class FlockMCPConnectionManager(BaseModel):
     def _trigger_replenishment_check(self) -> None:
         """Creates a task to check and replenish connections if not already running."""
         # Check if a replenishment task is already scheduled or running
-        if self._replenish_task is None or self._replenish_task.done():
+        if self.replenish_task is None or self.replenish_task.done():
             logger.info(
                 "Triggering background connection replenishment check.")
-            self._replenish_task = asyncio.create_task(
+            self.replenish_task = asyncio.create_task(
                 self._check_and_replenish(), name=f"replenish-{self.server_name}")
-            self._replenish_task.add_done_callback(self._clear_replenish_task)
+            self.replenish_task.add_done_callback(self._clear_replenish_task)
 
     def _clear_replenish_task(self, task: asyncio.Task) -> None:
         """Callback to clear the _replenish_task reference and log errors."""
         # Check fi the task that finished is indeed the one we stored
         # (Handles potential race conditions if trigger is called rapidly)
-        if self._replenish_task is task:
-            self._replenish_task = None
+        if self.replenish_task is task:
+            self.replenish_task = None
             try:
                 # Check if the task failed
                 exception = task.exception()
@@ -345,7 +398,7 @@ class FlockMCPConnectionManager(BaseModel):
         # Short delay to prevend rapid-fire checks if multiple clients die at once
         await asyncio.sleep(0.1)
 
-        async with self._lock:  # Use the primary lock, not condition
+        async with self.lock:  # Use the primary lock, not condition
             await self._ensure_minimum_connections_locked()
 
     async def _ensure_minimum_connections_locked(self):
@@ -356,26 +409,26 @@ class FlockMCPConnectionManager(BaseModel):
         try:
             # Prune dead connections from available list only
             live_available = [
-                c for c in self._available_connections if c.is_alive and not c.has_error]
+                c for c in self.available_connections if c.is_alive and not c.has_error]
             dead_available_count = len(
-                self._available_connections) - len(live_available)
+                self.available_connections) - len(live_available)
             if dead_available_count > 0:
                 logger.warning(
                     f"Pruning {dead_available_count} dead/error connections from available pool")
-                self._available_connections = live_available
+                self.available_connections = live_available
 
             # Count current live connections (available + busy)
             # Assume busy connections are live until proven otherwise by get/release
             current_total_count = len(
-                self._available_connections) + len(self._busy_connections)
+                self.available_connections) + len(self.busy_connections)
 
             # Approximation
             current_live_count = len(live_available) + \
-                len(self._busy_connections)
+                len(self.busy_connections)
 
             logger.debug(
                 f"Checking connections for {self.server_name}"
-                f"{len(self._available_connections)} avail (all live), {len(self._busy_connections)} busy."
+                f"{len(self.available_connections)} avail (all live), {len(self.busy_connections)} busy."
                 f"Total: {current_total_count}. Approx Live: {current_live_count}. Min required: {self.min_connections}"
             )
 
@@ -411,12 +464,12 @@ class FlockMCPConnectionManager(BaseModel):
             ]
 
             # Release the main lock while waiting for connections to be created
-            self._lock.release()
+            self.lock.release()
             try:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
             finally:
                 # We MUST re-acquire the main lock
-                await self._lock.acquire()
+                await self.lock.acquire()
 
             new_clients = []
             failed_count = 0
@@ -436,10 +489,10 @@ class FlockMCPConnectionManager(BaseModel):
                     f"Successfully created {len(new_clients)} new connections for {self.server_name}")
 
                 # Need to acquire condition lock briefly to modify list and notify
-                async with self._condition:
-                    self._available_connections.extend(new_clients)
+                async with self.condition:
+                    self.available_connections.extend(new_clients)
                     # Notify potentiall waiting getters for each new connection added
-                    self._condition.notify(len(new_clients))
+                    self.condition.notify(len(new_clients))
             else:
                 logger.warning(
                     f"Failed to create any new connections for {self.server_name} during replenishment")
@@ -454,5 +507,5 @@ class FlockMCPConnectionManager(BaseModel):
             logger.error(
                 f"Error during _ensure_minimum_connections_locked for {self.server_name}: {e}", exc_info=True)
             # Release lock if held due to excpetion before acquire/release pair
-            if self._lock.locked():
-                self._lock.release()
+            if self.lock.locked():
+                self.lock.release()

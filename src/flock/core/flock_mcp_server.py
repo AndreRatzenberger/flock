@@ -4,10 +4,10 @@
 import asyncio
 import json
 import os
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Type, TypeVar
 
 from flock.core.mcp.flock_mcp_connection_manager import FlockMCPConnectionManager
 from flock.core.mcp.flock_mcp_prompt import MCPPrompt
@@ -16,7 +16,7 @@ from flock.core.mcp.flock_mcp_tool import FlockMCPTool
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 
 from opentelemetry import trace
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
@@ -27,6 +27,7 @@ from flock.core.serialization.serialization_utils import deserialize_component, 
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServer")
+M = TypeVar("M", bound="FlockMCPServerConfig")
 
 
 SingatureType = (
@@ -38,16 +39,77 @@ SingatureType = (
 )
 
 
-class MCPServerConfig(BaseModel):
-    pass
+class FlockMCPServerConfig(BaseModel):
+    """"
+    Base configuration class for Flock MCP Servers
+
+    This class serves as the base for all server-specific configurations.
+    Each Type of Server (Stdio, Websocket, HTTP, GRPC) should
+    define its own config class inheriting from this one.
+    """
+
+    resources_enabled: bool = Field(
+        default=False,
+        description="Whether or not this Server should make resources available to the agents"
+    )
+
+    tools_enabled: bool = Field(
+        default=False,
+        description="Whether or not this Server should provide agents with tools."
+    )
+
+    prompts_enabled: bool = Field(
+        default=False,
+        description="Whether or not this Server should provide agents with prompts."
+    )
+
+    change_mountpoints_enabled: bool = Field(
+        default=False,
+        description="Wheter or not this Server should allow agents to dynamically change their mountpoints."
+    )
+
+    sampling_enabled: bool = Field(
+        default=False,
+        description="Whether or not this Server is capable of using FLock's LLMs to accept Sampling requests from remote servers."
+    )
+
+    @classmethod
+    def with_fields(cls: type[M], **field_definitions) -> type[M]:
+        """Create a new config class with additional fields"""
+        return create_model(
+            f"Dynamic{cls.__name__}", __base__=cls, **field_definitions
+        )
 
 
 class FlockMCPServer(BaseModel, Serializable, ABC):
-    """Core, declarative base class for Flock-MCP Servers, enabling serialization,
-    modularity, and integration with flock agents and flock modules.
-    Inherits from Pydantic BaseModel, ABC, and Serializable.
+    """
+    Base class for all Flock MCP Server Types.
+
+    Servers serve as an abstraction-layer between the underlying MCPClientSession
+    which is the actual connection between Flock and a (remote) MCP-Server.
+
+    Servers hook into the lifecycle of their assigned agents and take care 
+    of establishing sessions, getting and converting tools and other functions
+    without agents having to worry about the details.
+
+    Tools (if provided) will be injected into the list of tools of any attached 
+    agent automatically.
+
+    Servers provide lifecycle-hooks (`initialize`, `get_tools`, `get_prompts`, `list_resources`, `get_resource_contents`, `set_roots`, etc)
+    which allow modules to hook into them. This can be used to modify data or 
+    pass headers from authentication-flows to a server.
+
+    Each Server should define its configuration requirements either by:
+    1. Creating a subclass of FlockMCPServerConfig
+    2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
     name: str = Field(..., description="Unique identifier for the server")
+
+    initialized: bool = Field(
+        default=False,
+        exclude=True,
+        description="Whether or not this Server has already initialized."
+    )
 
     description: str | Callable[..., str] | None = Field(
         "",
@@ -75,35 +137,16 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         description="Underlying Connection Manager. Handles the actual underlying connections to the server."
     )
 
-    input: SingatureType = Field(
-        None,
-        description=("Signature for input keys. Supports type hints (:) and descriptions (|)."
-                     "E.g. 'query: str | Search query, context: dict | Conversation context'. Can be a callable."
-                     ),
-    )
-
-    output: SingatureType = Field(
-        None,
-        description=(
-            "Signature for output keys. Supports type hints (:) and descriptions (|)."
-            "E.g. 'result: str | Generated result, summary: str | Brief summary'. Can be a callable."
-        ),
-    )
-
     def __init__(
         self,
         name: str,
         description: str | Callable[..., str] | None = "",
-        input: SingatureType = None,
-        output: SingatureType = None,
         # Use dict for modules
         modules: dict[str, "FlockModule"] | None = None,
         **kwargs
     ):
         super().__init__(
             name=name,
-            input=input,
-            output=output,
             description=description,
             modules=modules if modules is not None else {},
         )
@@ -140,58 +183,28 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         return [m for m in self.modules.values() if m.config.enabled]
 
     # --- Lifecycle Hooks ---
-    async def connect(self) -> None:
-        """Establish a connection with an MCP-Server"""
-        pass
+    async def list_resources() -> list[FlockMCPResource] | None:
+        """
+        Documentation: 
+            https://modelcontextprotocol.io/docs/concepts/resources
+        Summary:
+            Resources represent any kind of data that an MCP Server wants to make available to
+            clients. This can include:
+            - File contents
+            - Database records
+            - API responses
+            - Live system data
+            - Screenshots and images
+            - Log files
+            - And more
 
-    async def make_mcp_call(self) -> None:
-        """Make a MCP-Protocol call."""
-        pass
+            Each resource is identified by a unique URI and can contain either text or binary data.
 
-    async def initialize(self) -> None:
-        """Initialize the server."""
+            Resources are identified using URIs that follow the format: [protocol]://[host]/[path]
 
-    async def get_tools(self) -> list[FlockMCPTool] | None:
-        """Get available tools"""
-        try:
-            tools_for_this_server: list[FlockMCPTool] | None = await self.connection_manager.get_tools()
-            if not tools_for_this_server:
-                logger.warning(
-                    f"Attempted to retrieve tools for server '{self.name}' but got no results."
-                )
-            return tools_for_this_server
-
-        except Exception as e:
-            logger.error(
-                f"Error while attempting to retrieve tools from server '{self.name}': {e}")
-            return None
-
-    async def get_available_resources(self) -> list[FlockMCPResource] | None:
-        """Get a list of available resources from the server."""
-        pass
-
-    async def get_mountpoints(self) -> list[str] | None:
-        """Get the current mountpoints for the server."""
-        pass
-
-    async def set_mountpoints(self) -> list[str] | None:
-        """Set the mountpoints for the server."""
-        pass
-
-    async def add_mountpoint(self) -> str | None:
-        """Add a mountpoint to the server."""
-        pass
-
-    async def remove_mountpoint(self) -> str | None:
-        """Remove a mountpoint from the server."""
-        pass
-
-    async def get_prompts(self) -> list[MCPPrompt] | None:
-        """Get a list of available prompts from the server."""
-        pass
-
-    async def sample(self) -> None:
-        """Runs when a remote server requests a sample from the agent."""
+            The protocol and path structure is defined by the MCP server implementation.
+            Servers can define their own custom URI schemes.
+        """
         pass
 
     @classmethod
