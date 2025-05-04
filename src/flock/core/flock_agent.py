@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from flock.core.flock_mcp_server import FlockMCPServer
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -88,6 +89,13 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             description="List of callable tools the agent can use. These must be registered.",
         )
     )
+    servers: list[FlockMCPServer] | None = (
+        Field(
+            default=None,
+            description="List of MCP Servers the agent can use to enhance its capabilities. These must be registered."
+        )
+    )
+
     write_to_file: bool = Field(
         default=False,
         description="Write the agent's output to a file.",
@@ -132,9 +140,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
+        servers: list[FlockMCPServer] | None = None,
         evaluator: "FlockEvaluator | None" = None,
         handoff_router: "FlockRouter | None" = None,
-        modules: dict[str, "FlockModule"] | None = None,  # Use dict for modules
+        # Use dict for modules
+        modules: dict[str, "FlockModule"] | None = None,
         write_to_file: bool = False,
         wait_for_input: bool = False,
         temporal_activity_config: TemporalActivityConfig | None = None,
@@ -147,6 +157,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             input=input,  # Store the raw input spec
             output=output,  # Store the raw output spec
             tools=tools,
+            servers=servers,
             write_to_file=write_to_file,
             wait_for_input=wait_for_input,
             evaluator=evaluator,
@@ -293,6 +304,39 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                     # Ensure tools are actually retrieved/validated if needed by evaluator type
                     # For now, assume evaluator handles tool resolution if necessary
                     registered_tools = self.tools
+
+                # Retrieve available mcp_tools if the evaluator needs them
+                registered_mcp_tools = []
+                if self.servers:
+                    # Ensure tools are actually retrieved/validated if needed by evaluator type
+                    # For now, assume evaluator handles tool resolution if necessary
+                    for server in self.servers:
+                        logger.debug(
+                            f"Retrieving list of available tools from server '{server.name}' for agent '{self.name}'")
+                        server_tools = await server.get_tools()
+                        if server_tools:
+                            for mcp_tool in server_tools:
+                                try:
+                                    conversion_result: Callable[..., Any] = mcp_tool.convert_to_callable(
+                                    )
+                                    if conversion_result:
+                                        registered_mcp_tools.append(
+                                            conversion_result)
+                                    else:
+                                        logger.warning(
+                                            f"Conversion of mcp tool '{mcp_tool.name}' of server '{server.name}' to callable for agent '{self.name}' resulted in no result. Skipping..."
+                                        )
+                                        continue  # Ignore it.
+                                except Exception as e:
+                                    logger.error(
+                                        f"Unable to convert mcp tool of server '{server.name}' to callable for agent '{self.name}'. Skipping..."
+                                    )
+                                    continue  # Skip over tools that cannot be converted to enable the agent to continue on
+                        else:
+                            continue  # Skip, if the server does not provide any tools
+
+                # Merge the list of registered tools with the list of mcp tools
+                registered_tools = registered_tools + registered_mcp_tools
 
                 result = await self.evaluator.evaluate(
                     self, current_inputs, registered_tools
@@ -560,7 +604,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         FlockRegistry = get_registry()
 
-        exclude = ["context", "evaluator", "modules", "handoff_router", "tools"]
+        exclude = ["context", "evaluator",
+                   "modules", "handoff_router", "tools"]
 
         is_descrition_callable = False
         is_input_callable = False
@@ -652,6 +697,22 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             logger.debug(
                 f"Added {len(serialized_modules)} modules to agent '{self.name}'"
             )
+
+        # --- Serialize Servers ---
+        if self.servers:
+            logger.debug(
+                f"Serializing {len(self.servers)} servers for agent '{self.name}'"
+            )
+            serialized_servers = []
+            for server in self.servers:
+                # Write it down as a list of server names.
+                serialized_servers.append(server.name)
+
+            if serialized_servers:
+                data["servers"] = serialized_servers
+                logger.debug(
+                    f"Added {len(serialized_servers)} servers to agent '{self.name}'"
+                )
 
         # --- Serialize Tools (Callables) ---
         if self.tools:
@@ -746,6 +807,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         component_configs = {}
         callable_configs = {}
         tool_config = []
+        servers_config = []
         agent_data = {}
 
         component_keys = [
@@ -761,6 +823,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         ]
         tool_key = "tools"
 
+        servers_key = "servers"
+
         for key, value in data.items():
             if key in component_keys and value is not None:
                 component_configs[key] = value
@@ -768,8 +832,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 callable_configs[key] = value
             elif key == tool_key and value is not None:
                 tool_config = value  # Expecting a list of names
+            elif key == servers_key and value is not None:
+                servers_config = value  # Expecting a list of names
             elif key not in component_keys + callable_keys + [
-                tool_key
+                tool_key, servers_key
             ]:  # Avoid double adding
                 agent_data[key] = value
             # else: ignore keys that are None or already handled
@@ -884,6 +950,36 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                         f"Unexpected error resolving tool '{tool_name_or_path}' for agent '{agent.name}': {e}. Skipping.",
                         exc_info=True,
                     )
+
+            # --- Deserialize Servers ---
+            agent.servers = []  # Initialize Servers list.
+            if servers_config:
+                logger.debug(
+                    f"Deserializing {len(servers_config)} servers for '{agent.name}'"
+                )
+                # Ask the registry for registered servers
+                for server_name in servers_config:
+                    try:
+                        from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+                        found_server = registry.get_server(server_name)
+                        if found_server and isinstance(found_server, ConcreteFlockMCPServer):
+                            agent.servers.append(found_server)
+                            logger.debug(
+                                f"Resolved and added server '{server_name}' for agent '{agent.name}'"
+                            )
+                        else:
+                            logger.warning(
+                                f"Registry returned no server instance for server '{server_name}' for agent '{agent.name}'. Skipping..."
+                            )
+                    except ValueError as e:
+                        logger.warning(
+                            f"Could not resolve server '{server_name}' for agent '{agent.name}': {e}. Skipping..."
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Unexpected error resolving server '{server_name}' for agent '{agent.name}': {e}. Skipping...",
+                            exc_info=True,
+                        )
 
         # --- Deserialize Callables ---
         logger.debug(f"Deserializing callable fields for '{agent.name}'")

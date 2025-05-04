@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from flock.core.mcp.flock_mcp_connection_manager import FlockMCPConnectionManager
 from flock.core.mcp.flock_mcp_prompt import MCPPrompt
 from flock.core.mcp.flock_mcp_resource import FlockMCPResource
 from flock.core.mcp.flock_mcp_tool import FlockMCPTool
@@ -63,6 +64,15 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         default=None,
         exclude=True,  # Exclude context from model_dump and serialization
         description="Runtime context associated with the flock execution."
+    )
+
+    # --- Underlying ConnectionManager ---
+    # (Manages a pool of ClientConnections and does the actual talking to the MCP Server)
+    # (Excluded from Serialization)
+    connection_manager: FlockMCPConnectionManager | None = Field(
+        default=None,
+        exclude=True,
+        description="Underlying Connection Manager. Handles the actual underlying connections to the server."
     )
 
     input: SingatureType = Field(
@@ -143,7 +153,18 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
 
     async def get_tools(self) -> list[FlockMCPTool] | None:
         """Get available tools"""
-        pass
+        try:
+            tools_for_this_server: list[FlockMCPTool] | None = await self.connection_manager.get_tools()
+            if not tools_for_this_server:
+                logger.warning(
+                    f"Attempted to retrieve tools for server '{self.name}' but got no results."
+                )
+            return tools_for_this_server
+
+        except Exception as e:
+            logger.error(
+                f"Error while attempting to retrieve tools from server '{self.name}': {e}")
+            return None
 
     async def get_available_resources(self) -> list[FlockMCPResource] | None:
         """Get a list of available resources from the server."""
