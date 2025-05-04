@@ -127,6 +127,19 @@ class FlockMCPCLient(BaseModel):
 
     # --- MCP Functionality ---
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None, read_timeout_seconds: timedelta | None = None):
+        """
+        Wrapper which allows agents to call MCPTools.
+
+        This method should NEVER be called directly.
+        Rather, the results from `get_tools` are converted 
+        into callables with type Callable[..., Any] which 
+        wrap around this method.
+        The agent only sees callables which look like native 
+        code.
+
+        Conversion of types is handled by these wrapper methods
+        rather than the call_tool method.
+        """
         async with self.lock:
             try:
                 logger.debug(f"Calling tool {name} with args: {arguments}")
@@ -135,9 +148,13 @@ class FlockMCPCLient(BaseModel):
                     timeout = self.read_timeout_seconds
                 result: CallToolResult = await self.client_session.call_tool(name=name, arguments=arguments, read_timeout_seconds=timeout)
 
-                content_type = None
-                # TODO: conversion to a format that flock can work with
-            except:
+                return result
+            except Exception as e:
+                logger.error(
+                    f"Unexpected exception ocurred during call_tool call for {self}: {e}")
+                self.is_alive = False
+                self.has_error = True
+                self.error_message = str(e)
 
     async def get_tools(self) -> list[FlockMCPTool] | None:
         # TODO: Caching

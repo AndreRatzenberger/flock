@@ -183,27 +183,75 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         return [m for m in self.modules.values() if m.config.enabled]
 
     # --- Lifecycle Hooks ---
+    async def initialize() -> None:
+        """
+        Called when initializing the server.
+        """
+        pass
+
+    async def communicate_with_server() -> None:
+        """
+        Called just before talking to a server.
+        Great for injecting auth-headers or other
+        additional headers into the request.
+
+        Or even adding additional fields and metadata.
+        """
+        pass
+
+    async def get_tools() -> list[FlockMCPTool] | None:
+        """
+        Returns a list of tools the server provides
+        """
+        pass
+
+    async def handle_error() -> None:
+        """
+        Called when an exception occurs.
+        """
+        pass
+
+    async def call_tool() -> None:
+        """
+        Tool Call wrapper.
+        """
+        pass
+
     async def list_resources() -> list[FlockMCPResource] | None:
         """
-        Documentation: 
-            https://modelcontextprotocol.io/docs/concepts/resources
-        Summary:
-            Resources represent any kind of data that an MCP Server wants to make available to
-            clients. This can include:
-            - File contents
-            - Database records
-            - API responses
-            - Live system data
-            - Screenshots and images
-            - Log files
-            - And more
+        Lists available resources
+        """
+        pass
 
-            Each resource is identified by a unique URI and can contain either text or binary data.
+    async def get_resource_contents() -> None:
+        """
+        Retrieve the contents of a resource.
+        """
+        pass
 
-            Resources are identified using URIs that follow the format: [protocol]://[host]/[path]
+    async def get_roots() -> None:
+        """
+        Lists current roots
+        """
 
-            The protocol and path structure is defined by the MCP server implementation.
-            Servers can define their own custom URI schemes.
+    async def set_roots() -> None:
+        """
+        Sets roots
+        """
+
+    async def get_prompts() -> None:
+        """
+        Lists available prompts
+        """
+
+    async def handle_sampling_request() -> None:
+        """
+        Handles sampling requests
+        """
+
+    async def terminate() -> None:
+        """
+        Called when terminating the server.
         """
         pass
 
