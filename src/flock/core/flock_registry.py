@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from flock.core.flock_evaluator import FlockEvaluator
     from flock.core.flock_module import FlockModule
     from flock.core.flock_router import FlockRouter
+    from flock.core.flock_mcp_server import FlockMCPServer
 
     COMPONENT_BASE_TYPES = (FlockModule, FlockEvaluator, FlockRouter)
 
@@ -41,7 +42,6 @@ else:
     IS_COMPONENT_CHECK_ENABLED = False
 
 # Fallback if core types aren't available during setup
-
 from flock.core.flock_module import FlockModuleConfig
 from flock.core.logging.logging import get_logger
 
@@ -63,6 +63,7 @@ class FlockRegistry:
     _instance = None
 
     _agents: dict[str, FlockAgent]
+    _servers: dict[str, FlockMCPServer]
     _callables: dict[str, Callable]
     _types: dict[str, type]
     _components: dict[str, type]  # For Module, Evaluator, Router classes
@@ -77,6 +78,7 @@ class FlockRegistry:
     def _initialize(self):
         """Initialize the internal dictionaries."""
         self._agents = {}
+        self._servers = {}
         self._callables = {}
         self._types = {}
         self._components = {}
@@ -165,8 +167,35 @@ class FlockRegistry:
                 )
             return f"{module}.{name}"
         except AttributeError:
-            logger.warning(f"Could not determine module/name for object: {obj}")
+            logger.warning(
+                f"Could not determine module/name for object: {obj}")
             return None
+
+    # --- Server Registration ---
+    def register_server(self, server: FlockMCPServer) -> None:
+        """Registers a flock mcp server by its name."""
+        if not hasattr(server, "name") or not server.name:
+            logger.error(
+                "Attempted to register a server without a valid 'name' attribute."
+            )
+            return
+        if server.name in self._servers and self._servers[server.name] != server:
+            logger.warning(
+                f"Server '{server.name}' already registered. Overwriting."
+            )
+        self._servers[server.name] = server
+        logger.debug(f"Registered server: {server.name}")
+
+    def get_server(self, name: str) -> FlockMCPServer | None:
+        """Retrieves a registered FlockMCPServer instance by name."""
+        server = self._servers.get(name)
+        if not server:
+            logger.warning(f"Server '{name}' not found in registry.")
+        return server
+
+    def get_all_server_names(self) -> list[str]:
+        """Returns a list of names for all registered servers."""
+        return list(self._servers.keys())
 
     # --- Agent Registration ---
     def register_agent(self, agent: FlockAgent) -> None:
@@ -209,7 +238,8 @@ class FlockRegistry:
                     f"Callable '{path_str}' already registered with a different function. Overwriting."
                 )
             self._callables[path_str] = func
-            logger.debug(f"Registered callable: '{path_str}' ({func.__name__})")
+            logger.debug(
+                f"Registered callable: '{path_str}' ({func.__name__})")
             return path_str
         logger.warning(
             f"Could not register callable {func.__name__}: Unable to determine path string"
@@ -483,6 +513,8 @@ def get_registry() -> FlockRegistry:
 # Type hinting for decorators to preserve signature
 @overload
 def flock_component(cls: ClassType) -> ClassType: ...  # Basic registration
+
+
 @overload
 def flock_component(
     *, name: str | None = None, config_class: type[ConfigType] | None = None
@@ -526,6 +558,8 @@ def flock_component(
 # Type hinting for decorators
 @overload
 def flock_tool(func: FuncType) -> FuncType: ...
+
+
 @overload
 def flock_tool(
     *, name: str | None = None
@@ -565,6 +599,8 @@ flock_callable = flock_tool
 
 @overload
 def flock_type(cls: ClassType) -> ClassType: ...
+
+
 @overload
 def flock_type(
     *, name: str | None = None
@@ -621,7 +657,8 @@ def _auto_register_by_path():
             component_class = getattr(module, class_name)
             _registry_instance.register_component(component_class)
         except (ImportError, AttributeError) as e:
-            logger.warning(f"{class_name} not found for auto-registration: {e}")
+            logger.warning(
+                f"{class_name} not found for auto-registration: {e}")
 
     # Auto-register standard tools by scanning modules
     tool_modules = [

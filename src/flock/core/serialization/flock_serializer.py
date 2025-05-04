@@ -17,7 +17,8 @@ from pydantic import BaseModel, create_model
 from flock.core.flock_registry import get_registry
 from flock.core.logging.logging import get_logger
 from flock.core.serialization.serialization_utils import (
-    extract_pydantic_models_from_type_string,  # Assuming this handles basic serialization needs
+    # Assuming this handles basic serialization needs
+    extract_pydantic_models_from_type_string,
 )
 
 if TYPE_CHECKING:
@@ -52,8 +53,111 @@ class FlockSerializer:
         )
 
         data["agents"] = {}
+        data["servers"] = {}
         custom_types = {}
         components = {}
+
+        for name, server_instance in flock_instance._servers.items():
+            try:
+                # Servers handle their own serialization via their to_dict method
+                server_data = (
+                    server_instance.to_dict()
+                )
+                data["servers"][name] = server_data
+
+                # --- Extract Types from Server Signatures ---
+                input_types = []
+                if server_instance.input:
+                    input_types = FlockSerializer._extract_types_from_signature(
+                        server_instance.input
+                    )
+                    if input_types:
+                        logger.debug(
+                            f"Found input types in server '{name}': {input_types}"
+                        )
+                output_types = []
+                if server_instance.output:
+                    output_types = FlockSerializer._extract_types_from_signature(
+                        server_instance.output)
+                    if output_types:
+                        logger.debug(
+                            f"Found output types in server '{name}': {output_types}"
+                        )
+                all_types = set(input_types + output_types)
+                if all_types:
+                    custom_types.update(
+                        FlockSerializer._get_type_definitions(all_types)
+                    )
+
+                # --- Extract Component Information ---
+
+                # Modules
+                if "modules" in server_data:
+                    for module_name, module_data in server_data["modules"].items():
+                        if module_data and "type" in module_data:
+                            component_type = module_data["type"]
+                            if component_type not in components:
+                                logger.debug(
+                                    f"Adding module component '{component_type}' from module '{module_name}' in server '{name}'"
+                                )
+                                components[component_type] = (
+                                    FlockSerializer._get_component_definition(
+                                        component_type, path_type
+                                    )
+                                )
+                # Description (Callables)
+                if server_data.get("description_callable"):
+                    logger.debug(
+                        f"Adding description callable '{server_data['description_callable']}' (from path {path_str}) to components."
+                    )
+                    components[description_callable_name] = (
+                        FlockSerializer._get_callable_definition(
+                            path_str, description_callable_name, path_type
+                        )
+                    )
+
+                # Input (Callables)
+                if server_data.get("input_callable"):
+                    logger.debug(
+                        f"Adding input callable '{server_data['input_callable']}' from server '{name}'"
+                    )
+                    input_callable_name = server_data["input_callable"]
+                    input_callable = server_instance.input
+                    path_str = FlockRegistry.get_callable_path_string(
+                        input_callable
+                    )
+                    if path_str:
+                        logger.debug(
+                            f"Adding input callable '{input_callable_name}' (from path '{path_str}') to components."
+                        )
+                        components[input_callable_name] = (
+                            FlockSerializer._get_callable_definition(
+                                path_str, input_callable_name, path_type
+                            )
+                        )
+                # Output (Callables)
+                if server_data.get("output_callable"):
+                    logger.debug(
+                        f"Adding output callable '{server_data['output_callable']}' from server '{name}'"
+                    )
+                    output_callable_name = server_data["output_callable"]
+                    output_callable = server_instance.output
+                    path_str = FlockRegistry.get_callable_path_string(
+                        output_callable
+                    )
+                    if path_str:
+                        logger.debug(
+                            f"Adding output callable '{output_callable_name}' (from path '{path_str}' to components)")
+                        components[output_callable_name] = (
+                            FlockSerializer._get_callable_definition(
+                                path_str, output_callable_name, path_type
+                            )
+                        )
+            except Exception as e:
+                logger.error(
+                    f"Failed to serialize server '{name}' within Flock: {e}",
+                    exc_info=True
+                )
 
         for name, agent_instance in flock_instance._agents.items():
             try:
@@ -218,7 +322,8 @@ class FlockSerializer:
                             tool = tool_objs[i]
                             if callable(tool) and not isinstance(tool, type):
                                 path_str = (
-                                    FlockRegistry.get_callable_path_string(tool)
+                                    FlockRegistry.get_callable_path_string(
+                                        tool)
                                 )
                                 if path_str:
                                     logger.debug(
@@ -492,7 +597,8 @@ class FlockSerializer:
             func = FlockRegistry.get_callable(
                 callable_path
             )  # Raises KeyError if not found
-            callable_def["module_path"] = getattr(func, "__module__", "unknown")
+            callable_def["module_path"] = getattr(
+                func, "__module__", "unknown")
             callable_def["description"] = (
                 inspect.getdoc(func) or f"Callable function {func_name}"
             )
@@ -585,7 +691,8 @@ class FlockSerializer:
             properties = schema.get("properties", {})
             required = schema.get("required", [])
             for field_name, field_schema in properties.items():
-                field_type = FlockSerializer._get_type_from_schema(field_schema)
+                field_type = FlockSerializer._get_type_from_schema(
+                    field_schema)
                 default = ... if field_name in required else None
                 fields[field_name] = (field_type, default)
 

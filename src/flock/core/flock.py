@@ -19,6 +19,8 @@ from typing import (
 from box import Box
 from temporalio import workflow
 
+from flock.core.flock_mcp_server import FlockMCPServer
+
 with workflow.unsafe.imports_passed_through():
     from datasets import Dataset
 
@@ -118,6 +120,9 @@ class Flock(BaseModel, Serializable):
     _start_agent_name: str | None = None  # For potential pre-configuration
     _start_input: dict = {}  # For potential pre-configuration
 
+    # Internal server storage - not part of the Pydantic model for direct serialization
+    _servers: dict[str, FlockMCPServer]
+
     # Pydantic v2 model config
     model_config = {
         "arbitrary_types_allowed": True,
@@ -133,6 +138,7 @@ class Flock(BaseModel, Serializable):
         enable_temporal: bool = False,
         enable_logging: bool | list[str] = False,
         agents: list[FlockAgent] | None = None,
+        servers: list[FlockMCPServer] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
         temporal_start_in_process_worker: bool = True,
         **kwargs,
@@ -156,11 +162,24 @@ class Flock(BaseModel, Serializable):
 
         # Initialize runtime attributes AFTER super().__init__()
         self._agents = {}
+        self._servers = {}
         self._start_agent_name = None
         self._start_input = {}
 
         # Set up logging based on the enable_logging flag
         self._configure_logging(enable_logging)  # Use instance attribute
+
+        # Register passed servers
+        # (need to be registered first so that agents can retrieve them from the registry)
+        if servers:
+            from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+            for server in servers:
+                if isinstance(server, ConcreteFlockMCPServer):
+                    self.add_server(server)
+                else:
+                    logger.warning(
+                        f"Item provided in 'servers' list is not a FlockMCPServer: {type(server)}"
+                    )
 
         # Register passed agents
         if agents:
@@ -238,6 +257,24 @@ class Flock(BaseModel, Serializable):
             session_id = str(uuid.uuid4())
             set_baggage("session_id", session_id)
             logger.debug(f"Generated new session_id: {session_id}")
+
+    def add_server(self, server: FlockMCPServer) -> FlockMCPServer:
+        """Adds a server instance to this Flock configuration and registry."""
+        from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+
+        if not isinstance(server, ConcreteFlockMCPServer):
+            raise TypeError(
+                "Provided object is not a FlockMCPServer instance.")
+        if not server.name:
+            raise ValueError("Server must have a name.")
+
+        if server.name in self._servers:
+            raise ValueError("Server with this name already exists.")
+
+        self._servers[server.name] = server
+        FlockRegistry.register_server(server)  # Register globally.
+        logger.info(f"Server '{server.name}' added to Flock '{self.name}'")
+        return server
 
     def add_agent(self, agent: FlockAgent) -> FlockAgent:
         """Adds an agent instance to this Flock configuration and registry."""
