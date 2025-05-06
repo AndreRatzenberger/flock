@@ -6,6 +6,7 @@ import typing
 from typing import Any, Literal
 
 from flock.core.logging.logging import get_logger
+from flock.core.util.spliter import split_top_level
 
 # Import split_top_level (assuming it's moved or copied appropriately)
 # Option 1: If moved to a shared util
@@ -17,48 +18,6 @@ logger = get_logger("mixin.dspy")
 
 # Type definition for agent type override
 AgentType = Literal["ReAct", "Completion", "ChainOfThought"] | None
-
-
-# Helper function needed by _resolve_type_string (copied from input_resolver.py/previous response)
-def split_top_level(s: str) -> list[str]:
-    """Split a string on commas that are not enclosed within brackets, parentheses, or quotes."""
-    parts = []
-    current = []
-    level = 0
-    in_quote = False
-    quote_char = ""
-    i = 0
-    while i < len(s):
-        char = s[i]
-        # Handle escapes within quotes
-        if in_quote and char == "\\" and i + 1 < len(s):
-            current.append(char)
-            current.append(s[i + 1])
-            i += 1  # Skip next char
-        elif in_quote:
-            current.append(char)
-            if char == quote_char:
-                in_quote = False
-        elif char in ('"', "'"):
-            in_quote = True
-            quote_char = char
-            current.append(char)
-        elif char in "([{":
-            level += 1
-            current.append(char)
-        elif char in ")]}":
-            level -= 1
-            current.append(char)
-        elif char == "," and level == 0:
-            parts.append("".join(current).strip())
-            current = []
-        else:
-            current.append(char)
-        i += 1
-    if current:
-        parts.append("".join(current).strip())
-    # Filter out empty strings that might result from trailing commas etc.
-    return [part for part in parts if part]
 
 
 # Helper function to resolve type strings (can be static or module-level)
@@ -93,20 +52,26 @@ def _resolve_type_string(type_str: str) -> type:
     if generic_match:
         base_name = generic_match.group(1).strip()
         args_str = generic_match.group(2).strip()
-        logger.debug(f"Detected generic pattern: Base='{base_name}', Args='{args_str}'")
+        logger.debug(
+            f"Detected generic pattern: Base='{base_name}', Args='{args_str}'"
+        )
 
         try:
             # Get the base generic type (e.g., list, dict, Optional) from registry/builtins
             BaseType = FlockRegistry.get_type(
                 base_name
             )  # Expects List, Dict etc. to be registered
-            logger.debug(f"Resolved base generic type '{base_name}' to: {BaseType}")
+            logger.debug(
+                f"Resolved base generic type '{base_name}' to: {BaseType}"
+            )
 
             # Special handling for Literal
             if BaseType is typing.Literal:
                 # Split literal values, remove quotes, strip whitespace
                 literal_args_raw = split_top_level(args_str)
-                literal_args = tuple(s.strip().strip("'\"") for s in literal_args_raw)
+                literal_args = tuple(
+                    s.strip().strip("'\"") for s in literal_args_raw
+                )
                 logger.debug(
                     f"Parsing Literal arguments: {literal_args_raw} -> {literal_args}"
                 )
@@ -121,7 +86,9 @@ def _resolve_type_string(type_str: str) -> type:
             if not arg_strs:
                 raise ValueError("Generic type has no arguments.")
 
-            resolved_arg_types = tuple(_resolve_type_string(arg) for arg in arg_strs)
+            resolved_arg_types = tuple(
+                _resolve_type_string(arg) for arg in arg_strs
+            )
             logger.debug(f"Resolved generic arguments: {resolved_arg_types}")
 
             # Construct the generic type hint
@@ -129,7 +96,9 @@ def _resolve_type_string(type_str: str) -> type:
                 if len(resolved_arg_types) != 1:
                     raise ValueError("Optional requires exactly one argument.")
                 resolved_type = typing.Union[resolved_arg_types[0], type(None)]  # type: ignore
-                logger.debug(f"Constructed Optional type as Union: {resolved_type}")
+                logger.debug(
+                    f"Constructed Optional type as Union: {resolved_type}"
+                )
                 return resolved_type
             elif BaseType is typing.Union:
                 if not resolved_arg_types:
@@ -141,7 +110,9 @@ def _resolve_type_string(type_str: str) -> type:
                 BaseType, "__getitem__"
             ):  # Check if subscriptable (like list, dict, List, Dict)
                 resolved_type = BaseType[resolved_arg_types]  # type: ignore
-                logger.debug(f"Constructed subscripted generic type: {resolved_type}")
+                logger.debug(
+                    f"Constructed subscripted generic type: {resolved_type}"
+                )
                 return resolved_type
             else:
                 # Base type found but cannot be subscripted
@@ -221,7 +192,8 @@ class DSPyIntegrationMixin:
             if not fields_string or not fields_string.strip():
                 return
 
-            for field in split_top_level(fields_string):
+            split_fields = split_top_level(fields_string)
+            for field in split_fields:
                 if field.strip():
                     parsed = parse_field(field)
                     if not parsed:
@@ -232,11 +204,15 @@ class DSPyIntegrationMixin:
                     )
 
                     FieldClass = (
-                        dspy.InputField if field_kind == "input" else dspy.OutputField
+                        dspy.InputField
+                        if field_kind == "input"
+                        else dspy.OutputField
                     )
                     # DSPy Fields use 'desc' for description
                     class_dict[name] = (
-                        FieldClass(desc=desc) if desc is not None else FieldClass()
+                        FieldClass(desc=desc)
+                        if desc is not None
+                        else FieldClass()
                     )
 
         try:
@@ -247,11 +223,15 @@ class DSPyIntegrationMixin:
                 f"Error processing fields for DSPy signature '{agent_name}': {e}",
                 exc_info=True,
             )
-            raise ValueError(f"Could not process fields for signature: {e}") from e
+            raise ValueError(
+                f"Could not process fields for signature: {e}"
+            ) from e
 
         # Create and return the dynamic class
         try:
-            DynamicSignature = type("dspy_" + agent_name, (base_class,), class_dict)
+            DynamicSignature = type(
+                "dspy_" + agent_name, (base_class,), class_dict
+            )
             logger.info(
                 f"Successfully created DSPy Signature: {DynamicSignature.__name__} "
                 f"with fields: {DynamicSignature.__annotations__}"
@@ -324,7 +304,9 @@ class DSPyIntegrationMixin:
         try:
             import dspy
         except ImportError:
-            logger.error("DSPy library is not installed. Cannot select DSPy task.")
+            logger.error(
+                "DSPy library is not installed. Cannot select DSPy task."
+            )
             raise ImportError("DSPy is required for this functionality.")
 
         processed_tools = []
@@ -343,7 +325,9 @@ class DSPyIntegrationMixin:
 
         # Determine type if not overridden
         if not selected_type:
-            selected_type = "ReAct" if processed_tools else "Predict"  # Default logic
+            selected_type = (
+                "ReAct" if processed_tools else "Predict"
+            )  # Default logic
 
         logger.debug(
             f"Selecting DSPy program type: {selected_type} (Tools provided: {bool(processed_tools)})"
@@ -366,7 +350,9 @@ class DSPyIntegrationMixin:
                 )
                 dspy_program = dspy.Predict(signature)
 
-            logger.info(f"Instantiated DSPy program: {type(dspy_program).__name__}")
+            logger.info(
+                f"Instantiated DSPy program: {type(dspy_program).__name__}"
+            )
             return dspy_program
         except Exception as e:
             logger.error(
@@ -390,7 +376,9 @@ class DSPyIntegrationMixin:
                 output_dict = dict(result.items())
             elif hasattr(result, "__dict__"):  # Fallback for other object types
                 output_dict = {
-                    k: v for k, v in result.__dict__.items() if not k.startswith("_")
+                    k: v
+                    for k, v in result.__dict__.items()
+                    if not k.startswith("_")
                 }
             else:
                 # If it's already a dict (less common for DSPy results directly)
