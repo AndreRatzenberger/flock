@@ -233,7 +233,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             try:
                 for module in self.get_enabled_modules():
                     await module.on_terminate(
-                        self, inputs, result, self.context
+                        self, inputs, self.context, result
                     )
 
                 if self.write_to_file:
@@ -255,7 +255,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             span.set_attribute("inputs", str(inputs))
             try:
                 for module in self.get_enabled_modules():
-                    await module.on_error(self, error, inputs, self.context)
+                    await module.on_error(self, inputs, self.context, error)
             except Exception as module_error:
                 logger.error(
                     "Error during on_error",
@@ -315,7 +315,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             current_result = result
             for module in self.get_enabled_modules():
                 current_result = await module.on_post_evaluate(
-                    self, current_inputs, current_result, self.context
+                    self,
+                    current_inputs,
+                    self.context,
+                    current_result,
                 )
 
             logger.debug(f"Evaluation completed for agent '{self.name}'")
