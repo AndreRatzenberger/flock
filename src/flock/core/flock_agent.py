@@ -231,13 +231,17 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 agent=self.name,
             )
             try:
+                current_result = result
                 for module in self.get_enabled_modules():
-                    await module.on_terminate(
-                        self, inputs, self.context, result
+                    tmp_result = await module.on_terminate(
+                        self, inputs, self.context, current_result
                     )
+                    # If the module returns a result, use it
+                    if tmp_result:
+                        current_result = tmp_result
 
                 if self.write_to_file:
-                    self._save_output(self.name, result)
+                    self._save_output(self.name, current_result)
 
                 if self.wait_for_input:
                     # simple input prompt
@@ -318,12 +322,15 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             # Post-evaluate hooks
             current_result = result
             for module in self.get_enabled_modules():
-                current_result = await module.on_post_evaluate(
+                tmp_result = await module.on_post_evaluate(
                     self,
                     current_inputs,
                     self.context,
                     current_result,
                 )
+                # If the module returns a result, use it
+                if tmp_result:
+                    current_result = tmp_result
 
             logger.debug(f"Evaluation completed for agent '{self.name}'")
             return current_result
