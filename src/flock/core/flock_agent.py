@@ -239,6 +239,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 if self.write_to_file:
                     self._save_output(self.name, result)
 
+                if self.wait_for_input:
+                    # simple input prompt
+                    input("Press Enter to continue...")
+
             except Exception as module_error:
                 logger.error(
                     "Error during terminate",
