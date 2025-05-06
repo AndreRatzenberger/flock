@@ -76,7 +76,7 @@ class FlockModule(BaseModel, ABC):
         inputs: dict[str, Any],
         context: FlockContext | None = None,
         result: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """Called after agent evaluation, can modify results."""
         return result
 
@@ -86,9 +86,9 @@ class FlockModule(BaseModel, ABC):
         inputs: dict[str, Any],
         context: FlockContext | None = None,
         result: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         """Called when the agent finishes running."""
-        pass
+        return result
 
     async def on_error(
         self,
