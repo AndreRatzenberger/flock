@@ -1,7 +1,7 @@
 import re
 
 
-def _split_fields(spec: str) -> list[str]:
+def split_top_level(spec: str) -> list[str]:
     """Split *spec* on commas that are truly between fields (i.e. that
     are **not** inside brackets, braces, parentheses, string literals,
     or the free-form description).
@@ -79,7 +79,7 @@ def parse_schema(spec: str) -> list[tuple[str, str, str]]:
     """Turn the raw *spec* into List[(name, python_type, description)]."""
     result: list[tuple[str, str, str]] = []
 
-    for field in _split_fields(spec):
+    for field in split_top_level(spec):
         if ":" not in field:
             raise ValueError(f"Malformed field (missing ':'): {field!r}")
 
@@ -114,13 +114,13 @@ if __name__ == "__main__":
     print(f"Sample 2: {SAMPLE_2}")
 
     print("\nSplitting Sample 1:")
-    split_sample_1 = _split_fields(SAMPLE_1)
+    split_sample_1 = split_top_level(SAMPLE_1)
     print(split_sample_1)
     for field in split_sample_1:
         print(parse_schema(field))
 
     print("\nSplitting Sample 2:")
-    split_sample_2 = _split_fields(SAMPLE_2)
+    split_sample_2 = split_top_level(SAMPLE_2)
     print(split_sample_2)
     for field in split_sample_2:
         print(parse_schema(field))

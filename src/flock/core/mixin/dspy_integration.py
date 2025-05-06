@@ -6,6 +6,7 @@ import typing
 from typing import Any, Literal
 
 from flock.core.logging.logging import get_logger
+from flock.core.util.spliter import split_top_level
 
 # Import split_top_level (assuming it's moved or copied appropriately)
 # Option 1: If moved to a shared util
@@ -17,48 +18,6 @@ logger = get_logger("mixin.dspy")
 
 # Type definition for agent type override
 AgentType = Literal["ReAct", "Completion", "ChainOfThought"] | None
-
-
-# Helper function needed by _resolve_type_string (copied from input_resolver.py/previous response)
-def split_top_level(s: str) -> list[str]:
-    """Split a string on commas that are not enclosed within brackets, parentheses, or quotes."""
-    parts = []
-    current = []
-    level = 0
-    in_quote = False
-    quote_char = ""
-    i = 0
-    while i < len(s):
-        char = s[i]
-        # Handle escapes within quotes
-        if in_quote and char == "\\" and i + 1 < len(s):
-            current.append(char)
-            current.append(s[i + 1])
-            i += 1  # Skip next char
-        elif in_quote:
-            current.append(char)
-            if char == quote_char:
-                in_quote = False
-        elif char in ('"', "'"):
-            in_quote = True
-            quote_char = char
-            current.append(char)
-        elif char in "([{":
-            level += 1
-            current.append(char)
-        elif char in ")]}":
-            level -= 1
-            current.append(char)
-        elif char == "," and level == 0:
-            parts.append("".join(current).strip())
-            current = []
-        else:
-            current.append(char)
-        i += 1
-    if current:
-        parts.append("".join(current).strip())
-    # Filter out empty strings that might result from trailing commas etc.
-    return [part for part in parts if part]
 
 
 # Helper function to resolve type strings (can be static or module-level)
