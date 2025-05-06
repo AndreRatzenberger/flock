@@ -110,7 +110,7 @@ class AssertionCheckerModule(FlockModule):
                 # Proceed without judge LM for other rule types
         return self._judge_lm
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],

@@ -208,7 +208,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             )
             try:
                 for module in self.get_enabled_modules():
-                    await module.initialize(self, inputs, self.context)
+                    await module.on_initialize(self, inputs, self.context)
             except Exception as module_error:
                 logger.error(
                     "Error during initialize",
@@ -232,7 +232,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             )
             try:
                 for module in self.get_enabled_modules():
-                    await module.terminate(self, inputs, result, self.context)
+                    await module.on_terminate(
+                        self, inputs, result, self.context
+                    )
 
                 if self.write_to_file:
                     self._save_output(self.name, result)
@@ -281,7 +283,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
             # Pre-evaluate hooks
             for module in self.get_enabled_modules():
-                current_inputs = await module.pre_evaluate(
+                current_inputs = await module.on_pre_evaluate(
                     self, current_inputs, self.context
                 )
 
@@ -312,7 +314,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             # Post-evaluate hooks
             current_result = result
             for module in self.get_enabled_modules():
-                current_result = await module.post_evaluate(
+                current_result = await module.on_post_evaluate(
                     self, current_inputs, current_result, self.context
                 )
 

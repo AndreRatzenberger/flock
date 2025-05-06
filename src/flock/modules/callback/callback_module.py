@@ -57,7 +57,7 @@ class CallbackModule(FlockModule):
         if self.config.initialize_callback:
             await self.config.initialize_callback(agent, inputs)
 
-    async def pre_evaluate(
+    async def on_pre_evaluate(
         self,
         agent: Any,
         inputs: dict[str, Any],

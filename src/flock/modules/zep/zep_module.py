@@ -141,7 +141,7 @@ class ZepModule(FlockModule):
             return []
         return response.results
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
@@ -158,7 +158,7 @@ class ZepModule(FlockModule):
         self.add_to_memory(str(result), zep_client)
         return result
 
-    async def pre_evaluate(
+    async def on_pre_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
