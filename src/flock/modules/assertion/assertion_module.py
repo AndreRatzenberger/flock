@@ -114,8 +114,8 @@ class AssertionCheckerModule(FlockModule):
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Checks rules after the main evaluator runs."""
         if not self.config.rules:

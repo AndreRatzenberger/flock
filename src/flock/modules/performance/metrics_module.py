@@ -231,8 +231,8 @@ class MetricsModule(FlockModule):
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         """Clean up and final metric recording."""
         if self.config.storage_type == "json":
@@ -427,8 +427,8 @@ class MetricsModule(FlockModule):
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Record post-evaluation metrics."""
         if self.config.collect_timing and self._start_time:
