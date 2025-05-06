@@ -230,8 +230,8 @@ class MemoryModule(FlockModule):
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Store results in memory after evaluation."""
         if not self.memory_store:

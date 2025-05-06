@@ -72,8 +72,8 @@ class CallbackModule(FlockModule):
         self,
         agent: Any,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         """Run terminate callback if configured."""
         if self.config.terminate_callback:

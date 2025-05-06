@@ -145,8 +145,8 @@ class ZepModule(FlockModule):
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Format and display the output."""
         if not self.config.enable_write:
