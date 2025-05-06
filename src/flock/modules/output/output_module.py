@@ -131,7 +131,7 @@ class OutputModule(FlockModule):
         )
         return text
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: "FlockAgent",
         inputs: dict[str, Any],

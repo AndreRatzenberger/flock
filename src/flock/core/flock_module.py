@@ -52,7 +52,7 @@ class FlockModule(BaseModel, ABC):
         default_factory=FlockModuleConfig, description="Module configuration"
     )
 
-    async def initialize(
+    async def on_initialize(
         self,
         agent: Any,
         inputs: dict[str, Any],
@@ -61,7 +61,7 @@ class FlockModule(BaseModel, ABC):
         """Called when the agent starts running."""
         pass
 
-    async def pre_evaluate(
+    async def on_pre_evaluate(
         self,
         agent: Any,
         inputs: dict[str, Any],
@@ -70,22 +70,22 @@ class FlockModule(BaseModel, ABC):
         """Called before agent evaluation, can modify inputs."""
         return inputs
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: Any,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Called after agent evaluation, can modify results."""
         return result
 
-    async def terminate(
+    async def on_terminate(
         self,
         agent: Any,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         """Called when the agent finishes running."""
         pass
@@ -93,9 +93,9 @@ class FlockModule(BaseModel, ABC):
     async def on_error(
         self,
         agent: Any,
-        error: Exception,
         inputs: dict[str, Any],
         context: FlockContext | None = None,
+        error: Exception | None = None,
     ) -> None:
         """Called when an error occurs during agent execution."""
         pass

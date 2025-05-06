@@ -68,7 +68,7 @@ class MockModule(FlockModule, Serializable): # Inherit Serializable
         return cls(name=data.get("name", "mock_module"), config=config)
 
     # Mock lifecycle methods if needed for testing interactions
-    async def post_evaluate(self, agent: FlockAgent, inputs: dict[str, Any], result: dict[str, Any], context: FlockContext | None = None) -> dict[str, Any]:
+    async def on_post_evaluate(self, agent: FlockAgent, inputs: dict[str, Any], result: dict[str, Any], context: FlockContext | None = None) -> dict[str, Any]:
         result["mock_module_added"] = self.config.mock_module_param
         return result
 
