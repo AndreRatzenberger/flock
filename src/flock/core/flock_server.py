@@ -13,7 +13,7 @@ from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionM
 from flock.core.mcp.flock_mcp_prompt_base import FlockMCPPromptBase
 from flock.core.mcp.flock_mcp_resource_base import FlockMCPResourceBase
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.serialization.json_encoder import FlockJSONEncoder
+from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
 
 from opentelemetry import trace
 from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, create_model
@@ -86,6 +86,26 @@ class FlockMCPServerConfig(BaseModel):
     mount_points: list[str] | list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] = Field(
         default_factory=list,
         description="The original set of mount points",
+    )
+
+    sampling_callback: SamplingFnT | None = Field(
+        default=None,
+        description="Callback for handling sampling requests."
+    )
+
+    list_roots_callback: ListRootsFnT | None = Field(
+        default=None,
+        description="Callback for handling list_roots request."
+    )
+
+    logging_callback: LoggingFnT | None = Field(
+        default=None,
+        description="Callback for logging."
+    )
+
+    message_handler: MessageHandlerFnT | None = Field(
+        default=None,
+        description="Message Handler Callback."
     )
 
     @classmethod

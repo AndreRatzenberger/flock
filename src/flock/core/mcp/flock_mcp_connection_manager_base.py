@@ -9,9 +9,11 @@ from typing import Annotated, AsyncIterator, Literal
 from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 from opentelemetry import trace
 
-from mcp import ClientSession
+from mcp import ClientSession, StdioServerParameters
 
-from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
+from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
+
+from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
 
 logger = get_logger("mcp_server")
@@ -21,8 +23,13 @@ tracer = trace.get_tracer(__name__)
 class FlockMCPConnectionManagerBase(BaseModel):
     """Handles a Pool of MCPClients."""
 
-    transport_type: Literal["stdio", "websockets", "http"] = Field(
+    transport_type: Literal["stdio", "websockets", "sse"] = Field(
         ..., description="Transport-Type to use for Connections")
+
+    connection_parameters: StdioServerParameters | SseServerParameters | WebSocketServerParameters = Field(
+        ...,
+        description="Connection parameters for the server"
+    )
 
     server_name: str = Field(...,
                              description="Name of the server to connect to.")
@@ -79,6 +86,26 @@ class FlockMCPConnectionManagerBase(BaseModel):
         description="The original roots of the managed clients",
     )
 
+    sampling_callback: SamplingFnT | None = Field(
+        default=None,
+        description="Callback for handling sampling requests."
+    )
+
+    list_roots_callback: ListRootsFnT | None = Field(
+        default=None,
+        description="Callback for handling list_roots request."
+    )
+
+    logging_callback: LoggingFnT | None = Field(
+        default=None,
+        description="Callback for logging."
+    )
+
+    message_handler: MessageHandlerFnT | None = Field(
+        default=None,
+        description="Message Handler Callback."
+    )
+
     # --- Pydantic v2 Configuratioin ---
     model_config = {
         "arbitrary_types_allowed": True,
@@ -125,6 +152,11 @@ class FlockMCPConnectionManagerBase(BaseModel):
                     transport_type=self.transport_type,
                     current_roots=self.original_roots,
                     max_retries=3,
+                    connection_parameters=self.connection_parameters,
+                    sampling_callback=self.sampling_callback,
+                    logging_callback=self.logging_callback,
+                    message_handler=self.message_handler,
+                    list_roots_callback=self.list_roots_callback,
                 )
 
                 # Let manager handle retries initially

@@ -10,6 +10,9 @@ import anyio
 import httpx
 from mcp import ClientNotification, ClientSession, ListToolsResult, McpError, StdioServerParameters
 from mcp.types import CallToolResult
+from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
+from mcp.client.websocket import websocket_client
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
 from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
@@ -31,6 +34,43 @@ logger = get_logger("mcp_client")
 tracer = trace.get_tracer(__name__)
 
 
+class WebSocketServerParameters(BaseModel):
+    """
+    Base Type for Websocket Server params.
+    """
+
+    url: str | AnyUrl = Field(
+        ...,
+        description="Url the server listens at."
+    )
+
+
+class SseServerParameters(BaseModel):
+    """
+    Base Type for SSE Server params
+    """
+
+    url: str | AnyUrl = Field(
+        ...,
+        description="The url the server listens at."
+    )
+
+    headers: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional Headers to pass to the client."
+    )
+
+    timeout: float = Field(
+        default=5,
+        description="Http Timeout."
+    )
+
+    sse_read_timeout: float = Field(
+        default=60*5,
+        description="How long the client will wait before disconnecting from the server."
+    )
+
+
 class FlockMCPClientBase(BaseModel, ABC):
     """
     Wrapper for mcp ClientSession.
@@ -46,12 +86,15 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Internally managed client session."
     )
 
-    transport_type: Literal["stdio", "websockets", "http"] = Field(
+    transport_type: Literal["stdio", "websockets", "sse"] = Field(
         ...,
         description="Type of transport to use."
     )
 
-    connection_parameters: StdioServerParameters,
+    connection_parameters: StdioServerParameters | SseServerParameters | WebSocketServerParameters = Field(
+        ...,
+        description="Connection parameters for the server."
+    )
 
     master_stack: AsyncExitStack | None = Field(
         default=None,

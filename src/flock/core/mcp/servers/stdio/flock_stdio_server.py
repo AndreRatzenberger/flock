@@ -39,7 +39,6 @@ class FlockMCPStdioServerConfig(FlockMCPServerConfig):
 
     args: list[str] = Field(
         ...,
-        default_factory=list,
         description="Command line arguments to pass to the executable."
     )
 
@@ -96,8 +95,20 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
                     self.connection_manager = FlockMCPConnectionManagerBase(
                         transport_type="stdio",
                         server_name=self.config.server_name,
+                        connection_parameters=StdioServerParameters(
+                            command=self.config.command,
+                            args=self.config.args,
+                            env=self.config.env,
+                            encoding=self.config.encoding,
+                            encoding_error_handler=self.config.encoding_error_handler
+                        ),
                         min_connections=1,
                         max_connections=1,
                         max_reconnect_attemtps=self.config.max_restart_attempts,
                         original_roots=self.config.mount_points,
+                        sampling_callback=self.config.sampling_callback,
+                        logging_callback=self.config.logging_callback,
+                        message_handler=self.config.message_handler,
+                        list_roots_callback=self.config.list_roots_callback,
                     )
+            self.condition.notify()
