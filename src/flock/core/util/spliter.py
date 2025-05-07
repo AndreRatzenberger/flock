@@ -2,46 +2,37 @@ import re
 
 
 def split_top_level(spec: str) -> list[str]:
-    """Split *spec* on commas that are truly between fields (i.e. that
-    are **not** inside brackets, braces, parentheses, string literals,
-    or the free-form description).
-
-    Strategy
-    --------
-    1. Single pass, char-by-char.
-    2. Track    • nesting depth for (), [], {}
-                • whether we are inside a quoted string
-    3. Consider a comma a separator *only* if depth == 0, we are not
-       inside quotes **and** the text that follows matches
-       `optional-ws + identifier + optional-ws + ':'`
-       which can only be the start of the next field.
-    """
+    """Return raw field strings, split on *top-level* commas."""
     fields: list[str] = []
     start = 0
     depth = 0
     quote_char: str | None = None
     i = 0
-    ident_re = re.compile(r"[A-Za-z_]\w*")  # cheap Python identifier
+    ident_re = re.compile(r"[A-Za-z_]\w*")  # cheap identifier
 
     while i < len(spec):
         ch = spec[i]
 
-        # ---------------- string handling ----------------
+        # ---------- string handling ----------
         if quote_char:
+            if ch == "\\":
+                i += 2  # skip escaped char
+                continue
             if ch == quote_char:
                 quote_char = None
             i += 1
             continue
 
         if ch in {"'", '"'}:
-            # treat as string delimiter only in places regular Python would
             prev = spec[i - 1] if i else " "
-            if depth or prev.isspace() or prev in "=([{,:":  # likely a quote
+            if (
+                depth or prev.isspace() or prev in "=([{,:"
+            ):  # looks like a quote
                 quote_char = ch
             i += 1
             continue
 
-        # ---------------- bracket / brace / paren ----------------
+        # ---------- bracket / brace / paren ----------
         if ch in "([{":
             depth += 1
             i += 1
@@ -51,23 +42,28 @@ def split_top_level(spec: str) -> list[str]:
             i += 1
             continue
 
-        # ---------------- field separators ----------------
+        # ---------- field separators ----------
         if ch == "," and depth == 0:
             j = i + 1
             while j < len(spec) and spec[j].isspace():
                 j += 1
-            if j < len(spec):
-                id_match = ident_re.match(spec, j)
-                if id_match:
-                    k = id_match.end()
-                    while k < len(spec) and spec[k].isspace():
-                        k += 1
-                    if k < len(spec) and spec[k] == ":":
-                        # confirmed: the comma ends the current field
-                        fields.append(spec[start:i].strip())
-                        start = i + 1
-                        i += 1
-                        continue
+            if j >= len(spec):  # comma at end – split
+                fields.append(spec[start:i].strip())
+                start = i + 1
+                i += 1
+                continue
+
+            id_match = ident_re.match(spec, j)
+            if id_match:
+                k = id_match.end()
+                while k < len(spec) and spec[k].isspace():
+                    k += 1
+                if k >= len(spec) or spec[k] in {":", "|", ","}:
+                    # confirmed: comma separates two fields
+                    fields.append(spec[start:i].strip())
+                    start = i + 1
+                    i += 1
+                    continue
 
         i += 1
 
@@ -76,21 +72,29 @@ def split_top_level(spec: str) -> list[str]:
 
 
 def parse_schema(spec: str) -> list[tuple[str, str, str]]:
-    """Turn the raw *spec* into List[(name, python_type, description)]."""
+    """Turn *spec* into a list of (name, python_type, description)."""
     result: list[tuple[str, str, str]] = []
 
     for field in split_top_level(spec):
-        if ":" not in field:
-            raise ValueError(f"Malformed field (missing ':'): {field!r}")
+        name = ""
+        type_str = "str"  # default type
+        description = ""
 
-        name_part, rest = field.split(":", 1)
-        name = name_part.strip()
-
-        type_part, _, desc_part = rest.partition("|")
-        type_str = type_part.strip()
+        name_part, _, desc_part = field.partition("|")
         description = desc_part.strip()
+        main_part = name_part.strip()
 
-        result.append((name, type_str, description))
+        if ":" in main_part:
+            name, type_candidate = main_part.split(":", 1)
+            name = name.strip()
+            type_candidate = type_candidate.strip()
+            if type_candidate:
+                type_str = type_candidate
+        else:
+            name = main_part  # keeps default type
+
+        if name:  # skip broken pieces
+            result.append((name, type_str, description))
 
     return result
 
@@ -107,20 +111,101 @@ if __name__ == "__main__":
     SAMPLE_2 = (
         "field_with_internal_quotes: Literal['type_A', "
         '"type_B_with_\'_apostrophe"] | A literal with mixed quotes,'
-        " another_field: str"
+        " another_field :str| A field with a description"
     )
 
-    print(f"Sample 1: {SAMPLE_1}")
-    print(f"Sample 2: {SAMPLE_2}")
+    SAMPLE_3 = (
+        "field_with_internal_quotes: Literal['type_A', "
+        '"type_B_with_\'_apostrophe"] | A literal with mixed quotes,'
+        " another_field | A field with a description"
+    )
 
-    print("\nSplitting Sample 1:")
-    split_sample_1 = split_top_level(SAMPLE_1)
-    print(split_sample_1)
-    for field in split_sample_1:
-        print(parse_schema(field))
+    SAMPLE_4 = "input, query, output"
 
-    print("\nSplitting Sample 2:")
-    split_sample_2 = split_top_level(SAMPLE_2)
-    print(split_sample_2)
-    for field in split_sample_2:
-        print(parse_schema(field))
+    SAMPLE_5 = (
+        "name: str | The character's full name,"
+        "race: str | The character's fantasy race,"
+        "class: Literal['mage','thief'] | The character's profession, which can be either mage or thief,"
+        "background: str | A brief backstory for the character"
+    )
+
+    SAMPLE_6 = (
+        "summary: str | A short blurb, e.g. key:value pairs that appear in logs"
+    )
+    # ➜ [('summary', 'str',
+    #     'A short blurb, e.g. key:value pairs that appear in logs')]
+
+    SAMPLE_7 = "path: str | The literal string 'C:\\\\Program Files\\\\My,App'"
+
+    # ➜ [('path', 'str',
+    #     "The literal string 'C:\\Program Files\\My,App'")]
+
+    SAMPLE_8 = (
+        "transform: Callable[[int, str], bool] | Function that returns True on success,"
+        "retries: int | How many times to retry"
+    )
+    # ➜ ('transform', 'Callable[[int, str], bool]', 'Function that returns True on success')
+    #    ('retries',   'int',                         'How many times to retry')
+
+    SAMPLE_9 = (
+        r"regex: str | Pattern such as r'^[A-Z\|a-z]+$',"
+        "flags: int | re flags to use"
+    )
+    # ➜ ('regex', 'str', "Pattern such as r'^[A-Z\\|a-z]+$'")
+    #    ('flags', 'int', 're flags to use')
+
+    SAMPLE_10 = "id:int, name:str,"  # note the final comma!
+    # ➜ ('id', 'int', '')
+    #    ('name', 'str', '')
+
+    SAMPLE_11 = "id:int | Primary key\nname:str | Display name\nactive:bool"
+    # ➜ should not work!
+
+    SAMPLE_12 = (
+        'comment:str | The text "done | failed" goes here,'
+        'status:Literal["done","failed"]'
+    )
+    # ➜ ('comment', 'str',    'The text "done | failed" goes here')
+    #    ('status',  'Literal["done","failed"]', '')
+
+    SAMPLE_13 = "choice: Literal['He said \\'yes\\'', 'no'] | User response"
+    # ➜ ('choice', "Literal['He said \\'yes\\'', 'no']", 'User response')
+
+    SAMPLE_14 = ""
+    # ➜ []
+
+    SAMPLE_15 = "username"
+    # ➜ [('username', 'str', '')]
+
+    SAMPLE_16 = (
+        "payload: dict[str, list[dict[str, tuple[int,str]]]] "
+        "| Arbitrarily complex structure"
+    )
+    # ➜ ('payload', 'dict[str, list[dict[str, tuple[int,str]]]]',
+    #     'Arbitrarily complex structure')
+
+    SAMPLE_17 = "münze: str | Deutsche Münzbezeichnung, engl. 'coin'"
+    # ➜ [('münze', 'str', "Deutsche Münzbezeichnung, engl. 'coin'")]
+
+    for title, spec in [
+        ("Sample-1", SAMPLE_1),
+        ("Sample-2", SAMPLE_2),
+        ("Sample-3", SAMPLE_3),
+        ("Sample-4", SAMPLE_4),
+        ("Sample-5", SAMPLE_5),
+        ("Sample-6", SAMPLE_6),
+        ("Sample-7", SAMPLE_7),
+        ("Sample-8", SAMPLE_8),
+        ("Sample-9", SAMPLE_9),
+        ("Sample-10", SAMPLE_10),
+        ("Sample-11", SAMPLE_11),
+        ("Sample-12", SAMPLE_12),
+        ("Sample-13", SAMPLE_13),
+        ("Sample-14", SAMPLE_14),
+        ("Sample-15", SAMPLE_15),
+        ("Sample-16", SAMPLE_16),
+        ("Sample-17", SAMPLE_17),
+    ]:
+        print(f"\n{title}")
+        for row in parse_schema(spec):
+            print(row)
