@@ -5,10 +5,10 @@ from asyncio import Lock
 import asyncio
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Annotated, Any, Type
+from typing import Annotated, Any, Literal, Type
 import anyio
 import httpx
-from mcp import ClientNotification, ClientSession, ListToolsResult, McpError
+from mcp import ClientNotification, ClientSession, ListToolsResult, McpError, StdioServerParameters
 from mcp.types import CallToolResult
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
@@ -45,6 +45,13 @@ class FlockMCPClientBase(BaseModel, ABC):
         exclude=True,
         description="Internally managed client session."
     )
+
+    transport_type: Literal["stdio", "websockets", "http"] = Field(
+        ...,
+        description="Type of transport to use."
+    )
+
+    connection_parameters: StdioServerParameters,
 
     master_stack: AsyncExitStack | None = Field(
         default=None,

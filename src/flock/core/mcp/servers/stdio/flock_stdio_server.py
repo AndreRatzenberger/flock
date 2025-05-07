@@ -8,6 +8,7 @@ from pydantic import Field
 
 from flock.core.flock_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 from flock.core.serialization.serializable import Serializable
 
 
@@ -63,6 +64,11 @@ class FlockMCPStdioServerConfig(FlockMCPServerConfig):
         description="The text encoding error handler.",
     )
 
+    max_restart_attempts: int = Field(
+        default=3,
+        description="How many times to attempt to restart the server before giving up."
+    )
+
 
 class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
     """
@@ -72,3 +78,26 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
     This means (most likely) that the server is a locally
     executed script.
     """
+
+    config: FlockMCPStdioServerConfig = Field(
+        ...,
+        description="Config for the server."
+    )
+
+    async def initialize(self):
+        """
+        Called when initializing the server
+        """
+        async with self.condition:
+            # Check if we already initialized
+            if not self.initialized:
+                # Initialize the underlying Connection Pool
+                if not self.connection_manager:
+                    self.connection_manager = FlockMCPConnectionManagerBase(
+                        transport_type="stdio",
+                        server_name=self.config.server_name,
+                        min_connections=1,
+                        max_connections=1,
+                        max_reconnect_attemtps=self.config.max_restart_attempts,
+                        original_roots=self.config.mount_points,
+                    )

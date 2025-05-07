@@ -44,13 +44,13 @@ class FlockMCPConnectionManagerBase(BaseModel):
 
     # --- Internal State ---
     available_connections: list[FlockMCPClientBase] = Field(
-        default=[],
+        default_factory=list,
         description="Connections which are capable of handling a request at the moment.",
         exclude=True,
     )
 
     busy_connections: list[FlockMCPClientBase] = Field(
-        default=[],
+        default_factory=list,
         description="Connections which are currently handling a request.",
         exclude=True,
     )
@@ -121,7 +121,11 @@ class FlockMCPConnectionManagerBase(BaseModel):
             logger.info(
                 f"Attempt {attempt + 1}/{self.max_reconnect_attemtps + 1} to create connection to {self.server_name}")
             try:
-                client = FlockMCPClientBase(max_retries=3)
+                client = FlockMCPClientBase(
+                    transport_type=self.transport_type,
+                    current_roots=self.original_roots,
+                    max_retries=3,
+                )
 
                 # Let manager handle retries initially
                 await client.connect(retries=0)

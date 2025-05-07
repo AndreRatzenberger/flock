@@ -7,7 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Type, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Type, TypeVar
 
 from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 from flock.core.mcp.flock_mcp_prompt_base import FlockMCPPromptBase
@@ -16,7 +16,7 @@ from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 
 from opentelemetry import trace
-from pydantic import BaseModel, Field, create_model
+from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, create_model
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
@@ -48,6 +48,16 @@ class FlockMCPServerConfig(BaseModel):
     define its own config class inheriting from this one.
     """
 
+    server_name: str = Field(
+        ...,
+        description="Unique server name"
+    )
+
+    description: str | Callable[..., str] | None = Field(
+        "",
+        description="A human-readable description or a callable returning one."
+    )
+
     resources_enabled: bool = Field(
         default=False,
         description="Whether or not this Server should make resources available to the agents"
@@ -71,6 +81,11 @@ class FlockMCPServerConfig(BaseModel):
     sampling_enabled: bool = Field(
         default=False,
         description="Whether or not this Server is capable of using FLock's LLMs to accept Sampling requests from remote servers."
+    )
+
+    mount_points: list[str] | list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] = Field(
+        default_factory=list,
+        description="The original set of mount points",
     )
 
     @classmethod
@@ -103,7 +118,6 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     1. Creating a subclass of FlockMCPServerConfig
     2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
-    name: str = Field(..., description="Unique identifier for the server")
 
     config: FlockMCPServerConfig = Field(
         ...,
@@ -114,11 +128,6 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         default=False,
         exclude=True,
         description="Whether or not this Server has already initialized."
-    )
-
-    description: str | Callable[..., str] | None = Field(
-        "",
-        description="A human-readable description or a callable returning one."
     )
 
     modules: dict[str, FlockModule] = Field(
@@ -140,6 +149,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         default=None,
         exclude=True,
         description="Underlying Connection Manager. Handles the actual underlying connections to the server."
+    )
+
+    condition: asyncio.Condition = Field(
+        default_factory=asyncio.Condition,
+        exclude=True,
+        description="Condition for asynchronous operations."
     )
 
     def __init__(
@@ -165,7 +180,8 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             logger.warning(f"Overwriting existing module: {module.name}")
 
         self.modules[module.name] = module
-        logger.debug(f"Added module '{module.name}' to server {self.name}")
+        logger.debug(
+            f"Added module '{module.name}' to server {self.config.server_name}")
         return
 
     def remove_module(self, module_name: str) -> None:
@@ -173,10 +189,10 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         if module_name in self.modules:
             del self.modules[module_name]
             logger.debug(
-                f"Removed module '{module_name}' from server '{self.name}'")
+                f"Removed module '{module_name}' from server '{self.config.server_name}'")
         else:
             logger.warning(
-                f"Module '{module_name}' not found on server '{self.name}'")
+                f"Module '{module_name}' not found on server '{self.config.server_name}'")
         return
 
     def get_module(self, module_name: str) -> FlockModule | None:
@@ -188,12 +204,14 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         return [m for m in self.modules.values() if m.config.enabled]
 
     # --- Lifecycle Hooks ---
-    async def initialize() -> None:
+    @abstractmethod
+    async def initialize(self) -> None:
         """
         Called when initializing the server.
         """
         pass
 
+    @abstractmethod
     async def communicate_with_server() -> None:
         """
         Called just before talking to a server.
@@ -204,56 +222,70 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         """
         pass
 
+    @abstractmethod
     async def get_tools() -> list[FlockMCPToolBase] | None:
         """
         Returns a list of tools the server provides
         """
         pass
 
+    @abstractmethod
     async def handle_error() -> None:
         """
         Called when an exception occurs.
         """
         pass
 
+    @abstractmethod
     async def call_tool() -> None:
         """
         Tool Call wrapper.
         """
         pass
 
+    @abstractmethod
     async def list_resources() -> list[FlockMCPResourceBase] | None:
         """
         Lists available resources
         """
         pass
 
+    @abstractmethod
     async def get_resource_contents() -> None:
         """
         Retrieve the contents of a resource.
         """
         pass
 
+    @abstractmethod
     async def get_roots() -> None:
         """
         Lists current roots
         """
+        pass
 
+    @abstractmethod
     async def set_roots() -> None:
         """
         Sets roots
         """
+        pass
 
+    @abstractmethod
     async def get_prompts() -> None:
         """
         Lists available prompts
         """
+        pass
 
+    @abstractmethod
     async def handle_sampling_request() -> None:
         """
         Handles sampling requests
         """
+        pass
 
+    @abstractmethod
     async def terminate() -> None:
         """
         Called when terminating the server.
@@ -334,8 +366,8 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         is_input_callable = False
         is_output_callable = False
 
-        # if self.description is a callable, exclude it
-        if callable(self.description):
+        # if self.config.description is a callable, exclude it
+        if callable(self.config.description):
             is_description_callable = True
             exclude.append("description")
 
@@ -349,7 +381,8 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             is_output_callable = True
             exclude.append("output")
 
-        logger.debug(f"Serializing server '{self.name}' to dict.")
+        logger.debug(
+            f"Serializing server '{self.config.server_name}' to dict.")
 
         # Use Pydantic's dump, exclude manually handled fields and runtime context.
         data = self.model_dump(
@@ -360,7 +393,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             exclude_none=True,
         )
         logger.debug(
-            f"Base server data for '{self.name}': {list(data.keys())}")
+            f"Base server data for '{self.config.server_name}': {list(data.keys())}")
         serialized_modules = {}
 
         def add_serialized_component(component: Any, field_name: str):
@@ -411,11 +444,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         if serialized_modules:
             data["modules"] = serialized_modules
             logger.debug(
-                f"Added {len(serialized_modules)} modules to server '{self.name}'"
+                f"Added {len(serialized_modules)} modules to server '{self.config.server_name}'"
             )
 
         if is_description_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.description)
+            path_str = FlockRegistry.get_callable_path_string(
+                self.config.description)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["description_callable"] = func_name
@@ -424,7 +458,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for description {self.description} in server '{self.name}'. Skipping..."
+                    f"Could not get path string for description {self.config.description} in server '{self.config.server_name}'. Skipping..."
                 )
 
         if is_input_callable:
@@ -433,11 +467,11 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 func_name = path_str.split(".")[-1]
                 data["input_callable"] = func_name
                 logger.debug(
-                    f"Added input '{func_name}' (from path '{path_str}') to server '{self.name}'"
+                    f"Added input '{func_name}' (from path '{path_str}') to server '{self.config.server_name}'"
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for input {self.input} in server '{self.name}'. Skipping..."
+                    f"Could not get path string for input {self.input} in server '{self.config.server_name}'. Skipping..."
                 )
 
         if is_output_callable:
@@ -446,15 +480,15 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 func_name = path_str.split(".")[-1]
                 data["output_callable"] = func_name
                 logger.debug(
-                    f"Added output '{func_name}' (from path '{path_str}') to server '{self.name}'"
+                    f"Added output '{func_name}' (from path '{path_str}') to server '{self.config.server_name}'"
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for output {self.output} in server '{self.name}'. Skipping...")
+                    f"Could not get path string for output {self.output} in server '{self.config.server_name}'. Skipping...")
 
         # No need to call _filter_none_values here as model_dump(exclude_none=True) handles it
         logger.info(
-            f"Serialization of server '{self.name}' complete with {len(data)} fields"
+            f"Serialization of server '{self.config.server_name}' complete with {len(data)} fields"
         )
         return data
 
