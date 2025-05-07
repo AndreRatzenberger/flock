@@ -199,29 +199,6 @@ class FlockMCPClientBase(BaseModel, ABC):
         "arbitrary_types_allowed": True,
     }
 
-    # TODO: This should go in its own dedicated Class.
-    async def _init_connection_stdio(self, retries: int | None) -> None:
-        server_params = self.connection_parameters
-
-        if isinstance(server_params, StdioServerParameters):
-            async with self.lock:
-                stdio_transport = await self.master_stack.enter_async_context(stdio_client(server_params))
-                read, write = stdio_transport
-                self.client_session = await self.master_stack.enter_async_context(ClientSession(
-                    read_stream=read,
-                    write_stream=write,
-                    read_timeout_seconds=self.read_timeout_seconds,
-                    sampling_callback=self.sampling_callback,
-                    list_roots_callback=self.list_roots_callback,
-                    logging_callback=self.logging_callback,
-                    message_handler=self.message_handler,
-                ))
-
-                await self.client_session.initialize()
-        else:
-            raise TypeError(
-                f"Connection Parameters for Stdio Transport type must be of type {type(StdioServerParameters)}")
-
     async def connect(self, retries: int | None) -> None:
         """
         Connects to the client.
