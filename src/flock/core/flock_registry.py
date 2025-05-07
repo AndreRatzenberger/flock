@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from flock.core.flock_evaluator import FlockEvaluator
     from flock.core.flock_module import FlockModule
     from flock.core.flock_router import FlockRouter
-    from flock.core.flock_mcp_server import FlockMCPServer
+    from flock.core.flock_server import FlockMCPServerBase
 
     COMPONENT_BASE_TYPES = (FlockModule, FlockEvaluator, FlockRouter)
 
@@ -63,7 +63,7 @@ class FlockRegistry:
     _instance = None
 
     _agents: dict[str, FlockAgent]
-    _servers: dict[str, FlockMCPServer]
+    _servers: dict[str, FlockMCPServerBase]
     _callables: dict[str, Callable]
     _types: dict[str, type]
     _components: dict[str, type]  # For Module, Evaluator, Router classes
@@ -172,7 +172,7 @@ class FlockRegistry:
             return None
 
     # --- Server Registration ---
-    def register_server(self, server: FlockMCPServer) -> None:
+    def register_server(self, server: FlockMCPServerBase) -> None:
         """Registers a flock mcp server by its name."""
         if not hasattr(server, "name") or not server.name:
             logger.error(
@@ -186,7 +186,7 @@ class FlockRegistry:
         self._servers[server.name] = server
         logger.debug(f"Registered server: {server.name}")
 
-    def get_server(self, name: str) -> FlockMCPServer | None:
+    def get_server(self, name: str) -> FlockMCPServerBase | None:
         """Retrieves a registered FlockMCPServer instance by name."""
         server = self._servers.get(name)
         if not server:

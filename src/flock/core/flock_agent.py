@@ -9,7 +9,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from flock.core.flock_mcp_server import FlockMCPServer
+from flock.core.flock_server import FlockMCPServerBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -89,7 +89,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             description="List of callable tools the agent can use. These must be registered.",
         )
     )
-    servers: list[FlockMCPServer] | None = (
+    servers: list[FlockMCPServerBase] | None = (
         Field(
             default=None,
             description="List of MCP Servers the agent can use to enhance its capabilities. These must be registered."
@@ -140,7 +140,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
-        servers: list[FlockMCPServer] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
         evaluator: "FlockEvaluator | None" = None,
         handoff_router: "FlockRouter | None" = None,
         # Use dict for modules
@@ -960,7 +960,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 # Ask the registry for registered servers
                 for server_name in servers_config:
                     try:
-                        from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+                        from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockMCPServer
                         found_server = registry.get_server(server_name)
                         if found_server and isinstance(found_server, ConcreteFlockMCPServer):
                             agent.servers.append(found_server)

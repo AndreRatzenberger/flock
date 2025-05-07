@@ -11,14 +11,14 @@ from opentelemetry import trace
 
 from mcp import ClientSession
 
-from flock.core.mcp.flock_mcp_client import FlockMCPCLient
+from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
 from flock.core.logging.logging import get_logger
 
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
 
 
-class FlockMCPConnectionManager(BaseModel):
+class FlockMCPConnectionManagerBase(BaseModel):
     """Handles a Pool of MCPClients."""
 
     transport_type: Literal["stdio", "websockets", "http"] = Field(
@@ -43,13 +43,13 @@ class FlockMCPConnectionManager(BaseModel):
     )
 
     # --- Internal State ---
-    available_connections: list[FlockMCPCLient] = Field(
+    available_connections: list[FlockMCPClientBase] = Field(
         default=[],
         description="Connections which are capable of handling a request at the moment.",
         exclude=True,
     )
 
-    busy_connections: list[FlockMCPCLient] = Field(
+    busy_connections: list[FlockMCPClientBase] = Field(
         default=[],
         description="Connections which are currently handling a request.",
         exclude=True,
@@ -111,7 +111,7 @@ class FlockMCPConnectionManager(BaseModel):
         if self.replenish_task:
             await self.replenish_task
 
-    async def _create_new_connection_with_retry(self) -> FlockMCPCLient | None:
+    async def _create_new_connection_with_retry(self) -> FlockMCPClientBase | None:
         """
         Attempts to create and connect a single new client with retries.
         Handles retries based on max_reconnect attempts.
@@ -121,7 +121,7 @@ class FlockMCPConnectionManager(BaseModel):
             logger.info(
                 f"Attempt {attempt + 1}/{self.max_reconnect_attemtps + 1} to create connection to {self.server_name}")
             try:
-                client = FlockMCPCLient(max_retries=3)
+                client = FlockMCPClientBase(max_retries=3)
 
                 # Let manager handle retries initially
                 await client.connect(retries=0)
@@ -167,7 +167,7 @@ class FlockMCPConnectionManager(BaseModel):
 
     # --- Core Pool Logic ---
     @asynccontextmanager
-    async def get_client(self) -> AsyncIterator[FlockMCPCLient]:
+    async def get_client(self) -> AsyncIterator[FlockMCPClientBase]:
         """
         Provides a client
         from the pool via an async context manager, ensuring
@@ -179,7 +179,7 @@ class FlockMCPConnectionManager(BaseModel):
                 tools = await client.get_tools()
             # Client is automatically released back into the pool here.
         """
-        client: FlockMCPCLient | None = None
+        client: FlockMCPClientBase | None = None
         try:
             # Acquire the client using the internal logic
             client = await self._get_available_client()
@@ -198,7 +198,7 @@ class FlockMCPConnectionManager(BaseModel):
                     f"Releaseing client via context manager: {client}")
                 await self._release_client(client)
 
-    async def _get_available_client(self) -> FlockMCPCLient:
+    async def _get_available_client(self) -> FlockMCPClientBase:
         """
         Retrieves a non-busy, live client from the connection-pool.
         If no client is available, it waits until one is returned or created.
@@ -272,7 +272,7 @@ class FlockMCPConnectionManager(BaseModel):
                     self._trigger_replenishment_check()
                     # Continue the outer loop to find another client.
 
-    async def _release_client(self, client: FlockMCPCLient) -> None:
+    async def _release_client(self, client: FlockMCPClientBase) -> None:
         """
         Releases a client back into the available pool and notifies waiting tasks.
         Moves the client from busy to available list. Discards unhealthy clients.
@@ -477,7 +477,7 @@ class FlockMCPConnectionManager(BaseModel):
             new_clients = []
             failed_count = 0
             for i, result in enumerate(results):
-                if isinstance(result, FlockMCPCLient) and result.is_alive and not result.has_error:
+                if isinstance(result, FlockMCPClientBase) and result.is_alive and not result.has_error:
                     new_clients.append(result)
                 elif isinstance(result, Exception):
                     logger.error(

@@ -1,7 +1,10 @@
 """Represents a prompt that can be retrieved from a MCP-Server"""
 
 
-class MCPPrompt:
+from pydantic import BaseModel
+
+
+class FlockMCPPromptBase(BaseModel):
     """
     Documentation:
         https://modelcontextprotocol.io/docs/concepts/prompts

@@ -6,7 +6,7 @@ from flock.core.flock_agent import FlockAgent
 from flock.core.flock_evaluator import FlockEvaluator, FlockEvaluatorConfig
 from flock.core.flock_factory import FlockFactory
 from flock.core.flock_module import FlockModule, FlockModuleConfig
-from flock.core.flock_mcp_server import FlockMCPServer
+from flock.core.flock_server import FlockMCPServerBase
 from flock.core.flock_registry import (
     FlockRegistry,
     flock_callable,
@@ -19,7 +19,7 @@ from flock.core.flock_registry import (
 __all__ = [
     "Flock",
     "FlockAgent",
-    "FlockMCPServer",
+    "FlockMCPServerBase",
     "FlockContext",
     "FlockEvaluator",
     "FlockEvaluatorConfig",

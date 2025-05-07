@@ -19,7 +19,7 @@ from typing import (
 from box import Box
 from temporalio import workflow
 
-from flock.core.flock_mcp_server import FlockMCPServer
+from flock.core.flock_server import FlockMCPServerBase
 
 with workflow.unsafe.imports_passed_through():
     from datasets import Dataset
@@ -121,7 +121,7 @@ class Flock(BaseModel, Serializable):
     _start_input: dict = {}  # For potential pre-configuration
 
     # Internal server storage - not part of the Pydantic model for direct serialization
-    _servers: dict[str, FlockMCPServer]
+    _servers: dict[str, FlockMCPServerBase]
 
     # Pydantic v2 model config
     model_config = {
@@ -138,7 +138,7 @@ class Flock(BaseModel, Serializable):
         enable_temporal: bool = False,
         enable_logging: bool | list[str] = False,
         agents: list[FlockAgent] | None = None,
-        servers: list[FlockMCPServer] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
         temporal_start_in_process_worker: bool = True,
         **kwargs,
@@ -172,7 +172,7 @@ class Flock(BaseModel, Serializable):
         # Register passed servers
         # (need to be registered first so that agents can retrieve them from the registry)
         if servers:
-            from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+            from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockMCPServer
             for server in servers:
                 if isinstance(server, ConcreteFlockMCPServer):
                     self.add_server(server)
@@ -258,9 +258,9 @@ class Flock(BaseModel, Serializable):
             set_baggage("session_id", session_id)
             logger.debug(f"Generated new session_id: {session_id}")
 
-    def add_server(self, server: FlockMCPServer) -> FlockMCPServer:
+    def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
         """Adds a server instance to this Flock configuration and registry."""
-        from flock.core.flock_mcp_server import FlockMCPServer as ConcreteFlockMCPServer
+        from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockMCPServer
 
         if not isinstance(server, ConcreteFlockMCPServer):
             raise TypeError(

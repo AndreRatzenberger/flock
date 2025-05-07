@@ -9,10 +9,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Type, TypeVar
 
-from flock.core.mcp.flock_mcp_connection_manager import FlockMCPConnectionManager
-from flock.core.mcp.flock_mcp_prompt import MCPPrompt
-from flock.core.mcp.flock_mcp_resource import FlockMCPResource
-from flock.core.mcp.flock_mcp_tool import FlockMCPTool
+from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
+from flock.core.mcp.flock_mcp_prompt_base import FlockMCPPromptBase
+from flock.core.mcp.flock_mcp_resource_base import FlockMCPResourceBase
+from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 
 from opentelemetry import trace
@@ -26,7 +26,7 @@ from flock.core.serialization.serialization_utils import deserialize_component, 
 
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
-T = TypeVar("T", bound="FlockMCPServer")
+T = TypeVar("T", bound="FlockMCPServerBase")
 M = TypeVar("M", bound="FlockMCPServerConfig")
 
 
@@ -81,7 +81,7 @@ class FlockMCPServerConfig(BaseModel):
         )
 
 
-class FlockMCPServer(BaseModel, Serializable, ABC):
+class FlockMCPServerBase(BaseModel, Serializable, ABC):
     """
     Base class for all Flock MCP Server Types.
 
@@ -104,6 +104,11 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
     2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
     name: str = Field(..., description="Unique identifier for the server")
+
+    config: FlockMCPServerConfig = Field(
+        ...,
+        description="Config for the server."
+    )
 
     initialized: bool = Field(
         default=False,
@@ -131,7 +136,7 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
     # --- Underlying ConnectionManager ---
     # (Manages a pool of ClientConnections and does the actual talking to the MCP Server)
     # (Excluded from Serialization)
-    connection_manager: FlockMCPConnectionManager | None = Field(
+    connection_manager: FlockMCPConnectionManagerBase | None = Field(
         default=None,
         exclude=True,
         description="Underlying Connection Manager. Handles the actual underlying connections to the server."
@@ -199,7 +204,7 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         """
         pass
 
-    async def get_tools() -> list[FlockMCPTool] | None:
+    async def get_tools() -> list[FlockMCPToolBase] | None:
         """
         Returns a list of tools the server provides
         """
@@ -217,7 +222,7 @@ class FlockMCPServer(BaseModel, Serializable, ABC):
         """
         pass
 
-    async def list_resources() -> list[FlockMCPResource] | None:
+    async def list_resources() -> list[FlockMCPResourceBase] | None:
         """
         Lists available resources
         """

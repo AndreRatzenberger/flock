@@ -1,20 +1,23 @@
 """Wrapper Class for a mcp ClientSession Object"""
 
+from abc import ABC
 from asyncio import Lock
 import asyncio
+from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Type
 import anyio
 import httpx
 from mcp import ClientNotification, ClientSession, ListToolsResult, McpError
 from mcp.types import CallToolResult
 from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
 
+from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
 
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
-from flock.core.mcp.flock_mcp_tool import FlockMCPTool
+from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 
 # TODO: fine-grained error handling
 # Standard JSON-RPC error codes
@@ -28,9 +31,9 @@ logger = get_logger("mcp_client")
 tracer = trace.get_tracer(__name__)
 
 
-class FlockMCPCLient(BaseModel):
+class FlockMCPClientBase(BaseModel, ABC):
     """
-    Wrapper for mcp ClientSession. 
+    Wrapper for mcp ClientSession.
     Class will attempt to re-establish connection if possible.
     If connection establishment fails after max_retries, then
     `has_error` will be set to true and `error_message` will
@@ -39,7 +42,14 @@ class FlockMCPCLient(BaseModel):
 
     client_session: ClientSession | None = Field(
         default=None,
+        exclude=True,
         description="Internally managed client session."
+    )
+
+    master_stack: AsyncExitStack | None = Field(
+        default=None,
+        exclude=True,
+        description="Master async exit stack."
     )
 
     is_busy: bool = Field(
@@ -85,9 +95,65 @@ class FlockMCPCLient(BaseModel):
         description="How many seconds to wait until the request times out."
     )
 
+    # Used internally in the ClientSession Object like so:
+    #     async def _received_request(
+    #     self, responder: RequestResponder[types.ServerRequest, types.ClientResult]
+    # ) -> None:
+    #     ctx = RequestContext[ClientSession, Any](
+    #         request_id=responder.request_id,
+    #         meta=responder.request_meta,
+    #         session=self,
+    #         lifespan_context=None,
+    #     )
+
+    #     match responder.request.root:
+    #         case types.CreateMessageRequest(params=params):
+    #             with responder:
+    #                 response = await self._sampling_callback(ctx, params)
+    #                 client_response = ClientResponse.validate_python(response)
+    #                 await responder.respond(client_response)
+
+    #         case types.ListRootsRequest():
+    #             with responder:
+    #                 response = await self._list_roots_callback(ctx)
+    #                 client_response = ClientResponse.validate_python(response)
+    #                 await responder.respond(client_response)
+
+    #         case types.PingRequest():
+    #             with responder:
+    #                 return await responder.respond(
+    #                     types.ClientResult(root=types.EmptyResult())
+    #                 )
+
+    sampling_callback: SamplingFnT | None = Field(
+        default=None,
+        description="Callback for sampling requests from external server. Take a look at mcp/client/session.py for how it is used."
+    )
+
+    list_roots_callback: ListRootsFnT | None = Field(
+        default=None,
+        description="Callback for list_roots requests from external server."
+    )
+
+    logging_callback: LoggingFnT | None = Field(
+        default=None,
+        description="Callback for logging purposes."
+    )
+
+    message_handler: MessageHandlerFnT | None = Field(
+        default=None,
+        description="Message Handler Callback."
+    )
+
     model_config = {
         "arbitrary_types_allowed": True,
     }
+
+    async def connect(self) -> None:
+        """
+        Connects to the client.
+        """
+        pass
 
     async def close(self) -> None:
         """Closes the connection and cleans up. Placeholder for now."""
@@ -131,10 +197,10 @@ class FlockMCPCLient(BaseModel):
         Wrapper which allows agents to call MCPTools.
 
         This method should NEVER be called directly.
-        Rather, the results from `get_tools` are converted 
-        into callables with type Callable[..., Any] which 
+        Rather, the results from `get_tools` are converted
+        into callables with type Callable[..., Any] which
         wrap around this method.
-        The agent only sees callables which look like native 
+        The agent only sees callables which look like native
         code.
 
         Conversion of types is handled by these wrapper methods
@@ -156,12 +222,12 @@ class FlockMCPCLient(BaseModel):
                 self.has_error = True
                 self.error_message = str(e)
 
-    async def get_tools(self) -> list[FlockMCPTool] | None:
+    async def get_tools(self) -> list[FlockMCPToolBase] | None:
         # TODO: Caching
         """Get available tools from the server."""
         # TODO: Tools list changed callback tomorrow (or rather on tuesday).
         async with self.lock:
-            tools: list[FlockMCPTool] = []
+            tools: list[FlockMCPToolBase] = []
             try:
                 logger.debug(f"Retrieving tools through client {self}")
                 if self.client_session:
@@ -170,7 +236,8 @@ class FlockMCPCLient(BaseModel):
                     # Convert the tools into a list of FlockMCPTools
                     if results.tools:
                         for t in results.tools:
-                            converted_tool = FlockMCPTool.try_from_mcp_tool(t)
+                            converted_tool = FlockMCPToolBase.try_from_mcp_tool(
+                                t)
                             if converted_tool:
                                 tools.append(converted_tool)
 

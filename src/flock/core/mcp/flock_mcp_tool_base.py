@@ -7,10 +7,10 @@ from mcp import Tool
 from pydantic import BaseModel, Field
 
 
-T = TypeVar("T", bound="FlockMCPTool")
+T = TypeVar("T", bound="FlockMCPToolBase")
 
 
-class FlockMCPTool(BaseModel):
+class FlockMCPToolBase(BaseModel):
     name: str = Field(
         ...,
         description="Name of the tool"
@@ -31,4 +31,4 @@ class FlockMCPTool(BaseModel):
         pass
 
     def convert_to_callable(self) -> Callable[..., Any] | None:
-        return FlockMCPTool._dummy_print_function
+        return None

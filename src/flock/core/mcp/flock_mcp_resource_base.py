@@ -2,7 +2,7 @@
 
 
 from typing import Annotated, Literal, TypeVar
-from pydantic import AnyUrl, Field, UrlConstraints
+from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 
 from mcp.types import Resource, ReadResourceResult, TextResourceContents, BlobResourceContents
 
@@ -10,10 +10,10 @@ from flock.core.logging.logging import get_logger
 
 
 logger = get_logger("mcp_resource")
-T = TypeVar("T", bound="FlockMCPResource")
+T = TypeVar("T", bound="FlockMCPResourceBase")
 
 
-class FlockMCPResource:
+class FlockMCPResourceBase(BaseModel):
     """
     Documentation:
         https://modelcontextprotocol.io/docs/concepts/resources
