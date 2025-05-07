@@ -9,7 +9,7 @@ from typing import Annotated, AsyncIterator, Literal
 from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
 from opentelemetry import trace
 
-from mcp import ClientSession, StdioServerParameters
+from mcp import StdioServerParameters
 
 from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
 
