@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Flock UI{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/custom.css') }}">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"
+        integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
+        crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Removed inline styles as they're in custom.css -->
+</head>
+
+<body>
+    <header class="top-header">
+        <span><strong>Flock UI 🐤</strong></span>
+        {# Use the variables passed from the route handler #}
+        {% if current_flock %}
+        <small>Current: <code>{{ current_filename or current_flock.name }}</code></small>
+        {% else %}
+        <small>No Flock Loaded</small>
+        {% endif %}
+    </header>
+
+    <aside class="sidebar" hx-get="/ui/htmx/sidebar"
+        hx-trigger="load, flockLoaded from:body, flockListChanged from:body" hx-swap="innerHTML">
+        <p>Loading navigation...</p><progress></progress>
+    </aside>
+
+    <main class="main-content" id="main-content-area">
+        {# Initial content is now loaded via HTMX based on the route #}
+        <div hx-get="{{ initial_content_url }}" hx-trigger="load" hx-swap="innerHTML">
+            <p>Loading content...</p><progress></progress>
+        </div>
+        {# Render block content if navigating directly and template extends base #}
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="message-container" x-data="messageHandler(
+            {{ success_message | tojson | safe if success_message else 'null' }},
+            {{ error_message | tojson | safe if error_message else 'null' }}
+         )">
+        <template x-if="showSuccess && successMsg">
+            <div class="success" role="alert" @click="showSuccess = false" style="cursor: pointer;">
+                <span x-text="successMsg"></span>
+                <button type="button" class="close" aria-label="Dismiss">×</button>
+            </div>
+        </template>
+        <template x-if="showError && errorMsg">
+            <div class="error" role="alert" @click="showError = false" style="cursor: pointer;">
+                <span x-text="errorMsg"></span>
+                <button type="button" class="close" aria-label="Dismiss">×</button>
+            </div>
+        </template>
+    </div>
+
+    <footer class="main-footer">
+        <small>Built with FastAPI, HTMX, Pico.CSS, and ❤️ for Flock</small>
+    </footer>
+
+    <script>
+        function messageHandler(initialSuccessMsg, initialErrorMsg) {
+            return {
+                showSuccess: !!initialSuccessMsg,
+                showError: !!initialErrorMsg,
+                successMsg: initialSuccessMsg,
+                errorMsg: initialErrorMsg,
+                init() {
+                    if (this.successMsg) { setTimeout(() => this.showSuccess = false, 5000); }
+                    if (this.errorMsg) { setTimeout(() => this.showError = false, 7000); }
+
+                    window.addEventListener('notify', event => {
+                        if (event.detail.type === 'success') {
+                            this.successMsg = event.detail.message;
+                            this.showSuccess = true; this.showError = false;
+                            setTimeout(() => this.showSuccess = false, 5000);
+                        }
+                        if (event.detail.type === 'error') {
+                            this.errorMsg = event.detail.message;
+                            this.showError = true; this.showSuccess = false;
+                            setTimeout(() => this.showError = false, 7000);
+                        }
+                    });
+                }
+            };
+        }
+        function triggerEvent(eventName, detail = {}) {
+            htmx.trigger(document.body, eventName, detail);
+        }
+    </script>
+</body>
+
+</html>

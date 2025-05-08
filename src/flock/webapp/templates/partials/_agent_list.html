@@ -1,0 +1,24 @@
+<article id="agent-list-content">
+    <header class="grid">
+        <h4>Agents ({{ flock.agents|length }})</h4>
+        <div style="text-align: right;">
+            <button role="button" class="outline" hx-get="/api/flocks/htmx/agents/new-agent-form" hx-target="#agent-detail-panel" hx-swap="innerHTML">Add New Agent</button>
+        </div>
+    </header>
+    {% if message %}
+        <div class="form-message {{ 'success' if success else 'error' }}">{{ message }}</div>
+    {% endif %}
+    {% if flock.agents %}
+    <ul>
+        {% for agent_name, agent in flock.agents.items() %}
+        <li hx-get="/api/flocks/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading">
+            <strong>{{ agent.name }}</strong><br>
+            <small>{{ agent.description|truncate(80) if agent.description else 'No description' }}</small>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No agents defined in this Flock yet. Click "Add New Agent" to create one.</p>
+    {% endif %}
+    <div id="agent-list-loading" class="htmx-indicator">Loading agents... <progress></progress></div>
+</article>

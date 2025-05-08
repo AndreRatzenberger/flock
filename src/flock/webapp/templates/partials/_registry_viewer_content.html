@@ -1,0 +1,47 @@
+<article>
+    <header>
+        <h2>Flock Registry Viewer</h2>
+        <p>Browse items registered with the Flock framework.</p>
+    </header>
+
+    <nav>
+        <ul role="group">
+            <li>
+                <button role="button" class="outline" hx-get="/api/registry/htmx/type/table" hx-target="#registry-table-container" hx-indicator="#registry-loading" hx-on:click="setActiveButton(this)">
+                    View Types
+                </button>
+            </li>
+            <li>
+                <button role="button" class="outline" hx-get="/api/registry/htmx/tool/table" hx-target="#registry-table-container" hx-indicator="#registry-loading" hx-on:click="setActiveButton(this)">
+                    View Tools/Callables
+                </button>
+            </li>
+            <li>
+                <button role="button" class="outline" hx-get="/api/registry/htmx/component/table" hx-target="#registry-table-container" hx-indicator="#registry-loading" hx-on:click="setActiveButton(this)">
+                    View Components
+                </button>
+            </li>
+        </ul>
+    </nav>
+
+    <div id="registry-loading" class="htmx-indicator" style="text-align: center; margin-top: 1rem;">
+        <progress></progress> Loading...
+    </div>
+
+    <div id="registry-table-container" style="margin-top: 1.5rem;">
+        <p>Select a category above to view registered items.</p>
+    </div>
+</article>
+
+<script>
+    // Make sure this script is included or available globally
+    function setActiveButton(clickedButton) {
+        const buttons = clickedButton.closest('ul[role="group"]').querySelectorAll('button');
+        buttons.forEach(button => {
+            button.classList.remove('primary'); 
+            button.classList.add('outline');
+        });
+        clickedButton.classList.remove('outline');
+        clickedButton.classList.add('primary'); 
+    }
+</script>
