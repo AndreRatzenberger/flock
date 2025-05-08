@@ -290,6 +290,7 @@ progress:indeterminate::after {
 
 #agent-list-panel header,
 #agent-detail-panel header {
+    background-color: var(--flock-header-background);
     flex-shrink: 0;
 }
 
@@ -356,6 +357,7 @@ progress:indeterminate::after {
 /* Buttons and Forms Styling */
 button[type="submit"],
 button.primary {
+    color: var(--pico-color);
     background-color: var(--pico-primary);
     border-color: var(--pico-primary);
     box-shadow: var(--pico-card-box-shadow); /* Use standard shadow or focus? */

@@ -26,21 +26,21 @@
         <li>
             <button hx-get="/api/flocks/htmx/flock-properties-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/properties?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/properties' %}active-nav{% endif %}">
+                class="contrast {% if request.url.path == '/ui/editor/properties' %}active-nav{% endif %}">
                 <i class="fas fa-cog"></i> Properties
             </button>
         </li>
         <li>
             <button hx-get="/ui/htmx/agent-manager-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/agents?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/agents' %}active-nav{% endif %}">
+                class="contrast{% if request.url.path == '/ui/editor/agents' %}active-nav{% endif %}">
                 <i class="fas fa-robot"></i> Agents ({{ current_flock.agents|length }})
             </button>
         </li>
         <li>
             <button hx-get="/ui/htmx/execution-view-container?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/execute?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/execute' %}active-nav{% endif %}">
+                class="contrast {% if request.url.path == '/ui/editor/execute' %}active-nav{% endif %}">
                 <i class="fas fa-play-circle"></i> Execute Flock
             </button>
         </li>
