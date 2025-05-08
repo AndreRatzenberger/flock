@@ -339,16 +339,18 @@ if __name__ == "__main__":
     template_path = template_dir / "theme_mapper.html"
     template_content = '''
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="en" data-theme="light">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Theme Mapper</title>
-        <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1/css/pico.min.css">
-        <style id="theme-vars">
-            {{ css_vars | safe }}
-        </style>
+        <!-- Use Pico CSS only -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
         <style>
+            {{ css_vars | safe }}
+
+            /* Only use Pico CSS classes and variables */
+           
             .color-sample {
                 height: 20px;
                 width: 100%;
@@ -379,6 +381,66 @@ if __name__ == "__main__":
             .bad-contrast {
                 background-color: var(--pico-del-color);
                 color: var(--pico-background-color);
+            }
+            
+            /* Override any non-pico CSS variables */
+            body {
+                background-color: var(--pico-background-color);
+                color: var(--pico-color);
+            }
+            a {
+                color: var(--pico-primary);
+            }
+            a:hover {
+                color: var(--pico-primary-hover);
+            }
+            h1 {
+                color: var(--pico-h1-color);
+            }
+            h2 {
+                color: var(--pico-h2-color);
+            }
+            h3 {
+                color: var(--pico-h3-color);
+            }
+            mark {
+                background-color: var(--pico-mark-background-color);
+                color: var(--pico-mark-color);
+            }
+            ins {
+                color: var(--pico-ins-color);
+            }
+            del {
+                color: var(--pico-del-color);
+            }
+            code {
+                background-color: var(--pico-code-background-color);
+                color: var(--pico-code-color);
+            }
+            button, input[type="submit"], input[type="button"] {
+                background-color: var(--pico-button-base-background-color);
+                color: var(--pico-button-base-color);
+                border-color: var(--pico-button-base-background-color);
+            }
+            button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+                background-color: var(--pico-button-hover-background-color);
+                color: var(--pico-button-hover-color);
+                border-color: var(--pico-button-hover-background-color);
+            }
+            button.secondary, input[type="submit"].secondary, input[type="button"].secondary {
+                background-color: var(--pico-secondary);
+                color: var(--pico-secondary-inverse);
+                border-color: var(--pico-secondary);
+            }
+            button.secondary:hover, input[type="submit"].secondary:hover, input[type="button"].secondary:hover {
+                background-color: var(--pico-secondary-hover);
+                color: var(--pico-secondary-inverse);
+                border-color: var(--pico-secondary-hover);
+            }
+            button.contrast, input[type="submit"].contrast, input[type="button"].contrast {
+                background-color: var(--pico-contrast);
+                color: var(--pico-contrast-inverse);
+                border-color: var(--pico-contrast);
             }
         </style>
     </head>
@@ -587,10 +649,12 @@ function example() {
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request, theme: str | None = None):
         try:
-            # Get requested theme name from query parameter, default to alabaster or first theme
-            if theme not in themes:
+            # Get requested theme name from query parameter
+            if theme is None or theme not in themes:
+                # If no theme is provided or theme is invalid, default to alabaster or first theme
                 theme_name = 'alabaster' if 'alabaster' in themes else next(iter(themes))
             else:
+                # Use the requested theme directly
                 theme_name = theme
 
             # Get the theme data
@@ -599,7 +663,7 @@ function example() {
             # Convert theme to pico css variables
             css_vars = alacritty_to_pico(theme_data)
 
-            # Format css variables for the style tag
+            # Format css variables for the style tag - this is important for proper application of the theme
             css_vars_str = ":root {\n" + "\n".join([f"  {k}: {v};" for k, v in css_vars.items()]) + "\n}"
 
             # Prepare main colors for display
