@@ -1,0 +1,15 @@
+<div class="editor-grid"> {# Use the improved two-column grid #}
+    <section id="agent-list-panel"
+             hx-get="/api/flocks/htmx/agent-list"
+             hx-trigger="load, agentListChanged from:body" {# Reload when agent list changes #}
+             hx-swap="innerHTML">
+        <article><p>Loading agents...</p><progress></progress></article>
+    </section>
+
+    <section id="agent-detail-panel">
+         <article>
+            <header><h4>Agent Details</h4></header>
+            <p>Select an agent from the list to view/edit, or click "Add New Agent".</p>
+        </article>
+    </section>
+</div>

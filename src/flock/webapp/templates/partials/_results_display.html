@@ -1,0 +1,35 @@
+{% from "partials/_structured_data_view.html" import render_value %}
+
+<article id="results-display-content" x-data="{ viewMode: 'structured' }">
+    <header class="grid">
+        <h5 style="margin-bottom: 0;">Execution Result</h5>
+        <div style="text-align: right;">
+            <button role="button" class="outline contrast" @click="viewMode = 'structured'" :aria-pressed="viewMode === 'structured'">Structured</button>
+            <button role="button" class="outline contrast" @click="viewMode = 'json'" :aria-pressed="viewMode === 'json'">Raw JSON</button>
+        </div>
+    </header>
+
+    <div x-show="viewMode === 'json'">
+        {% if result_data is string %}
+            <p class="error" style="white-space: pre-wrap;">{{ result_data }}</p>
+        {% elif result_data %}
+            <pre><code style="word-break: break-all; white-space: pre-wrap;">{{ result_data | tojson(indent=2) }}</code></pre>
+        {% else %}
+            <p>No results to display yet.</p>
+        {% endif %}
+    </div>
+
+    <div x-show="viewMode === 'structured'">
+        {% if result_data is string %}
+            <p class="error" style="white-space: pre-wrap;">{{ result_data }}</p>
+        {% elif result_data is mapping %}
+            {# Call our new macro for structured display #}
+            {{ render_value(result_data) }}
+        {% elif result_data %}
+             <p>Structured view not available for this result type (not a dictionary).</p>
+             <pre><code>{{ result_data | tojson(indent=2) }}</code></pre>
+        {% else %}
+            <p>No results to display yet.</p>
+        {% endif %}
+    </div>
+</article>

@@ -39,7 +39,7 @@ news/
 hierarchical_memory/
 .repomix-output.txt
 .sesskey
-
+.flock_ui_projects/
 .env.*
 .flock/
 memory.txt

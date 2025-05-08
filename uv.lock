@@ -1208,7 +1208,7 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.0b31"
+version = "0.4.0b34"
 source = { editable = "." }
 dependencies = [
     { name = "azure-search-documents" },
@@ -1239,7 +1239,6 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "pyparsing" },
     { name = "python-box" },
     { name = "python-decouple" },
     { name = "python-dotenv" },
@@ -1318,7 +1317,6 @@ requires-dist = [
     { name = "psutil", specifier = ">=6.1.1" },
     { name = "pydantic", specifier = ">=2.10.5" },
     { name = "pydantic-settings", specifier = ">=2.7.1" },
-    { name = "pyparsing", specifier = ">=3.2.1" },
     { name = "python-box", specifier = ">=7.3.2" },
     { name = "python-decouple", specifier = ">=3.8" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
