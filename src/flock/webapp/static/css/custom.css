@@ -93,7 +93,7 @@ aside.sidebar {
 .sidebar nav h5 {
     margin-bottom: 0.9rem;
     padding-left: 1.5rem;
-    color: var(--pico-button-base-color); /* Use muted color */
+    color: var(--pico-color); /* Use muted color */
     font-size: 0.85em;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -150,7 +150,7 @@ aside.sidebar {
     width: 24px;
     margin-right: 8px;
     text-align: center;
-    color: var(--pico-muted-color); /* Use muted color */
+    color: var(--pico-h2-color); /* Use muted color */
     transition: all 0.2s ease-in-out;
     flex-shrink: 0;
 }
@@ -168,7 +168,7 @@ aside.sidebar {
 .sidebar nav button.contrast {
     border: none;
     background-color: transparent;
-    color: var(--pico-color); /* Use theme text color */
+    color: var(--pico-muted-color); /* Use theme text color */
     box-shadow: none;
 }
 
