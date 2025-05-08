@@ -71,6 +71,18 @@ def get_current_flock_filename() -> str | None:
     return CURRENT_FLOCK_FILENAME
 
 
+def set_current_flock_instance_programmatically(flock: Flock, filename: str):
+    """Sets the current flock instance and filename programmatically.
+    Used when launching the UI with a pre-loaded flock from an external source (e.g., API server).
+    """
+    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
+    CURRENT_FLOCK_INSTANCE = flock
+    CURRENT_FLOCK_FILENAME = filename
+    print(
+        f"Programmatically set flock: {filename} (Name: {flock.name if flock else 'None'})"
+    )
+
+
 def set_current_flock_filename(filename: str | None):
     global CURRENT_FLOCK_FILENAME
     CURRENT_FLOCK_FILENAME = filename

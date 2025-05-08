@@ -4,7 +4,7 @@ import shutil
 import urllib.parse
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -50,7 +50,10 @@ app.include_router(
 
 
 def get_base_context(
-    request: Request, error: str = None, success: str = None
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = "standalone",
 ) -> dict:
     return {
         "request": request,
@@ -58,63 +61,120 @@ def get_base_context(
         "current_filename": get_current_flock_filename(),
         "error_message": error,
         "success_message": success,
+        "ui_mode": ui_mode,
     }
 
 
 # --- Main Page Routes ---
 @app.get("/", response_class=HTMLResponse)
 async def page_dashboard(
-    request: Request, error: str = None, success: str = None
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query(
+        None
+    ),  # Default to None to detect if it was explicitly passed
 ):
-    clear_current_flock()
-    context = get_base_context(request, error, success)
-    context["initial_content_url"] = "/ui/htmx/load-flock-view"
+    # Determine effective ui_mode
+    effective_ui_mode = ui_mode
+    flock_is_preloaded = get_current_flock_instance() is not None
+
+    if effective_ui_mode is None:  # ui_mode not in query parameters
+        if flock_is_preloaded:
+            # If a flock is preloaded (likely by API server) and no mode specified,
+            # default to scoped and redirect to make the URL explicit.
+            return RedirectResponse(url="/?ui_mode=scoped", status_code=307)
+        else:
+            effective_ui_mode = "standalone"  # True standalone launch
+    elif effective_ui_mode == "scoped" and not flock_is_preloaded:
+        # If explicitly asked for scoped mode but no flock is loaded (e.g. user bookmarked URL after server restart)
+        # It will show the "scoped-no-flock-view". We could also redirect to standalone.
+        # For now, let it show the "no flock loaded in scoped mode" message.
+        pass
+
+    # Conditional flock clearing based on the *effective* ui_mode
+    if effective_ui_mode != "scoped":
+        # If we are about to enter standalone mode, and a flock might have been
+        # preloaded (e.g. user navigated from /?ui_mode=scoped to /?ui_mode=standalone),
+        # ensure it's cleared for a true standalone experience.
+        if flock_is_preloaded:  # Clear only if one was there
+            clear_current_flock()
+
+    context = get_base_context(request, error, success, effective_ui_mode)
+
+    if effective_ui_mode == "scoped":
+        if get_current_flock_instance():  # Re-check, as clear_current_flock might have run if user switched modes
+            context["initial_content_url"] = (
+                "/api/flocks/htmx/flock-properties-form"
+            )
+        else:
+            context["initial_content_url"] = "/ui/htmx/scoped-no-flock-view"
+    else:  # Standalone mode
+        context["initial_content_url"] = "/ui/htmx/load-flock-view"
+
     return templates.TemplateResponse("base.html", context)
 
 
 @app.get("/ui/editor/properties", response_class=HTMLResponse)
 async def page_editor_properties(
-    request: Request, success: str = None, error: str = None
+    request: Request,
+    success: str = None,
+    error: str = None,
+    ui_mode: str = Query("standalone"),
 ):
     # ... (same as before) ...
     flock = get_current_flock_instance()
     if not flock:
         err_msg = "No flock loaded. Please load or create a flock first."
-        return RedirectResponse(
-            url=f"/?error={urllib.parse.quote(err_msg)}", status_code=303
-        )
-    context = get_base_context(request, error, success)
+        # Preserve ui_mode on redirect if it was passed
+        redirect_url = f"/?error={urllib.parse.quote(err_msg)}"
+        if ui_mode == "scoped":
+            redirect_url += "&ui_mode=scoped"
+        return RedirectResponse(url=redirect_url, status_code=303)
+    context = get_base_context(request, error, success, ui_mode)
     context["initial_content_url"] = "/api/flocks/htmx/flock-properties-form"
     return templates.TemplateResponse("base.html", context)
 
 
 @app.get("/ui/editor/agents", response_class=HTMLResponse)
 async def page_editor_agents(
-    request: Request, success: str = None, error: str = None
+    request: Request,
+    success: str = None,
+    error: str = None,
+    ui_mode: str = Query("standalone"),
 ):
     # ... (same as before) ...
     flock = get_current_flock_instance()
     if not flock:
-        return RedirectResponse(
-            url=f"/?error={urllib.parse.quote('No flock loaded for agent view.')}",
-            status_code=303,
+        # Preserve ui_mode on redirect
+        redirect_url = (
+            f"/?error={urllib.parse.quote('No flock loaded for agent view.')}"
         )
-    context = get_base_context(request, error, success)
+        if ui_mode == "scoped":
+            redirect_url += "&ui_mode=scoped"
+        return RedirectResponse(url=redirect_url, status_code=303)
+    context = get_base_context(request, error, success, ui_mode)
     context["initial_content_url"] = "/ui/htmx/agent-manager-view"
     return templates.TemplateResponse("base.html", context)
 
 
 @app.get("/ui/editor/execute", response_class=HTMLResponse)
 async def page_editor_execute(
-    request: Request, success: str = None, error: str = None
+    request: Request,
+    success: str = None,
+    error: str = None,
+    ui_mode: str = Query("standalone"),
 ):
     flock = get_current_flock_instance()
     if not flock:
-        return RedirectResponse(
-            url=f"/?error={urllib.parse.quote('No flock loaded to execute.')}",
-            status_code=303,
+        # Preserve ui_mode on redirect
+        redirect_url = (
+            f"/?error={urllib.parse.quote('No flock loaded to execute.')}"
         )
-    context = get_base_context(request, error, success)
+        if ui_mode == "scoped":
+            redirect_url += "&ui_mode=scoped"
+        return RedirectResponse(url=redirect_url, status_code=303)
+    context = get_base_context(request, error, success, ui_mode)
     # UPDATED initial_content_url
     context["initial_content_url"] = "/ui/htmx/execution-view-container"
     return templates.TemplateResponse("base.html", context)
@@ -123,42 +183,66 @@ async def page_editor_execute(
 # ... (registry and create page routes remain the same) ...
 @app.get("/ui/registry", response_class=HTMLResponse)
 async def page_registry(
-    request: Request, error: str = None, success: str = None
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query("standalone"),
 ):
-    context = get_base_context(request, error, success)
+    context = get_base_context(request, error, success, ui_mode)
     context["initial_content_url"] = "/ui/htmx/registry-viewer"
     return templates.TemplateResponse("base.html", context)
 
 
 @app.get("/ui/create", response_class=HTMLResponse)
-async def page_create(request: Request, error: str = None, success: str = None):
+async def page_create(
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query("standalone"),
+):
     clear_current_flock()
-    context = get_base_context(request, error, success)
+    # Create page should arguably not be accessible in scoped mode directly via URL,
+    # as the sidebar link will be hidden. If accessed, treat as standalone.
+    context = get_base_context(
+        request, error, success, "standalone"
+    )  # Force standalone for direct access
     context["initial_content_url"] = "/ui/htmx/create-flock-form"
     return templates.TemplateResponse("base.html", context)
 
 
 # --- HTMX Content Routes ---
 @app.get("/ui/htmx/sidebar", response_class=HTMLResponse)
-async def htmx_get_sidebar(request: Request):
+async def htmx_get_sidebar(
+    request: Request, ui_mode: str = Query("standalone")
+):
     # ... (same as before) ...
     return templates.TemplateResponse(
         "partials/_sidebar.html",
-        {"request": request, "current_flock": get_current_flock_instance()},
+        {
+            "request": request,
+            "current_flock": get_current_flock_instance(),
+            "ui_mode": ui_mode,
+        },
     )
 
 
 @app.get("/ui/htmx/load-flock-view", response_class=HTMLResponse)
 async def htmx_get_load_flock_view(
-    request: Request, error: str = None, success: str = None
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query("standalone"),
 ):
     # ... (same as before) ...
+    # This view is part of the "standalone" functionality.
+    # If somehow accessed in scoped mode, it might be confusing, but let it render.
     return templates.TemplateResponse(
         "partials/_load_manage_view.html",
         {
             "request": request,
             "error_message": error,
             "success_message": success,
+            "ui_mode": ui_mode,  # Pass for consistency, though not directly used in this partial
         },
     )
 
@@ -205,15 +289,20 @@ async def htmx_get_dashboard_flock_properties_preview(
 
 @app.get("/ui/htmx/create-flock-form", response_class=HTMLResponse)
 async def htmx_get_create_flock_form(
-    request: Request, error: str = None, success: str = None
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query("standalone"),
 ):
     # ... (same as before) ...
+    # This view is part of the "standalone" functionality.
     return templates.TemplateResponse(
         "partials/_create_flock_form.html",
         {
             "request": request,
             "error_message": error,
             "success_message": success,
+            "ui_mode": ui_mode,  # Pass for consistency
         },
     )
 
@@ -251,6 +340,87 @@ async def htmx_get_execution_view_container(request: Request):
     return templates.TemplateResponse(
         "partials/_execution_view_container.html", {"request": request}
     )
+
+
+# A new HTMX route for scoped mode when no flock is initially loaded (should ideally not happen)
+@app.get("/ui/htmx/scoped-no-flock-view", response_class=HTMLResponse)
+async def htmx_scoped_no_flock_view(request: Request):
+    return HTMLResponse("""
+        <article style="text-align:center; margin-top: 2rem; border: none; background: transparent;">
+            <hgroup>
+                <h2>Scoped Flock Mode</h2>
+                <h3>No Flock Loaded</h3>
+            </hgroup>
+            <p>This UI is in a scoped mode, expecting a Flock to be pre-loaded.</p>
+            <p>Please ensure the calling application provides a Flock instance.</p>
+        </article>
+    """)
+
+
+# Endpoint to launch the UI in scoped mode with a preloaded flock
+@app.post("/ui/launch-scoped", response_class=RedirectResponse)
+async def launch_scoped_ui(
+    request: Request,
+    flock_data: dict,  # This would be the flock's JSON data
+    # Potentially also receive filename if it's from a saved file
+):
+    # Here, you would parse flock_data, create a Flock instance,
+    # and set it as the current flock using your flock_service methods.
+    # For now, let's assume flock_service has a method like:
+    # set_current_flock_from_data(data) -> bool (returns True if successful)
+
+    # This is a placeholder for actual flock loading logic
+    # from flock.core.entities.flock import Flock # Assuming Flock can be instantiated from dict
+    # from flock.webapp.app.services.flock_service import set_current_flock_instance, set_current_flock_filename
+
+    # try:
+    #     # Assuming flock_data is a dict that can initialize a Flock object
+    #     # You might need a more robust way to deserialize, e.g., using Pydantic models
+    #     loaded_flock = Flock(**flock_data) # This is a simplistic example
+    #     set_current_flock_instance(loaded_flock)
+    #     # If the flock has a name or identifier, you might set it as well
+    #     # set_current_flock_filename(flock_data.get("name", "scoped_flock")) # Example
+    #
+    #     # Redirect to the agent editor or properties page in scoped mode
+    #     # The page_dashboard will handle ui_mode=scoped and redirect/set initial content appropriately
+    #     return RedirectResponse(url="/?ui_mode=scoped", status_code=303)
+    # except Exception as e:
+    #     # Log error e
+    #     # Redirect to an error page or the standalone dashboard with an error message
+    #     error_msg = f"Failed to load flock for scoped view: {e}"
+    #     return RedirectResponse(url=f"/?error={urllib.parse.quote(error_msg)}&ui_mode=standalone", status_code=303)
+
+    # For now, since we don't have the flock loading logic here,
+    # we'll just redirect. The calling service (`src/flock/core/api`)
+    # will need to ensure the flock is loaded into the webapp's session/state
+    # *before* redirecting to this UI.
+
+    # A more direct way if `load_flock_from_data_service` exists and sets it globally for the session:
+    # success = load_flock_from_data_service(flock_data, "scoped_runtime_flock") # example filename
+    # if success:
+    #    return RedirectResponse(url="/ui/editor/agents?ui_mode=scoped", status_code=303) # or properties
+    # else:
+    #    return RedirectResponse(url="/?error=Failed+to+load+scoped+flock&ui_mode=standalone", status_code=303)
+
+    # Given the current structure, the simplest way for an external service to "preload" a flock
+    # is to use the existing `load_flock_from_file_service` if the flock can be temporarily saved,
+    # or by enhancing `flock_service` to allow setting a Flock instance directly.
+    # Let's assume the flock is already loaded into the session by the calling API for now.
+    # The calling API will be responsible for calling a service function within the webapp's context.
+
+    # This endpoint's primary job is now to redirect to the UI in the correct mode.
+    # The actual loading of the flock should happen *before* this redirect,
+    # by the API server calling a service function within the webapp's context.
+
+    # For demonstration, let's imagine the calling API has already used a service
+    # to set the flock. We just redirect.
+    if get_current_flock_instance():
+        return RedirectResponse(
+            url="/ui/editor/agents?ui_mode=scoped", status_code=303
+        )
+    else:
+        # If no flock is loaded, go to the main page in scoped mode, which will show the "no flock" message.
+        return RedirectResponse(url="/?ui_mode=scoped", status_code=303)
 
 
 # --- Action Routes ...

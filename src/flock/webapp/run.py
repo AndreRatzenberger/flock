@@ -15,7 +15,7 @@ def main():
         uvicorn.run(
             "flock.webapp.app.main:app",
             host="127.0.0.1",
-            port=8008,
+            port=8344,
             reload=True,
         )
     except ModuleNotFoundError as e:
