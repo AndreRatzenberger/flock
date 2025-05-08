@@ -1,6 +1,7 @@
 # ... (keep existing imports and app setup) ...
 import json
 import shutil
+import sys  # For path
 import urllib.parse
 from pathlib import Path
 
@@ -15,7 +16,13 @@ from flock.webapp.app.api import (
     flock_management,
     registry_viewer,
 )
-from flock.webapp.app.config import FLOCK_FILES_DIR
+
+# Import config functions
+from flock.webapp.app.config import (
+    DEFAULT_THEME_NAME,  # Import default for fallback
+    FLOCK_FILES_DIR,
+    get_current_theme_name,
+)
 from flock.webapp.app.services.flock_service import (
     clear_current_flock,
     create_new_flock_service,
@@ -25,6 +32,36 @@ from flock.webapp.app.services.flock_service import (
     get_flock_preview_service,
     load_flock_from_file_service,
 )
+
+# Helper for theme loading
+
+# Find the 'src/flock' directory
+flock_base_dir = (
+    Path(__file__).resolve().parent.parent.parent
+)  # src/flock/webapp/app -> src/flock
+
+# Calculate themes directory relative to the flock base dir
+themes_dir = flock_base_dir / "themes"
+
+# Ensure the parent ('src') is in the path for core imports
+src_dir = flock_base_dir.parent  # src/
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
+try:
+    from flock.core.logging.formatters.themed_formatter import (
+        load_theme_from_file,
+    )
+
+    THEME_LOADER_AVAILABLE = True
+    # themes_dir calculated above
+except ImportError:
+    print(
+        "Warning: Could not import flock.core theme loading utilities.",
+        file=sys.stderr,
+    )
+    THEME_LOADER_AVAILABLE = False
+    themes_dir = None  # Keep it None if loader failed
 
 app = FastAPI(title="Flock UI")
 
@@ -49,12 +86,132 @@ app.include_router(
 )
 
 
+def generate_theme_css(theme_name: str | None) -> str:
+    """Loads a theme TOML and generates CSS variable overrides."""
+    if not THEME_LOADER_AVAILABLE or themes_dir is None:
+        return ""  # Return empty if theme loading isn't possible
+
+    active_theme_name = theme_name or DEFAULT_THEME_NAME
+    theme_filename = f"{active_theme_name}.toml"
+    theme_path = themes_dir / theme_filename
+
+    if not theme_path.exists():
+        print(
+            f"Warning: Theme file not found: {theme_path}. Using default theme.",
+            file=sys.stderr,
+        )
+        # Optionally load the default theme file if the requested one isn't found
+        theme_filename = f"{DEFAULT_THEME_NAME}.toml"
+        theme_path = themes_dir / theme_filename
+        if not theme_path.exists():
+            print(
+                f"Warning: Default theme file not found: {theme_path}. No theme CSS generated.",
+                file=sys.stderr,
+            )
+            return ""  # Return empty if even default isn't found
+        active_theme_name = (
+            DEFAULT_THEME_NAME  # Update active name if defaulted
+        )
+
+    try:
+        theme_dict = load_theme_from_file(str(theme_path))
+    except Exception as e:
+        print(f"Error loading theme file {theme_path}: {e}", file=sys.stderr)
+        return ""  # Return empty on error
+
+    # --- Define TOML Color -> CSS Variable Mapping ---
+    # This mapping is crucial and may need adjustment based on theme intent & Pico usage
+    css_vars = {}
+    try:
+        css_vars["--pico-background-color"] = theme_dict["colors"]["primary"][
+            "background"
+        ]
+        css_vars["--pico-color"] = theme_dict["colors"]["primary"]["foreground"]
+
+        # Use bright blue for primary interactive elements? Requires theme to have it.
+        css_vars["--pico-primary"] = theme_dict["colors"]["bright"].get(
+            "blue", "#007bff"
+        )  # Fallback blue
+        css_vars["--pico-primary-hover"] = theme_dict["colors"]["normal"].get(
+            "blue", "#0056b3"
+        )  # Fallback darker blue
+
+        # Contrast background for things like buttons using primary color
+        css_vars["--pico-contrast"] = theme_dict["colors"]["primary"][
+            "background"
+        ]
+        # Background of cards, menus, etc.
+        css_vars["--pico-card-background-color"] = theme_dict["colors"][
+            "primary"
+        ].get("background", "#ffffff")
+        css_vars["--pico-card-border-color"] = theme_dict["colors"][
+            "normal"
+        ].get("black", "#e1e1e1")
+        css_vars["--pico-muted-border-color"] = theme_dict["colors"][
+            "normal"
+        ].get("black", "#e1e1e1")
+        css_vars["--pico-form-element-background-color"] = theme_dict["colors"][
+            "primary"
+        ].get("background", "#ffffff")  # Or slightly different?
+        css_vars["--pico-form-element-border-color"] = theme_dict["colors"][
+            "bright"
+        ].get("black", "#cccccc")
+        css_vars["--pico-form-element-focus-color"] = theme_dict["colors"][
+            "bright"
+        ].get("blue", "#007bff")  # Same as primary?
+
+        # Custom vars (examples)
+        css_vars["--flock-sidebar-background"] = theme_dict["colors"][
+            "primary"
+        ]["background"]  # Same as main bg for now
+        css_vars["--flock-header-background"] = theme_dict["colors"]["primary"][
+            "background"
+        ]
+        css_vars["--flock-error-color"] = theme_dict["colors"]["bright"].get(
+            "red", "#dc3545"
+        )
+        css_vars["--flock-success-color"] = theme_dict["colors"]["bright"].get(
+            "green", "#28a745"
+        )
+
+    except KeyError as e:
+        print(
+            f"Warning: Missing expected key in theme '{active_theme_name}': {e}. CSS may be incomplete.",
+            file=sys.stderr,
+        )
+
+    if not css_vars:
+        return ""  # Return empty if no variables were mapped
+
+    css_rules = [f"    {name}: {value};" for name, value in css_vars.items()]
+
+    # Apply overrides within the currently active theme selector for better specificity
+    # We could get the theme name passed in, or maybe check the <html> tag attribute?
+    # For simplicity, let's assume we want to override Pico's dark theme vars when a theme is loaded.
+    # A better approach might involve removing data-theme="dark" and applying theme to :root
+    # or having specific data-theme selectors for each flock theme.
+    # Let's try applying to [data-theme="dark"] first.
+    selector = '[data-theme="dark"]'
+    css_string = ":root {\n" + "\n".join(css_rules) + "\n}"
+
+    print(
+        f"--- Generated CSS for theme '{active_theme_name}' ---"
+    )  # Debugging print
+    print(css_string)  # Debugging print
+    print(
+        "----------------------------------------------------"
+    )  # Debugging print
+    return css_string
+
+
 def get_base_context(
     request: Request,
     error: str = None,
     success: str = None,
     ui_mode: str = "standalone",
 ) -> dict:
+    theme_name = get_current_theme_name()  # Get theme from config
+    theme_css = generate_theme_css(theme_name)
     return {
         "request": request,
         "current_flock": get_current_flock_instance(),
@@ -62,6 +219,7 @@ def get_base_context(
         "error_message": error,
         "success_message": success,
         "ui_mode": ui_mode,
+        "theme_css": theme_css,  # Add generated CSS to context
     }
 
 

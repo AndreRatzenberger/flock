@@ -684,12 +684,57 @@ class Flock(BaseModel, Serializable):
         port: int = 8344,
         server_name: str = "Flock API",
         create_ui: bool = False,
+        ui_theme: str | None = None,
     ) -> None:
-        """Starts a REST API server for this Flock instance."""
+        """Starts a REST API server for this Flock instance.
+        If create_ui is True, integrates the web UI, potentially with a specific theme.
+        """
         # Import runner locally
-        from flock.core.api.runner import start_flock_api
+        # We need to decide if start_api now *always* tries to use the integrated approach
+        # or if it still calls the API-only runner when create_ui=False.
+        # Let's assume it uses the integrated approach starter if create_ui=True
+        # and the API-only starter (FlockAPI) if create_ui=False.
 
-        start_flock_api(self, host, port, server_name, create_ui)
+        if create_ui:
+            # Use the integrated server approach
+            try:
+                # We need a function similar to start_flock_api but for the integrated app
+                # Let's assume it exists in webapp.run for now, called start_integrated_server
+                from flock.webapp.run import start_integrated_server
+
+                start_integrated_server(
+                    flock_instance=self,
+                    host=host,
+                    port=port,
+                    server_name=server_name,
+                    theme_name=ui_theme,
+                )
+            except ImportError:
+                # Log error - cannot start integrated UI
+                from flock.core.logging.logging import get_logger
+
+                logger = get_logger("flock.core")
+                logger.error(
+                    "Cannot start integrated UI: Required components (e.g., flock.webapp.run.start_integrated_server) not found."
+                )
+            except Exception as e:
+                from flock.core.logging.logging import get_logger
+
+                logger = get_logger("flock.core")
+                logger.error(
+                    f"Failed to start integrated UI server: {e}", exc_info=True
+                )
+        else:
+            # Use the API-only server approach
+            from flock.core.api.runner import start_flock_api
+
+            start_flock_api(
+                flock=self,
+                host=host,
+                port=port,
+                server_name=server_name,
+                create_ui=False,  # Explicitly false for API only runner
+            )
 
     # --- CLI Starter ---
     def start_cli(
