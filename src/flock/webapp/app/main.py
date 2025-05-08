@@ -1,5 +1,6 @@
 # ... (keep existing imports and app setup) ...
 import json
+import os  # Needed for environment variable helpers
 import shutil
 import sys  # For path
 import urllib.parse
@@ -68,6 +69,66 @@ except ImportError:
     )
     THEME_LOADER_AVAILABLE = False
     # THEMES_DIR will be None if not imported, or its value from config
+
+# --- Lightweight .env helpers (self-contained, no external deps) ---
+ENV_FILE = ".env"
+SHOW_SECRETS_KEY = "SHOW_SECRETS"
+
+def load_env_file() -> dict[str, str]:
+    env_vars: dict[str, str] = {}
+    if not os.path.exists(ENV_FILE):
+        return env_vars
+    with open(ENV_FILE) as f:
+        lines = f.readlines()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            env_vars[""] = ""
+            continue
+        if line.startswith("#"):
+            env_vars[line] = ""
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            env_vars[k] = v
+        else:
+            env_vars[line] = ""
+    return env_vars
+
+def save_env_file(env_vars: dict[str, str]):
+    try:
+        with open(ENV_FILE, "w") as f:
+            for k, v in env_vars.items():
+                if k.startswith("#"):
+                    f.write(f"{k}\n")
+                elif not k:
+                    f.write("\n")
+                else:
+                    f.write(f"{k}={v}\n")
+    except Exception as e:
+        print(f"[Settings] Failed to save .env: {e}")
+
+def is_sensitive(key: str) -> bool:
+    patterns = ["key", "token", "secret", "password", "api", "pat"]
+    low = key.lower()
+    return any(p in low for p in patterns)
+
+def mask_sensitive_value(value: str) -> str:
+    if not value:
+        return value
+    if len(value) <= 4:
+        return "••••"
+    return value[:2] + "•" * (len(value) - 4) + value[-2:]
+
+def get_show_secrets_setting(env_vars: dict[str, str]) -> bool:
+    return env_vars.get(SHOW_SECRETS_KEY, "false").lower() == "true"
+
+def set_show_secrets_setting(show: bool):
+    env_vars = load_env_file()
+    env_vars[SHOW_SECRETS_KEY] = str(show)
+    save_env_file(env_vars)
+
+# -------------------------------------------------------------------
 
 app = FastAPI(title="Flock UI")
 
@@ -779,4 +840,235 @@ async def ui_create_flock_action(
             "current_filename": get_current_flock_filename(),
         },
         headers=response_headers,
+    )
+
+
+# --- Settings Page ---
+@app.get("/ui/settings", response_class=HTMLResponse)
+async def page_settings(
+    request: Request,
+    error: str = None,
+    success: str = None,
+    ui_mode: str = Query("standalone"),
+):
+    """Render the Settings top-level page which in turn loads the HTMX settings view."""
+    context = get_base_context(request, error, success, ui_mode)
+    context["initial_content_url"] = "/ui/htmx/settings-view"
+    return templates.TemplateResponse("base.html", context)
+
+
+# Helper to build env var list for templates
+
+def _prepare_env_vars_for_template():
+    env_vars_raw = load_env_file()
+    show_secrets = get_show_secrets_setting(env_vars_raw)
+    env_vars_list = []
+    for name, value in env_vars_raw.items():
+        if name.startswith("#") or name == "":
+            # skip comments/blank for table
+            continue
+        display_value = (
+            value
+            if (not is_sensitive(name) or show_secrets)
+            else mask_sensitive_value(value)
+        )
+        env_vars_list.append({"name": name, "value": display_value})
+    return env_vars_list, show_secrets
+
+
+@app.get("/ui/htmx/settings-view", response_class=HTMLResponse)
+async def htmx_get_settings_view(request: Request):
+    """Return the settings composite view (env vars + theme switcher)."""
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    theme_name = get_current_theme_name()
+    themes_available = []
+    if THEMES_DIR and THEMES_DIR.exists():
+        themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")]
+    return templates.TemplateResponse(
+        "partials/_settings_view.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+            "themes": themes_available,
+            "current_theme": theme_name,
+        },
+    )
+
+
+# --- Env Var Manager Endpoints ---
+@app.post("/ui/htmx/toggle-show-secrets", response_class=HTMLResponse)
+async def htmx_toggle_show_secrets(request: Request):
+    # Toggle and return updated table
+    env_vars_raw = load_env_file()
+    current = get_show_secrets_setting(env_vars_raw)
+    set_show_secrets_setting(not current)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    return templates.TemplateResponse(
+        "partials/_env_vars_table.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+        },
+    )
+
+
+@app.post("/ui/htmx/env-delete", response_class=HTMLResponse)
+async def htmx_env_delete(request: Request, var_name: str = Form(...)):
+    env_vars_raw = load_env_file()
+    if var_name in env_vars_raw:
+        del env_vars_raw[var_name]
+        save_env_file(env_vars_raw)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    return templates.TemplateResponse(
+        "partials/_env_vars_table.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+        },
+    )
+
+
+@app.post("/ui/htmx/env-edit", response_class=HTMLResponse)
+async def htmx_env_edit(
+    request: Request,
+    var_name: str = Form(...),
+):
+    # New value is provided via HX-Prompt header
+    new_value = request.headers.get("HX-Prompt")
+    if new_value is None:
+        # Nothing entered; just return current table
+        env_vars_list, show_secrets = _prepare_env_vars_for_template()
+        return templates.TemplateResponse(
+            "partials/_env_vars_table.html",
+            {
+                "request": request,
+                "env_vars": env_vars_list,
+                "show_secrets": show_secrets,
+            },
+        )
+    env_vars_raw = load_env_file()
+    env_vars_raw[var_name] = new_value
+    save_env_file(env_vars_raw)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    return templates.TemplateResponse(
+        "partials/_env_vars_table.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+        },
+    )
+
+
+@app.get("/ui/htmx/env-add-form", response_class=HTMLResponse)
+async def htmx_env_add_form(request: Request):
+    # Return simple form row at top of table
+    return HTMLResponse(
+        """
+        <form hx-post='/ui/htmx/env-add' hx-target='#env-vars-container' hx-swap='outerHTML' style='display:flex; gap:0.5rem; margin-bottom:0.5rem;'>
+            <input name='var_name' placeholder='NAME' required style='flex:2;'>
+            <input name='var_value' placeholder='VALUE' style='flex:3;'>
+            <button type='submit'>Add</button>
+        </form>
+        """
+    )
+
+
+@app.post("/ui/htmx/env-add", response_class=HTMLResponse)
+async def htmx_env_add(request: Request, var_name: str = Form(...), var_value: str = Form("")):
+    env_vars_raw = load_env_file()
+    env_vars_raw[var_name] = var_value
+    save_env_file(env_vars_raw)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    return templates.TemplateResponse(
+        "partials/_env_vars_table.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+        },
+    )
+
+
+# --- Theme Preview and Apply Endpoints ---
+@app.get("/ui/htmx/theme-preview", response_class=HTMLResponse)
+async def htmx_theme_preview(request: Request, theme: str = Query(None)):
+    theme_name = theme or get_current_theme_name()
+    # Load theme data
+    try:
+        theme_path = THEMES_DIR / f"{theme_name}.toml" if THEMES_DIR else None
+        if not (theme_path and theme_path.exists()):
+            return HTMLResponse("<p>Theme not found.</p>")
+        from flock.core.logging.formatters.themed_formatter import (
+            load_theme_from_file,
+        )
+        theme_data = load_theme_from_file(str(theme_path))
+    except Exception as e:
+        return HTMLResponse(f"<p>Error loading theme: {e}</p>")
+
+    css_vars = alacritty_to_pico(theme_data)
+    css_vars_str = ":root {\n" + "\n".join([f"  {k}: {v};" for k, v in css_vars.items()]) + "\n}"
+
+    main_colors = [
+        ("Background", css_vars["--pico-background-color"]),
+        ("Text", css_vars["--pico-color"]),
+        ("Primary", css_vars["--pico-primary"]),
+        ("Secondary", css_vars["--pico-secondary"]),
+        ("Muted", css_vars["--pico-muted-color"]),
+    ]
+
+    return templates.TemplateResponse(
+        "partials/_theme_preview.html",
+        {
+            "request": request,
+            "theme_name": theme_name,
+            "css_vars_str": css_vars_str,
+            "main_colors": main_colors,
+        },
+    )
+
+
+@app.post("/ui/apply-theme")
+async def apply_theme(request: Request, theme: str = Form(...)):
+    try:
+        from flock.webapp.app.config import set_current_theme_name
+
+        set_current_theme_name(theme)
+        # Trigger full refresh via HTMX
+        headers = {"HX-Refresh": "true"}
+        return HTMLResponse("", headers=headers)
+    except Exception as e:
+        return HTMLResponse(f"Failed to apply theme: {e}", status_code=500)
+
+
+# --- Settings Content Endpoints (for tab navigation) ---
+@app.get("/ui/htmx/settings/env-vars", response_class=HTMLResponse)
+async def htmx_settings_env_vars(request: Request):
+    env_vars_list, show_secrets = _prepare_env_vars_for_template()
+    return templates.TemplateResponse(
+        "partials/_settings_env_content.html",
+        {
+            "request": request,
+            "env_vars": env_vars_list,
+            "show_secrets": show_secrets,
+        },
+    )
+
+
+@app.get("/ui/htmx/settings/theme", response_class=HTMLResponse)
+async def htmx_settings_theme(request: Request):
+    theme_name = get_current_theme_name()
+    themes_available = []
+    if THEMES_DIR and THEMES_DIR.exists():
+        themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")]
+    return templates.TemplateResponse(
+        "partials/_settings_theme_content.html",
+        {
+            "request": request,
+            "themes": themes_available,
+            "current_theme": theme_name,
+        },
     )
