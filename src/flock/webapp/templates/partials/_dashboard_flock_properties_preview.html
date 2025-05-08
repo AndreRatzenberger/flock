@@ -5,7 +5,7 @@
     {% if preview_flock %}
         <p><strong>Default Model:</strong> {{ preview_flock.model or 'Not set' }}</p>
         <p><strong>Description:</strong> {{ preview_flock.description or 'None' }}</p>
-        <p><strong>Agents:</strong> {{ preview_flock.agents|length }}</p>
+        <p><strong>Agents:</strong> {{ preview_flock.agents_count }}</p>
         
         <form hx-post="/ui/load-flock-action/by-name" 
               hx-target="#main-content-area" {# This will load the full editor for this flock #}

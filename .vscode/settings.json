@@ -6,7 +6,7 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "python.testing.autoTestDiscoverOnSaveEnabled": true,
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
     "editor.codeActionsOnSave": {
         "source.organizeImports.ruff": "always",
         "source.fixAll.ruff": "always"
@@ -19,7 +19,7 @@
     "editor.fontSize": 15.5,
     "editor.fontLigatures": true,
     "editor.lineHeight": 1.5,
-    "editor.minimap.enabled": true,
+    "editor.minimap.enabled": false,
     "editor.tabSize": 2,
     "editor.semanticTokenColorCustomizations": {
         "enabled": true

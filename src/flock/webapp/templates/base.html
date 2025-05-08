@@ -9,6 +9,15 @@
     <link rel="stylesheet" href="/static/css/custom.css">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    {# Inject Theme CSS Variables #}
+    {% if theme_css %}
+    <style>
+        /* Start Theme CSS */
+        {{ theme_css | safe }}
+        /* End Theme CSS */
+    </style>
+    {% endif %}
+    {# End Theme CSS Injection #}
     <script src="https://unpkg.com/htmx.org@1.9.10"
         integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
         crossorigin="anonymous"></script>
@@ -19,12 +28,10 @@
 <body>
     <header class="top-header">
         <span><strong>🐧 Flock UI 🐤</strong></span>
-        {# Use the variables passed from the route handler #}
-        {% if current_flock %}
-        <small>Current: <code>{{ current_filename or current_flock.name }}</code></small>
-        {% else %}
-        <small>No Flock Loaded</small>
-        {% endif %}
+        <span id="header-flock-status-container" hx-get="/ui/htmx/header-flock-status?ui_mode={{ ui_mode }}"
+            hx-trigger="load, flockLoaded from:body, flockCleared from:body" hx-swap="innerHTML">
+            <small>Loading status...</small> {# Placeholder while loading #}
+        </span>
     </header>
 
     <aside class="sidebar" hx-get="/ui/htmx/sidebar?ui_mode={{ ui_mode }}"
@@ -60,7 +67,7 @@
     </div>
 
     <footer class="main-footer">
-        <small>Built with FastAPI, HTMX, Pico.CSS by 🤍 white duck 🦆</small>
+        <small>Built with FastAPI, HTMX, Pico.CSS by 🤍 white duck 🦆 - Theme: {{ active_theme_name | default('default') }}</small>
     </footer>
 
     <script>

@@ -6,16 +6,16 @@
             <button hx-get="/ui/htmx/load-flock-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/' or request.url.path == '/ui/htmx/load-flock-view' %}active-nav{% endif %}">
-                <i class="fas fa-folder-open"></i> Load Files
+                <i class="fas fa-folder-open"></i> Load Flock
             </button>
         </li>
-        <li>
+        <!-- <li>
             <button hx-get="/ui/htmx/create-flock-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/create?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/ui/create' %}active-nav{% endif %}">
                 <i class="fas fa-plus-circle"></i> Create New Flock
             </button>
-        </li>
+        </li> -->
     </ul>
     {% endif %}
 
@@ -26,21 +26,21 @@
         <li>
             <button hx-get="/api/flocks/htmx/flock-properties-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/properties?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/properties' %}active-nav{% endif %}">
+                class="contrast {% if request.url.path == '/ui/editor/properties' %}active-nav{% endif %}">
                 <i class="fas fa-cog"></i> Properties
             </button>
         </li>
         <li>
             <button hx-get="/ui/htmx/agent-manager-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/agents?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/agents' %}active-nav{% endif %}">
+                class="contrast{% if request.url.path == '/ui/editor/agents' %}active-nav{% endif %}">
                 <i class="fas fa-robot"></i> Agents ({{ current_flock.agents|length }})
             </button>
         </li>
         <li>
             <button hx-get="/ui/htmx/execution-view-container?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/execute?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
-                class="{% if request.url.path == '/ui/editor/execute' %}active-nav{% endif %}">
+                class="contrast {% if request.url.path == '/ui/editor/execute' %}active-nav{% endif %}">
                 <i class="fas fa-play-circle"></i> Execute Flock
             </button>
         </li>
@@ -55,6 +55,13 @@
                 hx-push-url="/ui/registry?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/ui/registry' %}active-nav{% endif %}">
                 <i class="fas fa-book"></i> View Registry
+            </button>
+        </li>
+        <li>
+            <button hx-get="/ui/htmx/settings-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
+                hx-push-url="/ui/settings?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
+                class="contrast {% if request.url.path == '/ui/settings' %}active-nav{% endif %}">
+                <i class="fas fa-sliders-h"></i> Settings
             </button>
         </li>
     </ul>

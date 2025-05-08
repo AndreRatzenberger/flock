@@ -1,6 +1,7 @@
 """Flock package initialization."""
 
 import argparse
+import os
 import sys
 
 
@@ -15,13 +16,43 @@ def main():
         action="store_true",
         help="Start the web interface instead of the CLI",
     )
+    parser.add_argument(
+        "--theme",
+        type=str,
+        default=None,
+        help="Specify the theme name for the web interface (if --web is used).",
+    )
     args = parser.parse_args()
 
     # If --web flag is provided, start the web server
     if args.web:
-        from flock.webapp.run import main as run_webapp
+        try:
+            # Set environment variable for theme if provided
+            if args.theme:
+                print(
+                    f"Setting FLOCK_WEB_THEME environment variable to: {args.theme}"
+                )
+                os.environ["FLOCK_WEB_THEME"] = args.theme
+            else:
+                # Ensure it's not set if no theme arg is passed
+                if "FLOCK_WEB_THEME" in os.environ:
+                    del os.environ["FLOCK_WEB_THEME"]
 
-        run_webapp()
+            # Import and run the standalone webapp main function
+            # It will now read the theme from the environment variable
+            from flock.webapp.run import main as run_webapp_main
+
+            run_webapp_main()
+
+        except ImportError:
+            print(
+                "Error: Could not import webapp components. Ensure web dependencies are installed.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting webapp: {e}", file=sys.stderr)
+            sys.exit(1)
         return
 
     # Otherwise, run the CLI interface
@@ -53,8 +84,6 @@ def main():
     console = Console()
 
     # Show a welcome message on first run with the new tool serialization format
-    import os
-
     cfg_file = os.path.expanduser(f"~/.flock/{CLI_CFG_FILE}")
     if not os.path.exists(cfg_file):
         # Create the directory if it doesn't exist
@@ -137,12 +166,6 @@ def main():
             manage_registry()
         elif result == CLI_SETTINGS:
             settings_editor()
-        elif result == CLI_START_WEB_SERVER:
-            # Start the web server
-            from flock.webapp.run import main as run_webapp
-
-            run_webapp()
-            break
         elif result == CLI_NOTES:
             load_release_notes()
         elif result == CLI_EXIT:
