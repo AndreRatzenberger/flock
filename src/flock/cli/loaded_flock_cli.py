@@ -12,8 +12,8 @@ from flock.cli.constants import (
     CLI_REGISTRY_MANAGEMENT,
     CLI_SETTINGS,
 )
-from flock.core.api import runner
 from flock.core.flock import Flock
+from flock.core.logging.logging import get_logger
 from flock.core.util.cli_helper import init_console
 
 # Import future modules we'll create
@@ -48,6 +48,7 @@ except ImportError:
 
 # Create console instance
 console = Console()
+logger = get_logger("cli.loaded_flock")
 
 
 def start_loaded_flock_cli(
@@ -188,17 +189,11 @@ def start_loaded_flock_cli(
 
 
 def _start_web_server(flock: Flock, create_ui: bool = False) -> None:
-    """Start a web server with the loaded Flock instance.
-
-    Args:
-        flock: The loaded Flock instance
-        create_ui: Whether to create a UI for the web server
-    """
+    """Start a web server with the loaded Flock instance."""
     host = "127.0.0.1"
     port = 8344
-    server_name = "Flock API"
+    # server_name = flock.name + " API" # Use flock name by default for server_name
 
-    # Get configuration from user
     console.print("\n[bold]Web Server Configuration[/]")
 
     host_input = questionary.text(
@@ -214,21 +209,46 @@ def _start_web_server(flock: Flock, create_ui: bool = False) -> None:
         port = int(port_input)
 
     server_name_input = questionary.text(
-        "Server name (default: FlockName API):", default=flock.name + " API"
+        "Server name (default: FlockName API):", default=f"{flock.name or 'Flock'} API"
     ).ask()
-    if server_name_input:
-        server_name = server_name_input
+    # if server_name_input: # server_name will be set by flock.start_api if not passed, or use its default
+    # server_name = server_name_input
 
-    # Start the web server
+    ui_theme_to_pass = None
+    if create_ui:
+        try:
+            from flock.webapp.app.config import (
+                DEFAULT_THEME_NAME,
+                list_available_themes,
+            )
+            available_themes = list_available_themes()
+            theme_choices = ["default (current environment setting)", "random"] + sorted(available_themes)
+
+            selected_theme_choice = questionary.select(
+                "Select UI theme:",
+                choices=theme_choices,
+                default="default (current environment setting)"
+            ).ask()
+
+            if selected_theme_choice == "random":
+                ui_theme_to_pass = "random"
+            elif selected_theme_choice and selected_theme_choice != "default (current environment setting)":
+                ui_theme_to_pass = selected_theme_choice
+            # If "default" or None, ui_theme_to_pass remains None, Flock.start_api will use its logic
+
+        except ImportError:
+            logger.warning("Could not import webapp theme configuration for CLI selection. Theme will use default.")
+            ui_theme_to_pass = None # Fallback if webapp components not there
+
     console.print(
-        f"\nStarting web server on {host}:{port} {'with UI' if create_ui else 'without UI'}..."
+        f"\nStarting web server on {host}:{port} {'with UI' if create_ui else 'without UI'}{' (Theme: ' + (ui_theme_to_pass if ui_theme_to_pass else 'default') + ')' if create_ui else ''}..."
     )
 
-    # Use the Flock's start_api method
-    runner.start_flock_api(
-        flock=flock,
+    # Call the Flock instance's own start_api method directly
+    flock.start_api(
         host=host,
         port=port,
-        server_name=server_name,
+        server_name=server_name_input, # Pass the chosen server name
         create_ui=create_ui,
+        ui_theme=ui_theme_to_pass,
     )

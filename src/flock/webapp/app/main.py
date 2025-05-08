@@ -21,7 +21,9 @@ from flock.webapp.app.api import (
 from flock.webapp.app.config import (
     DEFAULT_THEME_NAME,  # Import default for fallback
     FLOCK_FILES_DIR,
+    THEMES_DIR,  # Import THEMES_DIR from config
     get_current_theme_name,
+    # set_current_theme_name, # Not directly used in main.py, but available
 )
 from flock.webapp.app.services.flock_service import (
     clear_current_flock,
@@ -32,18 +34,22 @@ from flock.webapp.app.services.flock_service import (
     get_flock_preview_service,
     load_flock_from_file_service,
 )
+from flock.webapp.app.theme_mapper import alacritty_to_pico
 
 # Helper for theme loading
 
-# Find the 'src/flock' directory
-flock_base_dir = (
-    Path(__file__).resolve().parent.parent.parent
-)  # src/flock/webapp/app -> src/flock
+# Find the 'src/flock' directory - This can be removed if THEMES_DIR from config is sufficient
+# flock_base_dir = (
+#     Path(__file__).resolve().parent.parent.parent
+# )  # src/flock/webapp/app -> src/flock
 
-# Calculate themes directory relative to the flock base dir
-themes_dir = flock_base_dir / "themes"
+# Calculate themes directory relative to the flock base dir - This can be removed
+# themes_dir = flock_base_dir / "themes"
 
 # Ensure the parent ('src') is in the path for core imports
+# This path manipulation might still be needed if core imports are relative in a specific way
+flock_webapp_dir = Path(__file__).resolve().parent.parent # src/flock/webapp/
+flock_base_dir = flock_webapp_dir.parent # src/flock/
 src_dir = flock_base_dir.parent  # src/
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
@@ -54,14 +60,14 @@ try:
     )
 
     THEME_LOADER_AVAILABLE = True
-    # themes_dir calculated above
+    # themes_dir is now imported from config
 except ImportError:
     print(
         "Warning: Could not import flock.core theme loading utilities.",
         file=sys.stderr,
     )
     THEME_LOADER_AVAILABLE = False
-    themes_dir = None  # Keep it None if loader failed
+    # THEMES_DIR will be None if not imported, or its value from config
 
 app = FastAPI(title="Flock UI")
 
@@ -88,12 +94,12 @@ app.include_router(
 
 def generate_theme_css(theme_name: str | None) -> str:
     """Loads a theme TOML and generates CSS variable overrides."""
-    if not THEME_LOADER_AVAILABLE or themes_dir is None:
+    if not THEME_LOADER_AVAILABLE or THEMES_DIR is None: # Use imported THEMES_DIR
         return ""  # Return empty if theme loading isn't possible
 
     active_theme_name = theme_name or DEFAULT_THEME_NAME
     theme_filename = f"{active_theme_name}.toml"
-    theme_path = themes_dir / theme_filename
+    theme_path = THEMES_DIR / theme_filename # Use imported THEMES_DIR
 
     if not theme_path.exists():
         print(
@@ -102,7 +108,7 @@ def generate_theme_css(theme_name: str | None) -> str:
         )
         # Optionally load the default theme file if the requested one isn't found
         theme_filename = f"{DEFAULT_THEME_NAME}.toml"
-        theme_path = themes_dir / theme_filename
+        theme_path = THEMES_DIR / theme_filename
         if not theme_path.exists():
             print(
                 f"Warning: Default theme file not found: {theme_path}. No theme CSS generated.",
@@ -179,7 +185,7 @@ def generate_theme_css(theme_name: str | None) -> str:
 
         # Code blocks
         css_vars["--pico-code-background-color"] = theme_dict["colors"]["cursor"].get("text")  # Background behind code
-        css_vars["--pico-code-color"] = theme_dict["colors"]["selection"].get("text")  # Code text
+        css_vars["--pico-code-color"] = theme_dict["colors"]["primary"].get("background")  # Code text
         css_vars["--pico-code-kbd-background-color"] = theme_dict["colors"]["selection"].get("background")
         css_vars["--pico-code-kbd-color"] = theme_dict["colors"]["selection"].get("text")
         css_vars["--pico-code-tag-color"] = theme_dict["colors"]["normal"].get("blue")  # Tag elements
@@ -199,6 +205,10 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--flock-header-background"] = theme_dict["colors"]["selection"].get("background") # Example: Link header to card background
         css_vars["--flock-error-color"] = theme_dict["colors"]["normal"].get("red", "#dc3545")
         css_vars["--flock-success-color"] = theme_dict["colors"]["normal"].get("green", "#28a745")
+
+
+        pico_vars = alacritty_to_pico(theme_dict)
+        css_vars.update(pico_vars)
 
     except KeyError as e:
         print(
