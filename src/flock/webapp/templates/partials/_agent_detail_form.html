@@ -1,7 +1,8 @@
+<header>
+    <h5>{% if is_new %}Add New Agent{% else %}Edit Agent: {{ agent.name if agent else '' }}{% endif %}</h5>
+</header>
 <article id="agent-detail-form-content">
-    <header>
-        <h4>{% if is_new %}Add New Agent{% else %}Edit Agent: {{ agent.name if agent else '' }}{% endif %}</h4>
-    </header>
+    
     {% if form_message %}
         <div class="form-message {{ 'success' if success else 'error' }}"
              x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 3000)"

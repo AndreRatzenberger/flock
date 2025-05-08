@@ -276,7 +276,7 @@ progress:indeterminate::after {
 #agent-list-panel,
 #agent-detail-panel {
     height: calc(80vh - var(--pico-block-spacing-vertical) * 2);
-    overflow-y: auto;
+    
 }
 
 #agent-list-panel article,
@@ -290,7 +290,7 @@ progress:indeterminate::after {
 
 #agent-list-panel header,
 #agent-detail-panel header {
-    background-color: var(--pico-card-sectioning-background-color);
+    /* background-color: var(--pico-card-sectioning-background-color); */
     flex-shrink: 0;
 }
 
@@ -299,7 +299,6 @@ progress:indeterminate::after {
     overflow-y: auto;
     list-style-type: none;
     padding: 0;
-    margin-top: 1rem;
 }
 
 #agent-list-panel li {
@@ -312,7 +311,7 @@ progress:indeterminate::after {
 }
 
 #agent-list-panel li:hover,
-#agent-list-panel li.htmx-settling {
+#agent-list-panel li.htmx-setting {
     background-color: var(--pico-muted-hover-background-color);
 }
 
@@ -542,13 +541,13 @@ main.main-content h3 {
     /* border-radius: var(--pico-border-radius); */
     display: flex; /* To allow header and scrollable content within */
     flex-direction: column;
-    overflow-y: auto; /* If content within left-pane itself needs to scroll, not just a sub-div */
+   
 }
 
 /* If the left pane has a content div that should be scrollable (e.g., a list) */
 .left-pane > .scrollable-content {
     flex-grow: 1;
-    overflow-y: auto;
+    
 }
 
 .right-pane-framed {
@@ -556,7 +555,7 @@ main.main-content h3 {
     /* background-color: var(--pico-background-color); /* Match execution view's right pane style if it's plain */
     border-left: 1px solid var(--pico-muted-border-color); /* Separator line */
     padding-left: 1.5rem; /* Padding to the left of the separator */
-    overflow-y: auto; /* If content within right-pane itself needs to scroll */
+    
 }
 
 .right-pane-framed > header {
@@ -573,7 +572,7 @@ main.main-content h3 {
 /* Styles for item lists within the left-pane if needed globally */
 .item-list-container {
     flex-grow: 1;
-    overflow-y: auto;
+    
     /* border-top: 1px solid var(--pico-muted-border-color);  */
 }
 

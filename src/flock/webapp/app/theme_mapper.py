@@ -150,7 +150,7 @@ def alacritty_to_pico(theme: dict) -> dict[str, str]:
     cur_bg = _theme_color(theme, "cursor", "cursor") or sel_bg
     cur_fg = _theme_color(theme, "cursor", "text") or fg
     css["--pico-code-background-color"] = _rgb_to_hex(cur_bg)
-    css["--pico-code-color"] = _rgb_to_hex(cur_fg)
+    css["--pico-code-color"] = css["--pico-color"]
 
     # 7  Form elements and buttons reuse the existing tokens
     css["--pico-form-element-background-color"] = css["--pico-background-color"]
