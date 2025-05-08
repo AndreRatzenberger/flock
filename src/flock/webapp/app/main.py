@@ -436,7 +436,7 @@ async def htmx_get_load_flock_view(
     # This view is part of the "standalone" functionality.
     # If somehow accessed in scoped mode, it might be confusing, but let it render.
     return templates.TemplateResponse(
-        "partials/_load_manage_view.html",
+        "partials/_load_manager_view.html",
         {
             "request": request,
             "error_message": error,
@@ -658,7 +658,7 @@ async def ui_load_flock_by_name_action(
             {"notify": {"type": "error", "message": error_message}}
         )
         return templates.TemplateResponse(
-            "partials/_load_manage_view.html",
+            "partials/_load_manager_view.html",
             {"request": request, "error_message_inline": error_message},
             headers=response_headers,
         )

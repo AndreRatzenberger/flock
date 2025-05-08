@@ -1,15 +1,19 @@
-<div class="editor-grid"> {# Use the improved two-column grid #}
+<article class="two-pane-flex-container"> {# Use the new unified flex container #}
     <section id="agent-list-panel"
+             class="left-pane item-list-container" {# Added left-pane and item-list-container for scroll/style #}
              hx-get="/api/flocks/htmx/agent-list"
              hx-trigger="load, agentListChanged from:body" {# Reload when agent list changes #}
              hx-swap="innerHTML">
+        {# The hx-get will load content here. We expect it to be an <ul> or similar for the .item-list styles to apply #}
         <article><p>Loading agents...</p><progress></progress></article>
     </section>
 
-    <section id="agent-detail-panel">
+    <section id="agent-detail-panel" class="right-pane-framed"> {# Added right-pane-framed #}
          <article>
-            <header><h4>Agent Details</h4></header>
-            <p>Select an agent from the list to view/edit, or click "Add New Agent".</p>
+            <header>
+                <h5>Agent Details</h5> {# Changed to h5 for consistency #}
+            </header>
+            <p>Select an agent from the list to view/edit, or create a new one using the button above.</p>
         </article>
     </section>
-</div>
+</article>

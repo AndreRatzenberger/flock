@@ -1,0 +1,45 @@
+<article id="dashboard-flock-manager-content">
+    <header>
+        <h2>Manage & Load Flocks</h2>
+    </header>
+
+    {% if error_message %}
+        <div class="error DANGER" role="alert" x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            {{ error_message }} <button type="button" class="close" @click="show = false">×</button>
+        </div>
+    {% endif %}
+    {% if success_message %}
+        <div class="success SUCCESS" role="alert" x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            {{ success_message }} <button type="button" class="close" @click="show = false">×</button>
+        </div>
+    {% endif %}
+
+    <article class="two-pane-flex-container">
+        <section id="flock-file-list-column" class="left-pane">
+            <header style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color); margin-bottom:0; flex-shrink: 0;">
+                <h6>Available Flock Files</h6>
+                <small>(in <code>./.flock_ui_projects/</code>)</small>
+            </header>
+            {# This div will become scrollable if .left-pane > .scrollable-content is used, or apply .item-list-container #}
+            <div hx-get="/ui/htmx/dashboard-flock-file-list" 
+                 hx-trigger="load, flockFileListChanged from:body" 
+                 hx-swap="innerHTML" 
+                 id="dashboard-flock-file-list-target"
+                 class="item-list-container"> {# Using item-list-container for consistent styling/scroll #}
+                <p style="padding:1rem;">Loading files...</p><progress indeterminate></progress>
+            </div>
+        </section>
+
+        <section id="flock-detail-action-column" class="right-pane-framed">
+            <header>
+                <h5>Flock Details</h5>
+            </header>
+            <div id="flock-properties-or-action-content">
+                 <article style="text-align:center; margin-top: 2rem; border: none; background: transparent;">
+                    <p>Select a Flock from the list to view its details and load it into the editor.</p>
+                    <p><small>To create a new Flock or upload an existing one, use the options in the sidebar.</small></p>
+                </article>
+            </div>
+        </section>
+    </article>
+</article>
