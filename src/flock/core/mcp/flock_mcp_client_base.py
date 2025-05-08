@@ -1,6 +1,6 @@
 """Wrapper Class for a mcp ClientSession Object"""
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from asyncio import Lock
 import asyncio
 from contextlib import AsyncExitStack
@@ -9,7 +9,7 @@ from typing import Annotated, Any, Callable, Literal, Type
 import anyio
 import httpx
 from mcp import ClientNotification, ClientSession, InitializeResult, ListToolsResult, McpError, StdioServerParameters
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, TextContent
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 from mcp.client.websocket import websocket_client
@@ -206,6 +206,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         arbitrary_types_allowed=True,
     )
 
+    @abstractmethod
     async def connect(self, retries: int | None) -> InitializeResult:
         """
         Connects to the client.
@@ -346,6 +347,48 @@ class FlockMCPClientBase(BaseModel, ABC):
                 self.has_error = True
                 self.error_message = str(e)
                 return []  # FIXME: More fine-grained return values.
+
+    async def call_tool(self, tool_name: str, **arguments) -> Any:
+        """
+        Send a tool call request to a server.
+        """
+        async with self.lock:
+            # Make sure the session is intialized.
+            # By this point, it should be up and running,
+            # But it never hurts to be cautious.
+            if not self.client_session:
+                # Initialize the session
+                await self.connect()
+
+            try:
+                result: CallToolResult = await self.client_session.call_tool(
+                    name=tool_name,
+                    arguments=arguments,
+                    read_timeout_seconds=self.read_timeout_seconds,
+                )
+                return result
+            except Exception as e:
+                # Log it, but do not return the exception to the LLM
+                # Any exception here, is an underlying exception in the code-base
+                # And not a result of how the llm called the tool
+                # However, we still need to pass the information that *something* went
+                # wrong to the llm, to inform it.
+                # But, simply passing on an exception stack trace from
+                # the inside of our framework might expose sensitive data.
+                # So, we just send a call-tools result with a generic text.
+                logger.error(
+                    f"Unexpected Exception ocurred during tool call for tool '{tool_name}': {e}"
+                )
+
+                return CallToolResult(
+                    isError=True,
+                    content=[
+                        TextContent(
+                            type='text',
+                            text="An Exception ocurred while calling tool; '{tool_name}': EXCEPTION REDACTED"
+                        )
+                    ]
+                )
 
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""

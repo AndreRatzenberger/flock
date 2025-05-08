@@ -426,6 +426,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         return data
 
     async def __aenter__(self):
+        if not self.connection_manager or not self.initialized:
+            # Connection has not yet been established.
+            await self.initialize()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):

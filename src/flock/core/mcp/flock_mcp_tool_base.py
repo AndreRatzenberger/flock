@@ -2,10 +2,16 @@
 from typing import Any, Callable, TypeVar
 
 from mcp import Tool
-from mcp.types import ToolAnnotations
+from mcp.types import ToolAnnotations, CallToolResult, TextContent
 from pydantic import BaseModel, Field
 
 from dspy.primitives.tool import Tool as DSPyTool
+
+from flock.core.logging.logging import get_logger
+from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
+from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
+
+logger = get_logger("mcp_tool")
 
 
 T = TypeVar("T", bound="FlockMCPToolBase")
@@ -56,23 +62,52 @@ class FlockMCPToolBase(BaseModel):
             annotations=instance.annotations,
         )
 
-    def convert_to_callable(self, connection_manager: "FlockConnectionManagerBase") -> Callable[..., Any] | None:
+    def convert_to_callable(self, connection_manager: FlockMCPConnectionManagerBase) -> Callable[..., Any] | None:
         """
         Returns a dspy.Tool wrapper around this MCP tool, so that
         dspy.ReAct / dspy.Predict can consume its name/desc/args.
         """
-        async def _call(**arguments: Any) -> Any:
+        async def _call(**arguments: Any) -> CallToolResult:
             # delay import to avoid circularity
             from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
-            async with connection_manager.get_client() as client:
-                try:
-                    return await client.call_tool(
-                        name=self.name,
-                        arguments=arguments,
-                    )
-                except Exception as e:
-                    # TODO: propper logging
-                    return str(e)
+
+            logger.debug(
+                f"MCP Tool '{self.name}' called with arguments: {arguments}")
+            try:
+                client: FlockMCPClientBase = await connection_manager.get_client()
+                tool_call_result: CallToolResult = client.call_tool(
+                    name=self.name,
+                    arguments=arguments,
+                )
+
+                if tool_call_result.isError:
+                    # log the error for tracking purposes.
+                    logger.warning(
+                        f"LLM Tried to call mcp function '{self.name}' with arguments {arguments} and produced exception.")
+
+                return tool_call_result
+
+            except Exception as e:
+                # Log it, but do not return the Exception to the LLM
+                # The reason being, that any exception here likely
+                # originates from the surrounding code-framework
+                # and not from how the llm called the Function
+                # Also, passing on exceptions from the inside
+                # of the framework might expose sensitive information.
+                logger.error(
+                    f"Unexpected Exception ocurred when calling mcp_function '{self.name}': {e}")
+
+                # However, we need to return *something* to the llm, so
+                # we tell the llm, that something went wrong in order to inform it.
+                return CallToolResult(
+                    isError=True,
+                    content=[
+                        TextContent(
+                            type='text',
+                            text=f"Tool call for tool '{self.name}' failed. An Exception ocurred."
+                        )
+                    ]
+                )
 
         # wrap the inner coroutinge in a Dspy Tool
         return DSPyTool(

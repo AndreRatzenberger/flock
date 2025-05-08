@@ -126,6 +126,7 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
                         message_handler=self.server_config.message_handler,
                         list_roots_callback=self.server_config.list_roots_callback,
                     )
+                    self.initialized = True
             self.condition.notify()
 
     async def get_tools(self) -> list[DSPyTool]:

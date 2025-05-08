@@ -168,7 +168,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
 
                 if await client.get_is_alive() and not await client.get_has_error():
                     logger.info(
-                        f"Successfully created and connected: {client} with server '{self.server_name}'")
+                        f"Sucessfully established client session for server '{client.server_name}'")
                     logger.info(
                         f"Server provided the following response: {initialize_result}"
                     )
@@ -176,7 +176,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                 else:
                     message = await client.get_error_message()
                     logger.warning(
-                        f"Connection attempt {attempt + 1} failed for client {client}. Error: {message}")
+                        f"Connection attempt {attempt + 1} failed for client for server '{client.server_name}'. Error: {message}")
 
                     if message := await client.get_error_message():
                         last_exception = Exception(message)
@@ -190,7 +190,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                             await client.close()
                         except Exception as close_err:
                             logger.error(
-                                f"Error closing failed client {client} during retry: {close_err}")
+                                f"Error closing failed client {client.server_name} during retry: {close_err}")
             except Exception as e:
                 logger.error(
                     f"Exception during connection attempt {attempt + 1} to {self.server_name}: {e}", exc_info=True)
@@ -222,7 +222,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
             return client
         except Exception as e:
             logger.error(
-                f"Exception within get_client context for {client}: {e}", exc_info=True)
+                f"Exception within get_client context for server '{client.server_name}': {e}", exc_info=True)
             # Re-raise the exception so the caller knows something went wrong
             raise
 
@@ -234,7 +234,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
             await self._release_client(client=client)
         except Exception as e:
             logger.error(
-                f"Exception within release_client context for {client}: {e}", exc_info=True
+                f"Exception within release_client context for server '{client.server_name}': {e}", exc_info=True
             )
             raise
 
@@ -298,14 +298,15 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                     # It's alive. Mark it as busy and return it.
                     await client.set_is_busy(True)
                     self.busy_connections.append(client)
-                    logger.debug(f"Handing out client: {client}")
+                    logger.debug(
+                        f"Handing out client for server '{client.server_name}'")
 
                     return client
                 else:
                     message = await client.get_error_message()
                     # Client is dead/has errors, discard it and trigger replenishment check
                     logger.warning(
-                        f"Found dead/error client {client} in available pool. Discarding: Error: {message}"
+                        f"Found dead/error client for server '{client.server_name}' in available pool. Discarding: Error: {message}"
                     )
                     # Don't put it back, just let it be garbage collected
                     # Ensure replenishment is triggered
@@ -324,11 +325,11 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                 else:
                     # If not in busy, maybe it was already released or never assigned?
                     logger.warning(
-                        f"Attempted to release client not in busy list: {client}")
+                        f"Attempted to release client not in busy list for server '{client.server_name}'")
                     # If it's healthy, and somehow not available add it back
                     if await client.get_is_alive() and not await client.get_has_error() and client not in self.available_connections:
                         logger.warning(
-                            f"Adding released client {client} back to available pool as it was healthy and not busy/available")
+                            f"Adding released client for server '{client.server_name}' back to available pool as it was healthy and not busy/available")
                         await client.set_is_busy(False)
                         # IMPORTANT: Reset roots
                         await client.set_roots(self.original_roots)
@@ -336,7 +337,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                         self.condition.notify(1)
                     elif not await client.get_is_alive() or await client.get_has_error():
                         logger.warning(
-                            f"Discarding unhealthy client {client} released but not found in busy list.")
+                            f"Discarding unhealthy client '{client.server_name}' released but not found in busy list.")
                         self._trigger_replenishment_check()
                     return  # Exit early if not found in busy.
 
@@ -346,17 +347,18 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                 if await client.get_is_alive() and not await client.get_has_error():
                     # Return healthy clients to the pool
                     self.available_connections.append(client)
-                    logger.debug(f"Client returned to pool: {client}")
+                    logger.debug(
+                        f"Client returned to pool for server '{client.server_name}'")
                     self.condition.notify(1)
 
                 else:
                     message = await client.get_error_message()
                     logger.warning(
-                        f"Released client {client} is dead/has error. Discarding. Error: {message}")
+                        f"Released client for server '{client.server_name}' is dead/has error. Discarding. Error: {message}")
                     self._trigger_replenishment_check()
             except Exception as e:
                 logger.error(
-                    f"Error during _release_client for {client}: {e}", exc_info=True)
+                    f"Error during _release_client for server: '{client.server_name}': {e}", exc_info=True)
                 self._trigger_replenishment_check()
 
     # --- Public functions ---
