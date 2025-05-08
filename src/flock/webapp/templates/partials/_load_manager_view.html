@@ -17,15 +17,14 @@
 
     <article class="two-pane-flex-container">
         <article class="left-pane"> {# Changed section to article, or wrap section in article #}
-            <header>
-                <h2>Manage & Load Flocks</h2> {# Moved title here #}
+            <header class="grid">
+                <h2>Load Flock</h2> {# Moved title here #}
+                <div style="text-align: right;">
+                    <button role="button" class="outline" hx-get="/ui/htmx/create-flock-form?ui_mode={{ ui_mode }}" hx-target="#flock-properties-or-action-content" hx-swap="innerHTML">Add New Flock</button>
+                </div>
             </header>
             {# Content of the left pane now goes into this article #}
             <div style="padding: var(--pico-block-spacing-vertical) var(--pico-block-spacing-horizontal); flex-grow: 1; display: flex; flex-direction: column;">
-                <header style="padding: 0 0 0.5rem 0;  margin-bottom:0.5rem; flex-shrink: 0;">
-                    <h6>Available Flock Files</h6>
-                    <small>(in <code>./.flock_ui_projects/</code>)</small>
-                </header>
                 <div hx-get="/ui/htmx/dashboard-flock-file-list" 
                      hx-trigger="load, flockFileListChanged from:body" 
                      hx-swap="innerHTML" 

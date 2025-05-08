@@ -6,16 +6,16 @@
             <button hx-get="/ui/htmx/load-flock-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/' or request.url.path == '/ui/htmx/load-flock-view' %}active-nav{% endif %}">
-                <i class="fas fa-folder-open"></i> Load Files
+                <i class="fas fa-folder-open"></i> Load Flock
             </button>
         </li>
-        <li>
+        <!-- <li>
             <button hx-get="/ui/htmx/create-flock-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/create?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/ui/create' %}active-nav{% endif %}">
                 <i class="fas fa-plus-circle"></i> Create New Flock
             </button>
-        </li>
+        </li> -->
     </ul>
     {% endif %}
 
