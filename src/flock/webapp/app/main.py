@@ -185,7 +185,7 @@ def generate_theme_css(theme_name: str | None) -> str:
 
         # Code blocks
         css_vars["--pico-code-background-color"] = theme_dict["colors"]["cursor"].get("text")  # Background behind code
-        css_vars["--pico-code-color"] = theme_dict["colors"]["primary"].get("background")  # Code text
+        css_vars["--pico-code-color"] = theme_dict["colors"]["primary"].get("foreground")  # Code text
         css_vars["--pico-code-kbd-background-color"] = theme_dict["colors"]["selection"].get("background")
         css_vars["--pico-code-kbd-color"] = theme_dict["colors"]["selection"].get("text")
         css_vars["--pico-code-tag-color"] = theme_dict["colors"]["normal"].get("blue")  # Tag elements
@@ -207,8 +207,8 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--flock-success-color"] = theme_dict["colors"]["normal"].get("green", "#28a745")
 
 
-        pico_vars = alacritty_to_pico(theme_dict)
-        css_vars.update(pico_vars)
+
+        #css_vars.update(pico_vars)
 
     except KeyError as e:
         print(
@@ -219,7 +219,8 @@ def generate_theme_css(theme_name: str | None) -> str:
     if not css_vars:
         return ""  # Return empty if no variables were mapped
 
-    css_rules = [f"    {name}: {value};" for name, value in css_vars.items()]
+    pico_vars = alacritty_to_pico(theme_dict)
+    css_rules = [f"    {name}: {value};" for name, value in pico_vars.items()]
 
     # Apply overrides within the currently active theme selector for better specificity
     # We could get the theme name passed in, or maybe check the <html> tag attribute?

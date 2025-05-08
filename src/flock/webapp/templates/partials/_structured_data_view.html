@@ -16,7 +16,7 @@
         {% endif %}
     {% elif value is iterable and value is not string %}
         {% if not value %}
-            <em style="color: var(--pico-muted-color);">(Empty List)</em>
+            <em style="color: var(--pico-code-color);">(Empty List)</em>
         {% else %}
             <ul style="margin-left: {{ level * 20 }}px; padding-left: 1em; list-style-type: disc; margin-bottom:0.5em;">
             {% for item in value %}
@@ -27,9 +27,9 @@
     {% elif value is boolean %}
         <code style="color: {{ 'var(--flock-success-color)' if value else 'var(--flock-error-color)' }}; font-weight:bold;">{{ value }}</code>
     {% elif value is number %}
-        <code style="color: var(--pico-muted-color);">{{ value }}</code>
+        <code style="color: var(--pico-code-color);">{{ value }}</code>
     {% elif value is none %}
-        <em style="color: var(--pico-muted-color);">None</em>
+        <em style="color: var(--pico-code-color);">None</em>
     {% else %}
         {# Apply pre-wrap for multi-line strings #}
         <span style="white-space: pre-wrap; word-break: break-word;">{{ value }}</span>
