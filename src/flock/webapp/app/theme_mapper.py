@@ -118,6 +118,8 @@ def alacritty_to_pico(theme: dict) -> dict[str, str]:
     # 1  Main surface colours
     fixed_background = _theme_color(theme, "primary", "background") or (0, 0, 0)
     fixed_foreground = _theme_color(theme, "primary", "foreground") or (255, 255, 255)
+
+    fixed_background2 = _theme_color(theme, "selection", "background") or (0, 0, 0)
     # Try theme's own foreground first, then fall back to palette extremes
     # fg_candidates = [
     #     _theme_color(theme, "primary", "foreground"),
@@ -190,7 +192,7 @@ def alacritty_to_pico(theme: dict) -> dict[str, str]:
 
     # 6  Cards, selections, cursor, code — pick safe defaults
     css["--pico-card-background-color"] = css["--pico-background-color"]
-    css["--pico-card-sectioning-background-color"] = _rgb_to_hex(_mix(fixed_background, fixed_foreground, 0.05))
+    css["--pico-card-sectioning-background-color"] = _rgb_to_hex(fixed_background2)
     css["--pico-card-border-color"] = css["--pico-border-color"]
 
     sel_bg = _theme_color(theme, "selection", "background") or _mix(fixed_background, fixed_foreground, 0.20)
