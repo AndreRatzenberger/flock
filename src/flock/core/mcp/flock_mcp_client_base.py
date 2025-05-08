@@ -228,6 +228,7 @@ class FlockMCPClientBase(BaseModel, ABC):
             self.is_busy = False
             self.has_error = False
             self.error_message = None
+            self.client_session = None
 
     async def get_is_busy(self) -> bool:
         async with self.lock:
@@ -302,7 +303,7 @@ class FlockMCPClientBase(BaseModel, ABC):
                     converted_tool = FlockMCPToolBase.try_from_mcp_tool(tool)
                     if converted_tool:
                         flock_mcp_tools.append(
-                            converted_tool.convert_to_callable(connection_manager=self))
+                            converted_tool.convert_to_callable(client=self))
 
                 return flock_mcp_tools
             except anyio.ClosedResourceError as closed_from_our_side:
@@ -348,17 +349,20 @@ class FlockMCPClientBase(BaseModel, ABC):
                 self.error_message = str(e)
                 return []  # FIXME: More fine-grained return values.
 
-    async def call_tool(self, tool_name: str, **arguments) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """
         Send a tool call request to a server.
         """
+        needs_initialization = False
         async with self.lock:
-            # Make sure the session is intialized.
-            # By this point, it should be up and running,
-            # But it never hurts to be cautious.
             if not self.client_session:
-                # Initialize the session
-                await self.connect()
+                needs_initialization = True
+
+        # Make sure the session is intialized.
+        if needs_initialization:
+            await self.connect(retries=self.max_retries)
+
+        async with self.lock:
 
             try:
                 result: CallToolResult = await self.client_session.call_tool(

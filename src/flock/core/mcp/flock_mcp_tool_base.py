@@ -8,8 +8,6 @@ from pydantic import BaseModel, Field
 from dspy.primitives.tool import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
-from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 
 logger = get_logger("mcp_tool")
 
@@ -36,7 +34,7 @@ class FlockMCPToolBase(BaseModel):
     annotations: ToolAnnotations | None = Field(
         ...,
         description="Optional additional tool information."
-    )w
+    )
 
     @classmethod
     def try_from_mcp_tool(cls: type[T], mcp_tool: Tool) -> T | None:
@@ -62,21 +60,18 @@ class FlockMCPToolBase(BaseModel):
             annotations=instance.annotations,
         )
 
-    def convert_to_callable(self, connection_manager: FlockMCPConnectionManagerBase) -> Callable[..., Any] | None:
+    def convert_to_callable(self, client: Any) -> Callable[..., Any] | None:
         """
         Returns a dspy.Tool wrapper around this MCP tool, so that
         dspy.ReAct / dspy.Predict can consume its name/desc/args.
         """
         async def _call(**arguments: Any) -> CallToolResult:
-            # delay import to avoid circularity
-            from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 
             logger.debug(
                 f"MCP Tool '{self.name}' called with arguments: {arguments}")
             try:
-                client: FlockMCPClientBase = await connection_manager.get_client()
-                tool_call_result: CallToolResult = client.call_tool(
-                    name=self.name,
+                tool_call_result: CallToolResult = await client.call_tool(
+                    tool_name=self.name,
                     arguments=arguments,
                 )
 
@@ -109,10 +104,18 @@ class FlockMCPToolBase(BaseModel):
                     ]
                 )
 
+        # The dspy.Tool wants a dict of
+        # {arg_name: JSON_SCHEMA_for_that_arg}
+        # not the "root" object schema, so extract
+        # the properties first.
+
+        schema = self.input_schema or {}
+        arg_schemas = schema.get("properties", {})
+
         # wrap the inner coroutinge in a Dspy Tool
         return DSPyTool(
             func=_call,
             name=self.name,
             desc=self.description or "",
-            args=self.input_schema or {}
+            args=arg_schemas,
         )
