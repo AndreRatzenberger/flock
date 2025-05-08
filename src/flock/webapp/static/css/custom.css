@@ -20,7 +20,7 @@ header.top-header {
     grid-area: header;
     border-bottom: 1px solid var(--pico-muted-border-color);
     padding: 0.7rem 1.5rem;
-    background-color: var(--pico-card-background-color); /* Use custom or fallback */
+    background-color: var(--pico-card-sectioning-background-color); /* Use custom or fallback */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -290,7 +290,7 @@ progress:indeterminate::after {
 
 #agent-list-panel header,
 #agent-detail-panel header {
-    background-color: var(--flock-header-background);
+    background-color: var(--pico-card-sectioning-background-color);
     flex-shrink: 0;
 }
 

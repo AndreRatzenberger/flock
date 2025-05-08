@@ -1,6 +1,6 @@
 <article id="agent-list-content">
     <header class="grid">
-        <h4>Agents ({{ flock.agents|length }})</h4>
+        <h2>Agents ({{ flock.agents|length }})</h2>
         <div style="text-align: right;">
             <button role="button" class="outline" hx-get="/api/flocks/htmx/agents/new-agent-form" hx-target="#agent-detail-panel" hx-swap="innerHTML">Add New Agent</button>
         </div>

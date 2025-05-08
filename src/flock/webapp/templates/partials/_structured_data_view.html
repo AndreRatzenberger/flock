@@ -25,9 +25,9 @@
             </ul>
         {% endif %}
     {% elif value is boolean %}
-        <code style="color: {{ '#82CD20' if value else '#D83020' }}; font-weight:bold;">{{ value }}</code>
+        <code style="color: {{ 'var(--flock-success-color)' if value else 'var(--flock-error-color)' }}; font-weight:bold;">{{ value }}</code>
     {% elif value is number %}
-        <code style="color: #20A0D8;">{{ value }}</code>
+        <code style="color: var(--pico-primary-inverse);">{{ value }}</code>
     {% elif value is none %}
         <em style="color: var(--pico-muted-color);">None</em>
     {% else %}

@@ -129,12 +129,13 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-color"] = theme_dict["colors"]["primary"].get("foreground")  # Main text
 
         # Headings
-        css_vars["--pico-h1-color"] = theme_dict["colors"]["bright"].get("green")  # Primary heading
-        css_vars["--pico-h2-color"] = theme_dict["colors"]["normal"].get("green")  # Secondary heading
+        css_vars["--pico-h1-color"] = theme_dict["colors"]["selection"].get("foreground")  # Primary heading
+        css_vars["--pico-h2-color"] = theme_dict["colors"]["selection"].get("foreground")  # Secondary heading
         css_vars["--pico-h3-color"] = theme_dict["colors"]["primary"].get("foreground")  # Body heading
-        css_vars["--pico-muted-color"] = theme_dict["colors"]["bright"].get("black")  # Muted/subtext
-        css_vars["--pico-contrast"] = theme_dict["colors"]["primary"].get("foreground")  # Contrast text on dark
-        css_vars["--pico-primary-inverse"] = theme_dict["colors"]["primary"].get("background")  # Contrast on primary
+        css_vars["--pico-muted-color"] = theme_dict["colors"]["selection"].get("text")  # Muted/subtext
+        css_vars["--pico-primary-inverse"] = theme_dict["colors"]["cursor"].get("text")  # Contrast on primary
+        css_vars["--pico-contrast"] = theme_dict["colors"]["primary"].get("background")  # Contrast text on dark
+        css_vars["--pico-contrast-inverse"] = theme_dict["colors"]["primary"].get("foreground")  # Contrast text on dark
 
         # Primary interaction
         css_vars["--pico-primary"] = theme_dict["colors"]["normal"].get("blue")
@@ -143,9 +144,6 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-primary-active"] = theme_dict["colors"]["normal"].get("blue")
 
 
-        css_vars["--pico-h1-color"] = theme_dict["colors"]["bright"].get("green")
-        css_vars["--pico-h2-color"] = theme_dict["colors"]["normal"].get("green")
-        css_vars["--pico-h3-color"] = theme_dict["colors"]["primary"].get("foreground")
 
         # Secondary interaction
         css_vars["--pico-secondary"] = theme_dict["colors"]["normal"].get("magenta")
@@ -156,7 +154,7 @@ def generate_theme_css(theme_name: str | None) -> str:
         # Cards and containers
         css_vars["--pico-card-background-color"] = theme_dict["colors"]["primary"].get("background")
         css_vars["--pico-card-border-color"] = theme_dict["colors"]["bright"].get("black")  # Mid-tone, visible on bright bg
-        css_vars["--pico-card-sectioning-background-color"] = theme_dict["colors"]["normal"].get("black")  # Subtle contrast
+        css_vars["--pico-card-sectioning-background-color"] = theme_dict["colors"]["selection"].get("background")  # Subtle contrast
         css_vars["--pico-border-color"] = theme_dict["colors"]["bright"].get("black")
         css_vars["--pico-muted-border-color"] = theme_dict["colors"]["normal"].get("black")  # More subtle than main border
 
@@ -190,8 +188,6 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-code-comment-color"] = theme_dict["colors"]["bright"].get("black")  # Dim comment color
 
 
-        css_vars["--pico-contrast-inverse"] = theme_dict["colors"]["primary"].get("foreground")  # Dim comment color
-
         # Semantic markup
         css_vars["--pico-mark-background-color"] = theme_dict["colors"]["normal"].get("yellow") + "33"
         css_vars["--pico-mark-color"] = theme_dict["colors"]["primary"].get("foreground")
@@ -199,10 +195,10 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-del-color"] = theme_dict["colors"]["normal"].get("red")
 # Deleted content - red
         # Custom flock vars (mapped previously, ensure they are kept)
-        css_vars["--flock-sidebar-background"] = css_vars["--pico-card-background-color"] # Example: Link sidebar to card background
-        css_vars["--flock-header-background"] = css_vars["--pico-card-background-color"] # Example: Link header to card background
-        css_vars["--flock-error-color"] = theme_dict["colors"]["bright"].get("red", "#dc3545")
-        css_vars["--flock-success-color"] = theme_dict["colors"]["bright"].get("green", "#28a745")
+        css_vars["--flock-sidebar-background"] = theme_dict["colors"]["primary"].get("background")# css_vars["--pico-card-background-color"] # Example: Link sidebar to card background
+        css_vars["--flock-header-background"] = theme_dict["colors"]["selection"].get("background") # Example: Link header to card background
+        css_vars["--flock-error-color"] = theme_dict["colors"]["normal"].get("red", "#dc3545")
+        css_vars["--flock-success-color"] = theme_dict["colors"]["normal"].get("green", "#28a745")
 
     except KeyError as e:
         print(
