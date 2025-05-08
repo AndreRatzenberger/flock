@@ -19,12 +19,10 @@
 <body>
     <header class="top-header">
         <span><strong>🐧 Flock UI 🐤</strong></span>
-        {# Use the variables passed from the route handler #}
-        {% if current_flock %}
-        <small>Current: <code>{{ current_filename or current_flock.name }}</code></small>
-        {% else %}
-        <small>No Flock Loaded</small>
-        {% endif %}
+        <span id="header-flock-status-container" hx-get="/ui/htmx/header-flock-status?ui_mode={{ ui_mode }}"
+            hx-trigger="load, flockLoaded from:body, flockCleared from:body" hx-swap="innerHTML">
+            <small>Loading status...</small> {# Placeholder while loading #}
+        </span>
     </header>
 
     <aside class="sidebar" hx-get="/ui/htmx/sidebar?ui_mode={{ ui_mode }}"

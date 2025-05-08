@@ -1,14 +1,15 @@
-<article id="execution-view-container-content">
-    {# The Execution Form will be loaded here #}
-    <div id="execution-form-wrapper"
-         hx-get="/api/flocks/htmx/execution-form-content" {# New endpoint for just the form #}
-         hx-trigger="load"
-         hx-swap="innerHTML">
-        <p>Loading execution form...</p><progress indeterminate></progress>
-    </div>
+<article id="execution-view-container-content" style="display: flex; gap: 1.5rem;">
+    <section id="execution-left-pane" style="flex: 1; min-width: 300px;">
+        {# The Execution Form will be loaded here #}
+        <div id="execution-form-wrapper" hx-get="/api/flocks/htmx/execution-form-content" {# New endpoint for just the
+            form #} hx-trigger="load" hx-swap="innerHTML">
+            <p>Loading execution form...</p><progress indeterminate></progress>
+        </div>
+    </section>
 
-    {# The Results Display area, always present when this container is loaded #}
-    <section id="results-display-container" style="margin-top: 1.5rem;">
+    <section id="execution-right-pane"
+        style="flex: 2; border-left: 1px solid var(--pico-muted-border-color); padding-left: 1.5rem;">
+        {# The Results Display area, always present when this container is loaded #}
         <header>
             <h5>Execution Results</h5>
         </header>

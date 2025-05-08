@@ -226,6 +226,21 @@ async def htmx_get_sidebar(
     )
 
 
+@app.get("/ui/htmx/header-flock-status", response_class=HTMLResponse)
+async def htmx_get_header_flock_status(
+    request: Request, ui_mode: str = Query("standalone")
+):
+    # ui_mode isn't strictly needed for this partial's content, but good to accept if passed by hx-get
+    return templates.TemplateResponse(
+        "partials/_header_flock_status.html",
+        {
+            "request": request,
+            "current_flock": get_current_flock_instance(),
+            "current_filename": get_current_flock_filename(),
+        },
+    )
+
+
 @app.get("/ui/htmx/load-flock-view", response_class=HTMLResponse)
 async def htmx_get_load_flock_view(
     request: Request,

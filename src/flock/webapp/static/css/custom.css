@@ -65,14 +65,17 @@ main.main-content {
 }
 
 footer.main-footer {
-    grid-area: footer;
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: var(--pico-card-background-color);
+    border-top: 1px solid var(--pico-muted-border-color);
     padding: 0.5rem 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
-    font-size: 0.8em;
+    /* Adjust padding as needed */
     text-align: center;
-    z-index: 1;
-    background: var(--pico-card-background-color);
-    color: rgba(255, 255, 255, 0.6);
+    z-index: 1000;
+    /* Ensure footer is on top */
 }
 
 /* --- Improved Sidebar Styles --- */
