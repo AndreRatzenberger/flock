@@ -129,8 +129,8 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-color"] = theme_dict["colors"]["primary"].get("foreground")  # Main text
 
         # Headings
-        css_vars["--pico-h1-color"] = theme_dict["colors"]["selection"].get("foreground")  # Primary heading
-        css_vars["--pico-h2-color"] = theme_dict["colors"]["selection"].get("foreground")  # Secondary heading
+        css_vars["--pico-h1-color"] = theme_dict["colors"]["selection"].get("text")  # Primary heading
+        css_vars["--pico-h2-color"] = theme_dict["colors"]["selection"].get("text")  # Secondary heading
         css_vars["--pico-h3-color"] = theme_dict["colors"]["primary"].get("foreground")  # Body heading
         css_vars["--pico-muted-color"] = theme_dict["colors"]["selection"].get("text")  # Muted/subtext
         css_vars["--pico-primary-inverse"] = theme_dict["colors"]["cursor"].get("text")  # Contrast on primary
@@ -178,8 +178,8 @@ def generate_theme_css(theme_name: str | None) -> str:
         css_vars["--pico-button-hover-color"] = theme_dict["colors"]["selection"].get("text")
 
         # Code blocks
-        css_vars["--pico-code-background-color"] = theme_dict["colors"]["cursor"].get("cursor")  # Background behind code
-        css_vars["--pico-code-color"] = theme_dict["colors"]["cursor"].get("text")  # Code text
+        css_vars["--pico-code-background-color"] = theme_dict["colors"]["cursor"].get("text")  # Background behind code
+        css_vars["--pico-code-color"] = theme_dict["colors"]["selection"].get("text")  # Code text
         css_vars["--pico-code-kbd-background-color"] = theme_dict["colors"]["selection"].get("background")
         css_vars["--pico-code-kbd-color"] = theme_dict["colors"]["selection"].get("text")
         css_vars["--pico-code-tag-color"] = theme_dict["colors"]["normal"].get("blue")  # Tag elements
