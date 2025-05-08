@@ -265,15 +265,16 @@ class Flock(BaseModel, Serializable):
         if not isinstance(server, ConcreteFlockMCPServer):
             raise TypeError(
                 "Provided object is not a FlockMCPServer instance.")
-        if not server.name:
+        if not server.server_config.server_name:
             raise ValueError("Server must have a name.")
 
-        if server.name in self._servers:
+        if server.server_config.server_name in self._servers:
             raise ValueError("Server with this name already exists.")
 
-        self._servers[server.name] = server
+        self._servers[server.server_config.server_name] = server
         FlockRegistry.register_server(server)  # Register globally.
-        logger.info(f"Server '{server.name}' added to Flock '{self.name}'")
+        logger.info(
+            f"Server '{server.server_config.server_name}' added to Flock '{self.name}'")
         return server
 
     def add_agent(self, agent: FlockAgent) -> FlockAgent:

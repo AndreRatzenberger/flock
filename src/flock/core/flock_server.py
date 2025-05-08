@@ -18,6 +18,8 @@ from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHan
 from opentelemetry import trace
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints, create_model
 
+from dspy.primitives import Tool as DSPyTool
+
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.logging.logging import get_logger
@@ -28,15 +30,6 @@ logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 M = TypeVar("M", bound="FlockMCPServerConfig")
-
-
-SingatureType = (
-    str
-    | Callable[..., str]
-    | type[BaseModel]
-    | Callable[..., type[BaseModel]]
-    | None
-)
 
 
 class FlockMCPServerConfig(BaseModel):
@@ -151,7 +144,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     )
 
     modules: dict[str, FlockModule] = Field(
-        default_factory=dict,
+        default={},
         description="Dictionary of FlockModules attached to this Server."
     )
 
@@ -181,20 +174,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         arbitrary_types_allowed=True,
     )
 
-    def __init__(
-        self,
-        name: str,
-        description: str | Callable[..., str] | None = "",
-        # Use dict for modules
-        modules: dict[str, "FlockModule"] | None = None,
-        **kwargs
-    ):
-        super().__init__(
-            name=name,
-            description=description,
-            modules=modules if modules is not None else {},
-        )
-
+    @abstractmethod
     def add_module(self, module: FlockModule) -> None:
         """Add a module to this server."""
         if not module.name:
@@ -208,6 +188,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             f"Added module '{module.name}' to server {self.server_config.server_name}")
         return
 
+    @abstractmethod
     def remove_module(self, module_name: str) -> None:
         """Remove a module from this server."""
         if module_name in self.modules:
@@ -219,10 +200,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 f"Module '{module_name}' not found on server '{self.server_config.server_name}'")
         return
 
+    @abstractmethod
     def get_module(self, module_name: str) -> FlockModule | None:
         """Get a module by name"""
         return self.modules.get(module_name)
 
+    @abstractmethod
     def get_enabled_modules(self) -> list[FlockModule]:
         """Get a list of currently enabled modules attached to this server"""
         return [m for m in self.modules.values() if m.config.enabled]
@@ -236,83 +219,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         pass
 
     @abstractmethod
-    async def communicate_with_server() -> None:
+    async def get_tools(self) -> list[DSPyTool]:
         """
-        Called just before talking to a server.
-        Great for injecting auth-headers or other
-        additional headers into the request.
-
-        Or even adding additional fields and metadata.
-        """
-        pass
-
-    @abstractmethod
-    async def get_tools() -> list[FlockMCPToolBase] | None:
-        """
-        Returns a list of tools the server provides
-        """
-        pass
-
-    @abstractmethod
-    async def handle_error() -> None:
-        """
-        Called when an exception occurs.
-        """
-        pass
-
-    @abstractmethod
-    async def call_tool() -> None:
-        """
-        Tool Call wrapper.
-        """
-        pass
-
-    @abstractmethod
-    async def list_resources() -> list[FlockMCPResourceBase] | None:
-        """
-        Lists available resources
-        """
-        pass
-
-    @abstractmethod
-    async def get_resource_contents() -> None:
-        """
-        Retrieve the contents of a resource.
-        """
-        pass
-
-    @abstractmethod
-    async def get_roots() -> None:
-        """
-        Lists current roots
-        """
-        pass
-
-    @abstractmethod
-    async def set_roots() -> None:
-        """
-        Sets roots
-        """
-        pass
-
-    @abstractmethod
-    async def get_prompts() -> None:
-        """
-        Lists available prompts
-        """
-        pass
-
-    @abstractmethod
-    async def handle_sampling_request() -> None:
-        """
-        Handles sampling requests
-        """
-        pass
-
-    @abstractmethod
-    async def terminate() -> None:
-        """
-        Called when terminating the server.
+        Retrieves a list of available tools from this server.
         """
         pass
 
@@ -515,3 +424,11 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             f"Serialization of server '{self.server_config.server_name}' complete with {len(data)} fields"
         )
         return data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        # Check if the connection_manager is there:
+        if self.connection_manager:
+            await self.connection_manager.close_all()

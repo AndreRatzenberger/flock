@@ -1,11 +1,12 @@
 """Manages a pool of connections for a particular server."""
 
 
+from abc import ABC, abstractmethod
 from asyncio import Condition, Lock
 import asyncio
 from contextlib import asynccontextmanager
 import random
-from typing import Annotated, Any, AsyncIterator, Callable, Literal
+from typing import Annotated, Any, AsyncIterator, Callable, Generic, Literal, Type, TypeVar
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints
 from opentelemetry import trace
 
@@ -21,9 +22,11 @@ from flock.core.logging.logging import get_logger
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
 
+TClient = TypeVar("TClient", bound="FlockMCPClientBase")
 
-class FlockMCPConnectionManagerBase(BaseModel):
-    """Handles a Pool of MCPClients."""
+
+class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
+    """Handles a Pool of MCPClients of type TClient."""
 
     transport_type: Literal["stdio", "websockets", "sse"] = Field(
         ..., description="Transport-Type to use for Connections")
@@ -52,13 +55,13 @@ class FlockMCPConnectionManagerBase(BaseModel):
     )
 
     # --- Internal State ---
-    available_connections: list[FlockMCPClientBase] = Field(
+    available_connections: list[TClient] = Field(
         default_factory=list,
         description="Connections which are capable of handling a request at the moment.",
         exclude=True,
     )
 
-    busy_connections: list[FlockMCPClientBase] = Field(
+    busy_connections: list[TClient] = Field(
         default_factory=list,
         description="Connections which are currently handling a request.",
         exclude=True,
@@ -113,6 +116,13 @@ class FlockMCPConnectionManagerBase(BaseModel):
         arbitrary_types_allowed=True,
     )
 
+    @abstractmethod
+    async def _make_client(self) -> TClient:
+        """
+        Instantiate-but don't connect yet-a fresh client of the concrete subtype
+        """
+        pass
+
     async def initialize(self) -> None:
         """
         Initializes the connection Manager and populates the pool.
@@ -125,7 +135,7 @@ class FlockMCPConnectionManagerBase(BaseModel):
         except Exception as e:
             logger.error(f"Exception occurred during pool initialization: {e}")
             # Re-Throw any exceptions, so the caller knows that something is going on.
-            raise
+            raise e
 
     async def _initialize_pool(self) -> None:
         """
@@ -140,7 +150,7 @@ class FlockMCPConnectionManagerBase(BaseModel):
         if self.replenish_task:
             await self.replenish_task
 
-    async def _create_new_connection_with_retry(self) -> FlockMCPClientBase | None:
+    async def _create_new_connection_with_retry(self) -> TClient | None:
         """
         Attempts to create and connect a single new client with retries.
         Handles retries based on max_reconnect attempts.
@@ -150,35 +160,18 @@ class FlockMCPConnectionManagerBase(BaseModel):
             logger.info(
                 f"Attempt {attempt + 1}/{self.max_reconnect_attemtps + 1} to create connection to {self.server_name}")
             try:
-                client = FlockMCPClientBase(
-                    transport_type=self.transport_type,
-                    current_roots=self.original_roots,
-                    max_retries=3,
-                    connection_parameters=self.connection_parameters,
-                    sampling_callback=self.sampling_callback,
-                    logging_callback=self.logging_callback,
-                    message_handler=self.message_handler,
-                    list_roots_callback=self.list_roots_callback,
-                )
 
-                initialize_result: InitializeResult = await client.connect()
+                # delegate actual instantiation
+                client: TClient = await self._make_client()
 
-                if initialize_result:
-                    protocol_version = initialize_result.protocolVersion
-                    server_info = initialize_result.serverInfo
-                    instructions = initialize_result.instructions
-                    server_capabilities = initialize_result.capabilities
-
-                    logger.info(
-                        f"Connection established for server '{self.server_name}'. Protocol Version: {protocol_version}. Instructions from server: {instructions if instructions else 'no specific instructions'}")
-                    logger.debug(
-                        f"Server '{self.server_name}': {server_info}")
-                    logger.debug(
-                        f"Server '{self.server_name} offers the following tools: {server_capabilities.tools}")
+                initialize_result: InitializeResult = await client.connect(retries=1)
 
                 if await client.get_is_alive() and not await client.get_has_error():
                     logger.info(
-                        f"Successfully created and connected: {client}")
+                        f"Successfully created and connected: {client} with server '{self.server_name}'")
+                    logger.info(
+                        f"Server provided the following response: {initialize_result}"
+                    )
                     return client
                 else:
                     message = await client.get_error_message()
@@ -216,39 +209,36 @@ class FlockMCPConnectionManagerBase(BaseModel):
             f"Failed to create connection after retries: {last_exception}") from last_exception
 
     # --- Core Pool Logic ---
-    @asynccontextmanager
-    async def get_client(self) -> AsyncIterator[FlockMCPClientBase]:
+    async def get_client(self) -> TClient:
         """
         Provides a client
-        from the pool via an async context manager, ensuring
-        release.
-
-        Usage:
-            async with manager.get_client() as client:
-                # Use the client here
-                tools = await client.get_tools()
-            # Client is automatically released back into the pool here.
+        from the pool.
         """
-        client: FlockMCPClientBase | None = None
+        client: TClient | None = None
         try:
             # Acquire the client using the internal logic
             client = await self._get_available_client()
             # Yield the client to the `async with block`
-            yield client
+            return client
         except Exception as e:
             logger.error(
                 f"Exception within get_client context for {client}: {e}", exc_info=True)
-            # Re-raise the exception so the caller knwos something went wrong
+            # Re-raise the exception so the caller knows something went wrong
             raise
-        finally:
-            # No matter what happens, clients need to be returned
-            # to the pool
-            if client:
-                logger.debug(
-                    f"Releaseing client via context manager: {client}")
-                await self._release_client(client)
 
-    async def _get_available_client(self) -> FlockMCPClientBase:
+    async def release_client(self, client: TClient) -> None:
+        """
+        Returns a client to the pool.
+        """
+        try:
+            await self._release_client(client=client)
+        except Exception as e:
+            logger.error(
+                f"Exception within release_client context for {client}: {e}", exc_info=True
+            )
+            raise
+
+    async def _get_available_client(self) -> TClient:
         """
         Retrieves a non-busy, live client from the connection-pool.
         If no client is available, it waits until one is returned or created.
@@ -279,7 +269,7 @@ class FlockMCPConnectionManagerBase(BaseModel):
 
                         if new_client:
                             # Successfully created one
-                            await client.set_is_busy(False)
+                            await new_client.set_is_busy(False)
                             self.available_connections.append(new_client)
                             logger.info(
                                 f"Immediately added new client {new_client} to pool.")
@@ -322,7 +312,7 @@ class FlockMCPConnectionManagerBase(BaseModel):
                     self._trigger_replenishment_check()
                     # Continue the outer loop to find another client.
 
-    async def _release_client(self, client: FlockMCPClientBase) -> None:
+    async def _release_client(self, client: TClient) -> None:
         """
         Releases a client back into the available pool and notifies waiting tasks.
         Moves the client from busy to available list. Discards unhealthy clients.
@@ -374,9 +364,12 @@ class FlockMCPConnectionManagerBase(BaseModel):
         """
         Retrieves a list of tools for the agents to act on.
         """
-        async with self.get_client() as client:
-            flock_mcp_tools = await client.get_tools()
-            return flock_mcp_tools
+
+        try:
+            client = await self.get_client()
+            return await client.get_tools()
+        finally:
+            await self.release_client(client)
 
     async def close_all(self) -> None:
         """
@@ -404,22 +397,12 @@ class FlockMCPConnectionManagerBase(BaseModel):
             logger.debug(
                 f"Cleared internal connection lists. Found {len(all_connections)} total connections to close.")
 
-            close_tasks = []
             for client in all_connections:
-                if hasattr(client, "close") and asyncio.iscoroutinefunction(client.close):
-                    logger.debug(f"Scheduling close for client: {client}")
-                    close_tasks.append(asyncio.create_task(
-                        client.close(), name=f"close-{client}"))
-                else:
-                    logger.warning(
-                        f"Client {client} does not have an async close method.")
-            if close_tasks:
-                logger.info(
-                    f"Waiting for {len(close_tasks)} client close tasks to complete.")
-                results = await asyncio.gather(*close_tasks, return_exceptions=True)
-                for result in results:
-                    if isinstance(result, Exception):
-                        logger.error(f"Error closing client: {result}")
+                logger.debug(
+                    f"Closing Client for server: {client.server_name}")
+                await client.close()
+                logger.debug(f"Closed Client for server: {client.server_name}")
+
             logger.info(f"All connections closed for {self.server_name}")
 
     # --- Replenishment Logic for the Pool ---
@@ -536,11 +519,11 @@ class FlockMCPConnectionManagerBase(BaseModel):
             new_clients = []
             failed_count = 0
             for i, result in enumerate(results):
-                if isinstance(result, FlockMCPClientBase) and result.is_alive and not result.has_error:
-                    new_clients.append(result)
-                elif isinstance(result, Exception):
+                if isinstance(result, Exception):
                     logger.error(
                         f"Failed to create connection for {self.server_name} during replenishment. (Task {i}): {result}", exc_info=True)
+                elif getattr(result, "is_alive", False) and not getattr(result, "has_error", False):
+                    new_clients.append(result)
                 else:
                     logger.warning(
                         f"Connection creation task {i} for {self.server_name} returned None or an unhealthy client.")

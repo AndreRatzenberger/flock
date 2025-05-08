@@ -37,7 +37,7 @@ class FlockMCPToolBase(BaseModel):
         """
         Convert a mcp Tool into a FlockMCPTool
         """
-        return T(
+        return cls(
             name=mcp_tool.name,
             description=mcp_tool.description,
             input_schema=mcp_tool.inputSchema,

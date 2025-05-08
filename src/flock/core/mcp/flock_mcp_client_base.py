@@ -220,7 +220,13 @@ class FlockMCPClientBase(BaseModel, ABC):
         """
         Closes the connection and cleans up.
         """
-        pass
+        async with self.lock:
+            if self.master_stack:
+                await self.master_stack.aclose()
+            self.is_alive = False
+            self.is_busy = False
+            self.has_error = False
+            self.error_message = None
 
     async def get_is_busy(self) -> bool:
         async with self.lock:
@@ -340,9 +346,6 @@ class FlockMCPClientBase(BaseModel, ABC):
                 self.has_error = True
                 self.error_message = str(e)
                 return []  # FIXME: More fine-grained return values.
-            finally:
-                # Release the lock no matter what.
-                self.lock.release()
 
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""
