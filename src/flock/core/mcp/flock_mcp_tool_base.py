@@ -36,7 +36,7 @@ class FlockMCPToolBase(BaseModel):
     annotations: ToolAnnotations | None = Field(
         ...,
         description="Optional additional tool information."
-    )
+    )w
 
     @classmethod
     def try_from_mcp_tool(cls: type[T], mcp_tool: Tool) -> T | None:
