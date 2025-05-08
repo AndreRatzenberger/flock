@@ -362,7 +362,7 @@ async def page_dashboard(
     if effective_ui_mode == "scoped":
         if get_current_flock_instance():  # Re-check, as clear_current_flock might have run if user switched modes
             context["initial_content_url"] = (
-                "/api/flocks/htmx/flock-properties-form"
+                "/ui/htmx/execution-view-container"
             )
         else:
             context["initial_content_url"] = "/ui/htmx/scoped-no-flock-view"
