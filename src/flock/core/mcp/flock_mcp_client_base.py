@@ -5,17 +5,19 @@ from asyncio import Lock
 import asyncio
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Annotated, Any, Literal, Type
+from typing import Annotated, Any, Callable, Literal, Type
 import anyio
 import httpx
-from mcp import ClientNotification, ClientSession, ListToolsResult, McpError, StdioServerParameters
+from mcp import ClientNotification, ClientSession, InitializeResult, ListToolsResult, McpError, StdioServerParameters
 from mcp.types import CallToolResult
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 from mcp.client.websocket import websocket_client
-from pydantic import BaseModel, Field, AnyUrl, UrlConstraints
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, UrlConstraints
 
 from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
+
+from dspy.primitives import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
@@ -79,6 +81,11 @@ class FlockMCPClientBase(BaseModel, ABC):
     `has_error` will be set to true and `error_message` will
     contain the details of the exception.
     """
+
+    server_name: str = Field(
+        ...,
+        description="Name of the server the client connects to."
+    )
 
     client_session: ClientSession | None = Field(
         default=None,
@@ -175,31 +182,31 @@ class FlockMCPClientBase(BaseModel, ABC):
     #                     types.ClientResult(root=types.EmptyResult())
     #                 )
 
-    sampling_callback: SamplingFnT | None = Field(
+    sampling_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for sampling requests from external server. Take a look at mcp/client/session.py for how it is used."
     )
 
-    list_roots_callback: ListRootsFnT | None = Field(
+    list_roots_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for list_roots requests from external server."
     )
 
-    logging_callback: LoggingFnT | None = Field(
+    logging_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for logging purposes."
     )
 
-    message_handler: MessageHandlerFnT | None = Field(
+    message_handler: Callable[..., Any] | None = Field(
         default=None,
         description="Message Handler Callback."
     )
 
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
 
-    async def connect(self, retries: int | None) -> None:
+    async def connect(self, retries: int | None) -> InitializeResult:
         """
         Connects to the client.
 
@@ -210,7 +217,9 @@ class FlockMCPClientBase(BaseModel, ABC):
         pass
 
     async def close(self) -> None:
-        """Closes the connection and cleans up. Placeholder for now."""
+        """
+        Closes the connection and cleans up.
+        """
         pass
 
     async def get_is_busy(self) -> bool:
@@ -245,99 +254,95 @@ class FlockMCPClientBase(BaseModel, ABC):
         async with self.lock:
             self.error_message = message
 
-    # --- MCP Functionality ---
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None, read_timeout_seconds: timedelta | None = None):
+    # TODO: caching
+    async def get_tools(self) -> list[DSPyTool]:
         """
-        Wrapper which allows agents to call MCPTools.
-
-        This method should NEVER be called directly.
-        Rather, the results from `get_tools` are converted
-        into callables with type Callable[..., Any] which
-        wrap around this method.
-        The agent only sees callables which look like native
-        code.
-
-        Conversion of types is handled by these wrapper methods
-        rather than the call_tool method.
+        Gets the list of available tools from the server.
         """
+        # Check if underlying client session has been initialized.
+        initialized = False
         async with self.lock:
-            try:
-                logger.debug(f"Calling tool {name} with args: {arguments}")
-                timeout = read_timeout_seconds
-                if timeout is None:
-                    timeout = self.read_timeout_seconds
-                result: CallToolResult = await self.client_session.call_tool(name=name, arguments=arguments, read_timeout_seconds=timeout)
+            if self.client_session:
+                initialized = True
 
-                return result
+        if not initialized:
+            # Underlying client session has not yet been initialized.
+            # This should never happen in practice, but it is good to be extra cautious
+            logger.warning(
+                f"Underlying session for connection has not been initialized.")
+            try:
+                await self.connect(retries=self.max_retries)
+                logger.debug(f"Underlying session has been established.")
+                initialized = True
             except Exception as e:
                 logger.error(
-                    f"Unexpected exception ocurred during call_tool call for {self}: {e}")
+                    f"Exception ocurred while initializing connection: {e}")
                 self.is_alive = False
                 self.has_error = True
                 self.error_message = str(e)
+                # Return an empty list as to not impede application flow.
+                return []
 
-    async def get_tools(self) -> list[FlockMCPToolBase] | None:
-        # TODO: Caching
-        """Get available tools from the server."""
-        # TODO: Tools list changed callback tomorrow (or rather on tuesday).
+        # Get the tools
+        # Lock the client beforehand
         async with self.lock:
-            tools: list[FlockMCPToolBase] = []
             try:
-                logger.debug(f"Retrieving tools through client {self}")
-                if self.client_session:
-                    results: ListToolsResult = await self.client_session.list_tools()
+                response: ListToolsResult = await self.client_session.list_tools()
 
-                    # Convert the tools into a list of FlockMCPTools
-                    if results.tools:
-                        for t in results.tools:
-                            converted_tool = FlockMCPToolBase.try_from_mcp_tool(
-                                t)
-                            if converted_tool:
-                                tools.append(converted_tool)
+                flock_mcp_tools = []
 
-                return tools
-            except anyio.ClosedResourceError as closed_on_our_side:
+                for tool in response.tools:
+                    converted_tool = FlockMCPToolBase.try_from_mcp_tool(tool)
+                    if converted_tool:
+                        flock_mcp_tools.append(
+                            converted_tool.convert_to_callable(connection_manager=self))
+
+                return flock_mcp_tools
+            except anyio.ClosedResourceError as closed_from_our_side:
                 logger.error(
-                    f"Exception ocurred during list_tools call for client {self} (Stream closed on our side): {closed_on_our_side}")
+                    f"Exception ocurred during list/tools request to server '{self.server_name}' (Stream closed from our side): {closed_from_our_side}"
+                )
                 self.is_alive = False
                 self.has_error = True
-                self.error_message = str(e)
-                # TODO: close session. (or reopen it?)
-            except anyio.BrokenResourceError as closed_on_remote_side:
+                self.error_message = str(closed_from_our_side)
+                return []  # FIXME: More fine-grained return values.
+            except anyio.BrokenResourceError as closed_from_remote_side:
                 logger.error(
-                    f"Exception ocurred during list_tools call for client {self} (Stream closed by remote): {closed_on_remote_side}")
+                    f"Exception ocurred during list/tools request to server '{self.server_name}' (Connection closed by remote): {closed_from_remote_side}"
+                )
                 self.is_alive = False
                 self.has_error = True
-                self.error_message = str(e)
-                # TODO: close session (or reopen it?)
+                self.error_message = str(closed_from_remote_side)
+                return []  # FIXME: More fine-grained return values.
             except McpError as mcp_error:
-                if mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
-                    logger.error(
-                        f"MCP Excpetion ocurred during list_tools call for client {self} (Request timed out.): {mcp_error}")
-                    self.is_alive = True  # On Timeout we dare try again in the future
-                    self.has_error = False
-                    self.error_message = None
-                elif mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
-                    logger.error(
-                        f"MCP Exception ocurred during list_tools call for client {self} (Too many requests or too early to call again): {mcp_error}"
-                    )
+                if mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
+                    # This means the server is simply receiving too many requests.
+                    # But the client itself didn't crap its pants.
+                    # This means, we can try again in the future.
+                    # FIXME: Backoff-Logic. For now, we simply return an empty list of tools.
+                    logger.warning(
+                        f"Server '{self.server_name}' returned Code: {mcp_error.error.code}")
                     self.is_alive = True
                     self.has_error = False
                     self.error_message = None
-                else:
+                elif mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
                     logger.error(
-                        f"MCP Exception ocurred during list_tools call for client {self}: {mcp_error}")
+                        f"Call to list/tools for Server '{self.server_name}' timed out: {mcp_error}"
+                    )
                     self.is_alive = False
                     self.has_error = True
                     self.error_message = str(mcp_error)
-
+                return []  # FIXME: More fine-grained return values.
             except Exception as e:
                 logger.error(
-                    f"Unexpected Exception occurred while attempting to retrieve tools with client {self}: {e}")
+                    f"Unexpected Exception ocurred for list/tools request to server '{self.server_name}': {e}")
                 self.is_alive = False
                 self.has_error = True
                 self.error_message = str(e)
-                # TODO: close session. (or reopen it?)
+                return []  # FIXME: More fine-grained return values.
+            finally:
+                # Release the lock no matter what.
+                self.lock.release()
 
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
         """Sets the roots for this Client."""

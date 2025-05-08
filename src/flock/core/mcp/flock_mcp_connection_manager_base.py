@@ -5,13 +5,15 @@ from asyncio import Condition, Lock
 import asyncio
 from contextlib import asynccontextmanager
 import random
-from typing import Annotated, AsyncIterator, Literal
-from pydantic import AnyUrl, BaseModel, Field, UrlConstraints
+from typing import Annotated, Any, AsyncIterator, Callable, Literal
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints
 from opentelemetry import trace
 
-from mcp import StdioServerParameters
+from mcp import InitializeResult, StdioServerParameters
 
 from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
+
+from dspy.primitives import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
@@ -86,30 +88,30 @@ class FlockMCPConnectionManagerBase(BaseModel):
         description="The original roots of the managed clients",
     )
 
-    sampling_callback: SamplingFnT | None = Field(
+    sampling_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for handling sampling requests."
     )
 
-    list_roots_callback: ListRootsFnT | None = Field(
+    list_roots_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for handling list_roots request."
     )
 
-    logging_callback: LoggingFnT | None = Field(
+    logging_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for logging."
     )
 
-    message_handler: MessageHandlerFnT | None = Field(
+    message_handler: Callable[..., Any] | None = Field(
         default=None,
         description="Message Handler Callback."
     )
 
     # --- Pydantic v2 Configuratioin ---
-    model_config = {
-        "arbitrary_types_allowed": True,
-    }
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
 
     async def initialize(self) -> None:
         """
@@ -159,8 +161,20 @@ class FlockMCPConnectionManagerBase(BaseModel):
                     list_roots_callback=self.list_roots_callback,
                 )
 
-                # Let manager handle retries initially
-                await client.connect(retries=0)
+                initialize_result: InitializeResult = await client.connect()
+
+                if initialize_result:
+                    protocol_version = initialize_result.protocolVersion
+                    server_info = initialize_result.serverInfo
+                    instructions = initialize_result.instructions
+                    server_capabilities = initialize_result.capabilities
+
+                    logger.info(
+                        f"Connection established for server '{self.server_name}'. Protocol Version: {protocol_version}. Instructions from server: {instructions if instructions else 'no specific instructions'}")
+                    logger.debug(
+                        f"Server '{self.server_name}': {server_info}")
+                    logger.debug(
+                        f"Server '{self.server_name} offers the following tools: {server_capabilities.tools}")
 
                 if await client.get_is_alive() and not await client.get_has_error():
                     logger.info(
@@ -354,6 +368,15 @@ class FlockMCPConnectionManagerBase(BaseModel):
                 logger.error(
                     f"Error during _release_client for {client}: {e}", exc_info=True)
                 self._trigger_replenishment_check()
+
+    # --- Public functions ---
+    async def get_tools(self) -> list[DSPyTool]:
+        """
+        Retrieves a list of tools for the agents to act on.
+        """
+        async with self.get_client() as client:
+            flock_mcp_tools = await client.get_tools()
+            return flock_mcp_tools
 
     async def close_all(self) -> None:
         """

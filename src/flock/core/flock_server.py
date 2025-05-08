@@ -16,7 +16,7 @@ from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
 
 from opentelemetry import trace
-from pydantic import AnyUrl, BaseModel, Field, UrlConstraints, create_model
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints, create_model
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
@@ -88,22 +88,22 @@ class FlockMCPServerConfig(BaseModel):
         description="The original set of mount points",
     )
 
-    sampling_callback: SamplingFnT | None = Field(
+    sampling_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for handling sampling requests."
     )
 
-    list_roots_callback: ListRootsFnT | None = Field(
+    list_roots_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for handling list_roots request."
     )
 
-    logging_callback: LoggingFnT | None = Field(
+    logging_callback: Callable[..., Any] | None = Field(
         default=None,
         description="Callback for logging."
     )
 
-    message_handler: MessageHandlerFnT | None = Field(
+    message_handler: Callable[..., Any] | None = Field(
         default=None,
         description="Message Handler Callback."
     )
@@ -139,7 +139,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
 
-    config: FlockMCPServerConfig = Field(
+    server_config: FlockMCPServerConfig = Field(
         ...,
         description="Config for the server."
     )
@@ -177,6 +177,10 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         description="Condition for asynchronous operations."
     )
 
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
+
     def __init__(
         self,
         name: str,
@@ -201,7 +205,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
         self.modules[module.name] = module
         logger.debug(
-            f"Added module '{module.name}' to server {self.config.server_name}")
+            f"Added module '{module.name}' to server {self.server_config.server_name}")
         return
 
     def remove_module(self, module_name: str) -> None:
@@ -209,10 +213,10 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         if module_name in self.modules:
             del self.modules[module_name]
             logger.debug(
-                f"Removed module '{module_name}' from server '{self.config.server_name}'")
+                f"Removed module '{module_name}' from server '{self.server_config.server_name}'")
         else:
             logger.warning(
-                f"Module '{module_name}' not found on server '{self.config.server_name}'")
+                f"Module '{module_name}' not found on server '{self.server_config.server_name}'")
         return
 
     def get_module(self, module_name: str) -> FlockModule | None:
@@ -387,7 +391,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         is_output_callable = False
 
         # if self.config.description is a callable, exclude it
-        if callable(self.config.description):
+        if callable(self.server_config.description):
             is_description_callable = True
             exclude.append("description")
 
@@ -402,7 +406,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             exclude.append("output")
 
         logger.debug(
-            f"Serializing server '{self.config.server_name}' to dict.")
+            f"Serializing server '{self.server_config.server_name}' to dict.")
 
         # Use Pydantic's dump, exclude manually handled fields and runtime context.
         data = self.model_dump(
@@ -413,7 +417,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             exclude_none=True,
         )
         logger.debug(
-            f"Base server data for '{self.config.server_name}': {list(data.keys())}")
+            f"Base server data for '{self.server_config.server_name}': {list(data.keys())}")
         serialized_modules = {}
 
         def add_serialized_component(component: Any, field_name: str):
@@ -464,12 +468,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         if serialized_modules:
             data["modules"] = serialized_modules
             logger.debug(
-                f"Added {len(serialized_modules)} modules to server '{self.config.server_name}'"
+                f"Added {len(serialized_modules)} modules to server '{self.server_config.server_name}'"
             )
 
         if is_description_callable:
             path_str = FlockRegistry.get_callable_path_string(
-                self.config.description)
+                self.server_config.description)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["description_callable"] = func_name
@@ -478,7 +482,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for description {self.config.description} in server '{self.config.server_name}'. Skipping..."
+                    f"Could not get path string for description {self.server_config.description} in server '{self.server_config.server_name}'. Skipping..."
                 )
 
         if is_input_callable:
@@ -487,11 +491,11 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 func_name = path_str.split(".")[-1]
                 data["input_callable"] = func_name
                 logger.debug(
-                    f"Added input '{func_name}' (from path '{path_str}') to server '{self.config.server_name}'"
+                    f"Added input '{func_name}' (from path '{path_str}') to server '{self.server_config.server_name}'"
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for input {self.input} in server '{self.config.server_name}'. Skipping..."
+                    f"Could not get path string for input {self.input} in server '{self.server_config.server_name}'. Skipping..."
                 )
 
         if is_output_callable:
@@ -500,21 +504,14 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 func_name = path_str.split(".")[-1]
                 data["output_callable"] = func_name
                 logger.debug(
-                    f"Added output '{func_name}' (from path '{path_str}') to server '{self.config.server_name}'"
+                    f"Added output '{func_name}' (from path '{path_str}') to server '{self.server_config.server_name}'"
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for output {self.output} in server '{self.config.server_name}'. Skipping...")
+                    f"Could not get path string for output {self.output} in server '{self.server_config.server_name}'. Skipping...")
 
         # No need to call _filter_none_values here as model_dump(exclude_none=True) handles it
         logger.info(
-            f"Serialization of server '{self.config.server_name}' complete with {len(data)} fields"
+            f"Serialization of server '{self.server_config.server_name}' complete with {len(data)} fields"
         )
         return data
-
-    # --- Pydantic v2 Configuratioin ---
-
-    class Config:
-        arbitrary_tpyes_allowed = (
-            True  # Important for components like modules
-        )
