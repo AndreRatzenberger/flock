@@ -67,15 +67,16 @@ def alacritty_to_pico(theme: dict) -> dict[str, str]:
 
     # 1  Main surface colours
     bg = _theme_color(theme, "primary", "background") or (0, 0, 0)
+    fg = _theme_color(theme, "primary", "foreground") or (255, 255, 255)
     # Try theme's own foreground first, then fall back to palette extremes
-    fg_candidates = [
-        _theme_color(theme, "primary", "foreground"),
-        _theme_color(theme, "normal", "white"),
-        _theme_color(theme, "bright", "white"),
-        _theme_color(theme, "normal", "black"),
-        _theme_color(theme, "bright", "black"),
-    ]
-    fg = _best_contrast([c for c in fg_candidates if c], bg)
+    # fg_candidates = [
+    #     _theme_color(theme, "primary", "foreground"),
+    #     _theme_color(theme, "normal", "white"),
+    #     _theme_color(theme, "bright", "white"),
+    #     _theme_color(theme, "normal", "black"),
+    #     _theme_color(theme, "bright", "black"),
+    # ]
+    # fg = _best_contrast([c for c in fg_candidates if c], bg)
 
     css["--pico-background-color"] = _rgb_to_hex(bg)
     css["--pico-color"] = _rgb_to_hex(fg)
@@ -148,9 +149,31 @@ def alacritty_to_pico(theme: dict) -> dict[str, str]:
     css["--pico-selection-color"] = _rgb_to_hex(sel_fg)
 
     cur_bg = _theme_color(theme, "cursor", "cursor") or sel_bg
-    cur_fg = _theme_color(theme, "cursor", "text") or fg
+
+    # Try theme's own foreground first, then fall back to palette extremes
+    fg_cur_candidates = [
+        _theme_color(theme, "primary", "foreground"),
+        _theme_color(theme, "normal", "white"),
+        _theme_color(theme, "bright", "white"),
+        _theme_color(theme, "normal", "blue"),
+        _theme_color(theme, "bright", "blue"),
+        _theme_color(theme, "normal", "cyan"),
+        _theme_color(theme, "bright", "cyan"),
+        _theme_color(theme, "normal", "magenta"),
+        _theme_color(theme, "bright", "magenta"),
+        _theme_color(theme, "normal", "green"),
+        _theme_color(theme, "bright", "green"),
+        _theme_color(theme, "normal", "yellow"),
+        _theme_color(theme, "bright", "yellow"),
+        _theme_color(theme, "normal", "red"),
+        _theme_color(theme, "bright", "red"),
+        _theme_color(theme, "normal", "black"),
+        _theme_color(theme, "bright", "black"),
+    ]
+    cur_fg = _best_contrast([c for c in fg_cur_candidates if c], cur_bg)
+
     css["--pico-code-background-color"] = _rgb_to_hex(cur_bg)
-    css["--pico-code-color"] = css["--pico-color"]
+    css["--pico-code-color"] = _rgb_to_hex(cur_fg)
 
     # 7  Form elements and buttons reuse the existing tokens
     css["--pico-form-element-background-color"] = css["--pico-background-color"]
