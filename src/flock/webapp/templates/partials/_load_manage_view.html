@@ -1,0 +1,88 @@
+<article id="dashboard-flock-manager-content">
+    <header>
+        <h3>Manage & Load Flocks</h3>
+    </header>
+
+    {% if error_message %}
+        <div class="error DANGER" role="alert" x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            {{ error_message }} <button type="button" class="close" @click="show = false">×</button>
+        </div>
+    {% endif %}
+    {% if success_message %}
+        <div class="success SUCCESS" role="alert" x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            {{ success_message }} <button type="button" class="close" @click="show = false">×</button>
+        </div>
+    {% endif %}
+
+    <div class="flock-manager-grid"> 
+        <section id="flock-file-list-column" class="list-pane">
+            <header style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color);">
+                <h6>Available Flock Files</h6>
+                <small>(in <code>./.flock_ui_projects/</code>)</small>
+            </header>
+            <div hx-get="/ui/htmx/dashboard-flock-file-list" 
+                 hx-trigger="load, flockFileListChanged from:body" 
+                 hx-swap="innerHTML" 
+                 id="dashboard-flock-file-list-target">
+                <p style="padding:1rem;">Loading files...</p><progress indeterminate></progress>
+            </div>
+        </section>
+
+        <section id="flock-detail-action-column" class="detail-pane">
+            {# This area will be updated when a file is selected from the list. #}
+            <div id="flock-properties-or-action-content">
+                 <article style="text-align:center; margin-top: 2rem; border: none; background: transparent;">
+                    <p>Select a Flock from the list to view its details and load it into the editor.</p>
+                    <p><small>To create a new Flock or upload an existing one, use the options in the sidebar.</small></p>
+                </article>
+            </div>
+        </section>
+    </div>
+</article>
+
+<style>
+    /* Styles for the dashboard's two-pane layout for flock management */
+    .flock-manager-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 1fr) 2.5fr; 
+        gap: 0; 
+        height: calc(100vh - var(--header-height) - 6rem); 
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
+        background-color: var(--pico-card-background-color); 
+    }
+
+    .flock-manager-grid .list-pane { 
+        border-right: 1px solid var(--pico-muted-border-color);
+        padding: 0; 
+        overflow-y: auto;
+        display: flex; 
+        flex-direction: column;
+    }
+    .flock-manager-grid .list-pane header {
+        flex-shrink: 0;
+    }
+    .flock-manager-grid .list-pane #dashboard-flock-file-list-target {
+        flex-grow: 1;
+        overflow-y: auto;
+    }
+
+    .flock-manager-grid .detail-pane { 
+        padding: 1rem;
+        overflow-y: auto;
+        background-color: var(--pico-background-color); 
+    }
+
+    #dashboard-flock-file-list-target ul.item-list {
+        list-style-type: none; padding: 0; margin:0;
+    }
+    #dashboard-flock-file-list-target li {
+        padding: 0.75rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color);
+        cursor: pointer; transition: background-color 0.15s ease-in-out;
+    }
+    #dashboard-flock-file-list-target li:last-child { border-bottom: none; }
+    #dashboard-flock-file-list-target li:hover,
+    #dashboard-flock-file-list-target li.selected-item { 
+        background-color: var(--pico-primary-focus); color: var(--pico-primary-inverse);
+    }
+</style>

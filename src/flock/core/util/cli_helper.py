@@ -62,9 +62,9 @@ def init_console(clear_screen: bool = True, show_banner: bool = True):
 
     if show_banner:
         console.print(banner_text)
-    console.print(
-        "[italic]'Magpie'[/] milestone - [bold]white duck GmbH[/] - [cyan]https://whiteduck.de[/]\n"
-    )
+        console.print(
+            "[italic]'Magpie'[/] milestone - [bold]white duck GmbH[/] - [cyan]https://whiteduck.de[/]\n"
+        )
 
 
 def display_banner_no_version():

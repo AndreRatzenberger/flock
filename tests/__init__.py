@@ -1,1 +1,1 @@
-"""Test package for Flock.""" 
+"""Test package for Flock."""

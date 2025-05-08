@@ -1,0 +1,19 @@
+<article id="execution-view-container-content">
+    {# The Execution Form will be loaded here #}
+    <div id="execution-form-wrapper"
+         hx-get="/api/flocks/htmx/execution-form-content" {# New endpoint for just the form #}
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <p>Loading execution form...</p><progress indeterminate></progress>
+    </div>
+
+    {# The Results Display area, always present when this container is loaded #}
+    <section id="results-display-container" style="margin-top: 1.5rem;">
+        <header>
+            <h5>Execution Results</h5>
+        </header>
+        <div id="results-display">
+            <p><small>Results will appear here after running the Flock.</small></p>
+        </div>
+    </section>
+</article>

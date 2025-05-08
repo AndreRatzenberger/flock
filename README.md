@@ -65,7 +65,7 @@ Flock's power comes from a few key ideas (Learn more in the [Full Documentation]
 6. **Tool Integration:** Equip agents with standard or custom Python functions (`@flock_tool`) registered via the `FlockRegistry`.
 7. **Registry:** A central place (`@flock_component`, `@flock_type`, `@flock_tool`) to register your custom classes, types, and functions, enabling robust serialization and dynamic loading.
 
-## 💾 Installation
+## 💾 Installation - Use Flock in your project
 
 Get started with the core Flock library:
 
@@ -87,7 +87,27 @@ uv pip install flock-core[tools]
 uv pip install flock-core[all]
 ```
 
-Environment Setup:
+## 🔑 Installation - Develop Flock
+
+```bash
+git clone https://github.com/whiteducksoftware/flock.git
+cd flock
+
+# One-liner dev setup after cloning
+pip install poethepoet && poe install
+```
+
+Additional provided `poe` tasks and commands:
+
+```bash
+poe install # Install the project
+poe build # Build the project
+poe docs # Serve the docs
+poe format # Format the code
+poe lint # Lint the code
+```
+
+## 🔑 Environment Setup
 
 Flock uses environment variables (typically in a .env file) for configuration, especially API keys. Create a .env file in your project root:
 
@@ -112,7 +132,7 @@ DEFAULT_MODEL="openai/gpt-4o" # Default LLM if agent doesn't specify
 # VARS_PER_PAGE="20"
 ```
 
-Remember to add .env to your .gitignore!
+Be sure that the .env file is added to your .gitignore!
 
 ## ⚡ Quick Start Syntax
 
@@ -162,17 +182,31 @@ Version 0.4.0 brings significant enhancements focused on usability, deployment, 
 
 Easily deploy your Flock agents as scalable REST API endpoints. Interact with your agent workflows via standard HTTP requests.
 
+--------------------------------
+
 ### 🖥️ Web UI - Test Flock Agents in the Browser
 
 Test and interact with your Flock agents directly in your browser through an integrated web interface.
+
+--------------------------------
 
 ### ⌨️ CLI Tool - Manage Flock Agents via the Command Line
 
 Manage Flock configurations, run agents, and inspect results directly from your command line.
 
+--------------------------------
+
 ### 💾 Enhanced Serialization - Share, Deploy, and Run Flock Agents by human readable yaml files
 
 Define and share entire Flock configurations, including agents and components, using human-readable YAML files. Load flocks directly from these files for easy deployment and versioning.
+
+--------------------------------
+
+### 💾 New execution flows
+
+Run Flock in batch mode to process multiple inputs at once or in evaluation mode to test agents with different inputs.
+
+--------------------------------
 
 ### ⏱️ Robust Temporal Integration
 
@@ -188,6 +222,51 @@ Flock makes this easy with:
 *   **Declarative Configuration:** Define Temporal timeouts, retry policies, and task queues directly within your `Flock` and `FlockAgent` configurations (YAML or Python).
 *   **Correct Patterns:** Uses Temporal's recommended granular activity execution for better control and visibility.
 *   **Clear Worker Separation:** Provides guidance and flags for running dedicated Temporal workers, separating development convenience from production best practices.
+  
+Visit the [Temporal Documentation](https://learn.temporal.io/python/workflows/) for more information on how to use Temporal.
+
+Or check out the [Flock Showcase](https://github.com/whiteducksoftware/flock-showcase) for a complete example of a Flock that uses Temporal or our [docs](https://whiteducksoftware.github.io/flock/guides/temporal-configuration/) for more information.
+
+Here's an example of how to configure a Flock to use Temporal:
+
+```python
+from flock.core import Flock, FlockFactory
+
+from flock.workflow.temporal_config import (
+    TemporalActivityConfig,
+    TemporalRetryPolicyConfig,
+    TemporalWorkflowConfig,
+)
+
+# Flock-scoped temporal config
+flock = Flock(
+    enable_temporal=True,
+    temporal_config=TemporalWorkflowConfig(
+        task_queue="flock-test-queue",
+        workflow_execution_timeout=timedelta(minutes=10),
+        default_activity_retry_policy=TemporalRetryPolicyConfig(
+            maximum_attempts=2
+        ),
+    ),
+)
+
+# Agent-scoped temporal config
+content_agent = FlockFactory.create_default_agent(
+    name="content_agent",
+    input="funny_title, funny_slide_headers",
+    output="funny_slide_content",
+    temporal_activity_config=TemporalActivityConfig(
+        start_to_close_timeout=timedelta(minutes=1),
+        retry_policy=TemporalRetryPolicyConfig(
+            maximum_attempts=4,
+            initial_interval=timedelta(seconds=2),
+            non_retryable_error_types=["ValueError"],
+        ),
+    ),
+)
+```
+
+--------------------------------
 
 ### ✨ Utility: @flockclass Hydrator
 
@@ -219,6 +298,8 @@ async def create_character():
 
 # asyncio.run(create_character())
 ```
+
+--------------------------------
 
 ## 📚 Examples & Tutorials
 

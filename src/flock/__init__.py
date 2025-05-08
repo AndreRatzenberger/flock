@@ -1,8 +1,30 @@
 """Flock package initialization."""
 
+import argparse
+import sys
+
 
 def main():
     """Main function."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Flock - Declarative LLM Orchestration at Scale"
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Start the web interface instead of the CLI",
+    )
+    args = parser.parse_args()
+
+    # If --web flag is provided, start the web server
+    if args.web:
+        from flock.webapp.run import main as run_webapp
+
+        run_webapp()
+        return
+
+    # Otherwise, run the CLI interface
     import questionary
     from rich.console import Console
     from rich.panel import Panel
@@ -116,11 +138,11 @@ def main():
         elif result == CLI_SETTINGS:
             settings_editor()
         elif result == CLI_START_WEB_SERVER:
-            # Simple web server without a loaded Flock - could create a new one
-            console.print(
-                "[yellow]Web server without loaded Flock not yet implemented.[/]"
-            )
-            input("\nPress Enter to continue...")
+            # Start the web server
+            from flock.webapp.run import main as run_webapp
+
+            run_webapp()
+            break
         elif result == CLI_NOTES:
             load_release_notes()
         elif result == CLI_EXIT:

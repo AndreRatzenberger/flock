@@ -12,14 +12,56 @@ from flock.core.api.models import FlockBatchRequest
 from flock.core.flock import Flock
 from flock.core.logging.logging import get_logger
 
+logger = get_logger("api.main")
+
 from .endpoints import create_api_router
 
 # Import components from the api package
 from .run_store import RunStore
-from .ui.routes import FASTHTML_AVAILABLE, create_ui_app
-from .ui.utils import format_result_to_html, parse_input_spec  # Import UI utils
 
-logger = get_logger("api.main")
+# Conditionally import for the new UI integration
+NEW_UI_SERVICE_AVAILABLE = False
+WEBAPP_FASTAPI_APP = None
+try:
+    from flock.webapp.app.main import (
+        app as webapp_fastapi_app,  # Import the FastAPI app instance
+    )
+    from flock.webapp.app.services.flock_service import (
+        set_current_flock_instance_programmatically,
+    )
+
+    WEBAPP_FASTAPI_APP = webapp_fastapi_app
+    NEW_UI_SERVICE_AVAILABLE = True
+except ImportError:
+    logger.warning(
+        "New webapp components (flock.webapp.app.main:app or flock.webapp.app.services.flock_service) not found. "
+        "UI mode will fall back to old FastHTML UI if available."
+    )
+    # Fallback: Import old UI components if new one isn't available and create_ui is True
+    try:
+        from .ui.routes import FASTHTML_AVAILABLE, create_ui_app
+
+        if FASTHTML_AVAILABLE:  # Only import utils if fasthtml is there
+            from .ui.utils import format_result_to_html, parse_input_spec
+        else:
+            # Define placeholders if fasthtml itself is not available
+            def parse_input_spec(*args, **kwargs):
+                return []
+
+            def format_result_to_html(*args, **kwargs):
+                return ""
+
+            FASTHTML_AVAILABLE = False  # Ensure it's false if import failed
+
+    except ImportError:
+        FASTHTML_AVAILABLE = False  # Ensure it's defined as false
+
+        # Define placeholders if utils can't be imported
+        def parse_input_spec(*args, **kwargs):
+            return []
+
+        def format_result_to_html(*args, **kwargs):
+            return ""
 
 
 class FlockAPI:
@@ -390,62 +432,119 @@ class FlockAPI:
         server_name: str = "Flock API",
         create_ui: bool = False,
     ):
-        """Start the API server, optionally creating and mounting a FastHTML UI."""
+        """Start the API server. If create_ui is True, it mounts the new webapp or the old FastHTML UI at the root."""
         if create_ui:
-            if not FASTHTML_AVAILABLE:
-                logger.error(
-                    "FastHTML not installed. Cannot create UI. Running API only."
+            if NEW_UI_SERVICE_AVAILABLE and WEBAPP_FASTAPI_APP:
+                logger.info(
+                    f"Preparing to mount new Scoped Web UI at root for Flock: {self.flock.name}"
                 )
-            else:
-                logger.info("Attempting to create and mount FastHTML UI at /ui")
                 try:
-                    # Pass self (FlockAPI instance) to the UI creation function
-                    # It needs access to self.flock and self._parse_input_spec
-                    fh_app = create_ui_app(
-                        self,
-                        api_host=host,
-                        api_port=port,
-                        server_name=server_name,
+                    # Set the flock instance for the webapp
+                    set_current_flock_instance_programmatically(
+                        self.flock,
+                        f"{self.flock.name.replace(' ', '_').lower()}_api_scoped.flock",
                     )
-                    self.app.mount("/ui", fh_app, name="ui")
-                    logger.info("FastHTML UI mounted successfully.")
+                    logger.info(
+                        f"Flock '{self.flock.name}' set for the new web UI (now part of the main app)."
+                    )
 
-                    # Add root redirect only if UI was successfully mounted
-                    @self.app.get(
-                        "/",
-                        include_in_schema=False,
-                        response_class=RedirectResponse,
+                    # Mount the new web UI app at the root of self.app
+                    # The WEBAPP_FASTAPI_APP handles its own routes including '/', static files etc.
+                    # It will need to be started with ui_mode=scoped, which should be handled by
+                    # the client accessing /?ui_mode=scoped initially.
+                    self.app.mount(
+                        "/", WEBAPP_FASTAPI_APP, name="flock_ui_root"
                     )
-                    async def root_redirect():
-                        logger.debug("Redirecting / to /ui/")
-                        return "/ui/"
+                    logger.info(
+                        f"New Web UI (scoped mode) mounted at root. Access at http://{host}:{port}/?ui_mode=scoped"
+                    )
+                    # No explicit root redirect needed from self.app to WEBAPP_FASTAPI_APP's root,
+                    # as WEBAPP_FASTAPI_APP now *is* the handler for "/".
+                    # The API's own routes (e.g. /api/...) will still be served by self.app if they don't conflict.
 
-                except ImportError as e:
-                    logger.error(
-                        f"Could not create UI due to import error: {e}. Running API only."
+                    logger.info(
+                        f"API server '{server_name}' (with integrated UI) starting on http://{host}:{port}"
                     )
+                    logger.info(
+                        f"Access the Scoped UI for '{self.flock.name}' at http://{host}:{port}/?ui_mode=scoped"
+                    )
+
                 except Exception as e:
                     logger.error(
-                        f"An error occurred setting up the UI: {e}. Running API only.",
+                        f"Error setting up or mounting new scoped UI at root: {e}. "
+                        "API will start, UI might be impacted.",
                         exc_info=True,
                     )
+            elif FASTHTML_AVAILABLE:  # Fallback to old FastHTML UI
+                logger.warning(
+                    "New webapp not available or WEBAPP_FASTAPI_APP is None. Falling back to old FastHTML UI (mounted at /ui)."
+                )
+                try:
+                    from .ui.routes import create_ui_app
+                except ImportError:
+                    logger.error(
+                        "Failed to import create_ui_app for old UI. API running without UI."
+                    )
+                    FASTHTML_AVAILABLE = False
 
-        logger.info(f"Starting API server on http://{host}:{port}")
-        if (
-            create_ui
-            and FASTHTML_AVAILABLE
-            and any(
-                m.path == "/ui" for m in self.app.routes if hasattr(m, "path")
+                if FASTHTML_AVAILABLE:
+                    logger.info(
+                        "Attempting to create and mount old FastHTML UI at /ui"
+                    )  # Old UI stays at /ui
+                    try:
+                        fh_app = create_ui_app(
+                            self,
+                            api_host=host,
+                            api_port=port,
+                            server_name=server_name,
+                        )
+                        self.app.mount(
+                            "/ui", fh_app, name="old_flock_ui"
+                        )  # Old UI still at /ui
+                        logger.info(
+                            "Old FastHTML UI mounted successfully at /ui."
+                        )
+
+                        @self.app.get(
+                            "/",
+                            include_in_schema=False,
+                            response_class=RedirectResponse,
+                        )
+                        async def root_redirect_to_old_ui():  # Redirect / to /ui/ for old UI
+                            logger.debug("Redirecting / to /ui/ (old UI)")
+                            return RedirectResponse(url="/ui/", status_code=303)
+
+                        logger.info(
+                            f"Old FastHTML UI available at http://{host}:{port}/ui/"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"An error occurred setting up the old FastHTML UI: {e}. Running API only.",
+                            exc_info=True,
+                        )
+            else:
+                logger.error(
+                    "No UI components available. API running without UI."
+                )
+
+        if not create_ui:
+            logger.info(
+                f"API server '{server_name}' starting on http://{host}:{port} (UI not requested)."
             )
+        elif (
+            not (NEW_UI_SERVICE_AVAILABLE and WEBAPP_FASTAPI_APP)
+            and not FASTHTML_AVAILABLE
         ):
-            logger.info(f"UI available at http://{host}:{port}/ui/")
+            logger.info(
+                f"API server '{server_name}' starting on http://{host}:{port}. UI was requested but no components found."
+            )
 
         uvicorn.run(self.app, host=host, port=port)
 
     async def stop(self):
         """Stop the API server."""
         logger.info("Stopping API server (cleanup if necessary)")
-        pass  # Add cleanup logic if needed
+        pass
 
 
 # --- End of file ---
