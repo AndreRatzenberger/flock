@@ -123,10 +123,12 @@ def generate_theme_css(theme_name: str | None) -> str:
     # This mapping is crucial and may need adjustment based on theme intent & Pico usage
     css_vars = {}
     try:
-        css_vars["--pico-background-color"] = theme_dict["colors"]["primary"][
-            "background"
-        ]
-        css_vars["--pico-color"] = theme_dict["colors"]["primary"]["foreground"]
+        css_vars["--pico-background-color"] = theme_dict["colors"][
+            "primary"
+        ].get("background", "#161719")
+        css_vars["--pico-color"] = theme_dict["colors"]["primary"].get(
+            "foreground", "#c5c8c6"
+        )
 
         # Use bright blue for primary interactive elements? Requires theme to have it.
         css_vars["--pico-primary"] = theme_dict["colors"]["bright"].get(
@@ -142,7 +144,7 @@ def generate_theme_css(theme_name: str | None) -> str:
         ]
         # Background of cards, menus, etc.
         css_vars["--pico-card-background-color"] = theme_dict["colors"][
-            "primary"
+            "selection"
         ].get("background", "#ffffff")
         css_vars["--pico-card-border-color"] = theme_dict["colors"][
             "normal"
@@ -162,11 +164,11 @@ def generate_theme_css(theme_name: str | None) -> str:
 
         # Custom vars (examples)
         css_vars["--flock-sidebar-background"] = theme_dict["colors"][
+            "selection"
+        ].get("background", "#161719")  # Same as main bg for now
+        css_vars["--flock-header-background"] = theme_dict["colors"][
             "primary"
-        ]["background"]  # Same as main bg for now
-        css_vars["--flock-header-background"] = theme_dict["colors"]["primary"][
-            "background"
-        ]
+        ].get("background", "#161719")
         css_vars["--flock-error-color"] = theme_dict["colors"]["bright"].get(
             "red", "#dc3545"
         )
