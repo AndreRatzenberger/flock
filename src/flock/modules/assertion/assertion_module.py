@@ -110,12 +110,12 @@ class AssertionCheckerModule(FlockModule):
                 # Proceed without judge LM for other rule types
         return self._judge_lm
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Checks rules after the main evaluator runs."""
         if not self.config.rules:

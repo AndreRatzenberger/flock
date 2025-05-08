@@ -83,7 +83,7 @@ class MemoryModule(FlockModule):
             else [{"type": "semantic"}]
         )
 
-    async def initialize(
+    async def on_initialize(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
@@ -101,7 +101,7 @@ class MemoryModule(FlockModule):
         )
         logger.debug(f"Initialized memory module for agent {agent.name}")
 
-    async def pre_evaluate(
+    async def on_pre_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
@@ -226,12 +226,12 @@ class MemoryModule(FlockModule):
         except Exception as e:
             logger.warning(f"Memory storage failed: {e}", agent=agent.name)
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Store results in memory after evaluation."""
         if not self.memory_store:
@@ -245,7 +245,7 @@ class MemoryModule(FlockModule):
 
         return result
 
-    async def terminate(
+    async def on_terminate(
         self,
         agent: Any,
         inputs: dict[str, Any],

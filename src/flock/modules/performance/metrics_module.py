@@ -227,12 +227,12 @@ class MetricsModule(FlockModule):
 
         return stats
 
-    async def terminate(
+    async def on_terminate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         """Clean up and final metric recording."""
         if self.config.storage_type == "json":
@@ -340,7 +340,7 @@ class MetricsModule(FlockModule):
             return value * 1000 > self.config.latency_threshold_ms
         return False
 
-    async def initialize(
+    async def on_initialize(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
@@ -382,7 +382,7 @@ class MetricsModule(FlockModule):
             total_cost = 0.0
             return token_count, total_cost
 
-    async def pre_evaluate(
+    async def on_pre_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
@@ -423,12 +423,12 @@ class MetricsModule(FlockModule):
 
         return inputs
 
-    async def post_evaluate(
+    async def on_post_evaluate(
         self,
         agent: FlockAgent,
         inputs: dict[str, Any],
-        result: dict[str, Any],
         context: FlockContext | None = None,
+        result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Record post-evaluation metrics."""
         if self.config.collect_timing and self._start_time:

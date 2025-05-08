@@ -1,6 +1,7 @@
 """Utility functions for resolving input keys to their corresponding values."""
 
 from flock.core.context.context import FlockContext
+from flock.core.util.spliter import split_top_level
 
 
 def get_callable_members(obj):
@@ -20,60 +21,6 @@ def get_callable_members(obj):
     ]
 
     return callables
-
-
-def split_top_level(s: str) -> list[str]:
-    """Split a string on commas that are not enclosed within brackets, parentheses, or quotes.
-
-    This function iterates over the string while keeping track of the nesting level. It
-    only splits on commas when the nesting level is zero. It also properly handles quoted
-    substrings.
-
-    Args:
-        s (str): The input string.
-
-    Returns:
-        List[str]: A list of substrings split at top-level commas.
-    """
-    parts = []
-    current = []
-    level = 0
-    in_quote = False
-    quote_char = ""
-
-    for char in s:
-        # If inside a quote, only exit when the matching quote is found.
-        if in_quote:
-            current.append(char)
-            if char == quote_char:
-                in_quote = False
-            elif char == "\\":
-                # Include escape sequences
-                continue
-            continue
-
-        # Check for the start of a quote.
-        if char in ('"', "'"):
-            in_quote = True
-            quote_char = char
-            current.append(char)
-            continue
-
-        # Track nesting.
-        if char in "([{":
-            level += 1
-        elif char in ")]}":
-            level -= 1
-
-        # Split on commas if not nested.
-        if char == "," and level == 0:
-            parts.append("".join(current).strip())
-            current = []
-        else:
-            current.append(char)
-    if current:
-        parts.append("".join(current).strip())
-    return parts
 
 
 def _parse_keys(keys: list[str]) -> list[str]:

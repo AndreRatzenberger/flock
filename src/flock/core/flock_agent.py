@@ -219,7 +219,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             )
             try:
                 for module in self.get_enabled_modules():
-                    await module.initialize(self, inputs, self.context)
+                    await module.on_initialize(self, inputs, self.context)
             except Exception as module_error:
                 logger.error(
                     "Error during initialize",
@@ -242,11 +242,21 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 agent=self.name,
             )
             try:
+                current_result = result
                 for module in self.get_enabled_modules():
-                    await module.terminate(self, inputs, result, self.context)
+                    tmp_result = await module.on_terminate(
+                        self, inputs, self.context, current_result
+                    )
+                    # If the module returns a result, use it
+                    if tmp_result:
+                        current_result = tmp_result
 
                 if self.write_to_file:
-                    self._save_output(self.name, result)
+                    self._save_output(self.name, current_result)
+
+                if self.wait_for_input:
+                    # simple input prompt
+                    input("Press Enter to continue...")
 
             except Exception as module_error:
                 logger.error(
@@ -264,7 +274,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             span.set_attribute("inputs", str(inputs))
             try:
                 for module in self.get_enabled_modules():
-                    await module.on_error(self, error, inputs, self.context)
+                    await module.on_error(self, inputs, self.context, error)
             except Exception as module_error:
                 logger.error(
                     "Error during on_error",
@@ -292,7 +302,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
             # Pre-evaluate hooks
             for module in self.get_enabled_modules():
-                current_inputs = await module.pre_evaluate(
+                current_inputs = await module.on_pre_evaluate(
                     self, current_inputs, self.context
                 )
 
@@ -356,9 +366,15 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             # Post-evaluate hooks
             current_result = result
             for module in self.get_enabled_modules():
-                current_result = await module.post_evaluate(
-                    self, current_inputs, current_result, self.context
+                tmp_result = await module.on_post_evaluate(
+                    self,
+                    current_inputs,
+                    self.context,
+                    current_result,
                 )
+                # If the module returns a result, use it
+                if tmp_result:
+                    current_result = tmp_result
 
             logger.debug(f"Evaluation completed for agent '{self.name}'")
             return current_result

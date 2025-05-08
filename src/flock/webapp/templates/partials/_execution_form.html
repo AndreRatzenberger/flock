@@ -1,0 +1,48 @@
+<article id="execution-form-content">
+    <header>
+        <h4>Run Flock</h4>
+    </header>
+    {% if flock and flock.agents %}
+    <form hx-post="/api/flocks/htmx/run" 
+          hx-target="#results-display" 
+          hx-swap="innerHTML" 
+          hx-indicator="#run-loading-indicator"
+          x-data="{ selectedAgentForInput: '' }">
+        
+        <label for="start_agent_name_select">Select Start Agent:</label>
+        <select id="start_agent_name_select" 
+                name="start_agent_name" 
+                required
+                x-model="selectedAgentForInput"
+                @change="
+                    if ($event.target.value) {
+                        htmx.ajax('GET', '/api/flocks/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
+                    } else {
+                        document.getElementById('dynamic-input-form-fields').innerHTML = '<p><small>Select an agent to see its input fields.</small></p>';
+                    }
+                ">
+            <option value="" disabled {% if not selected_agent_name %}selected{% endif %}>-- Choose an agent --</option>
+            {% for agent_name_key in flock.agents.keys() %}
+            <option value="{{ agent_name_key }}" {% if selected_agent_name == agent_name_key %}selected{% endif %}>{{ agent_name_key }}</option>
+            {% endfor %}
+        </select>
+
+        <div id="dynamic-input-form-fields">
+            <!-- Input fields for the selected agent will be loaded here -->
+            <p><small>Select an agent to see its input fields.</small></p>
+        </div>
+        <div id="input-form-loading-indicator" class="htmx-indicator">
+            <progress indeterminate></progress> Loading input form...
+        </div>
+
+        <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>
+        <span id="run-loading-indicator" class="htmx-indicator">
+            <progress indeterminate></progress> Running...
+        </span>
+    </form>
+    {% elif flock and not flock.agents %}
+    <p>No agents available in the current Flock. Add agents to enable execution.</p>
+    {% else %}
+    <p>Load or create a Flock to enable execution.</p>
+    {% endif %}
+</article>
