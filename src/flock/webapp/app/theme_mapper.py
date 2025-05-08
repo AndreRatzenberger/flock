@@ -383,6 +383,20 @@ if __name__ == "__main__":
                 color: var(--pico-background-color);
             }
             
+            /* New: give demo content cards a themed background so text always contrasts */
+            article {
+                background-color: var(--pico-card-sectioning-background-color);
+                border: 1px solid var(--pico-card-border-color);
+                padding: 1rem;
+                border-radius: 8px;
+            }
+            /* New: background for the two grid columns */
+            .grid > div {
+                background-color: var(--pico-card-background-color);
+                padding: 1rem;
+                border-radius: 8px;
+            }
+            
             /* Override any non-pico CSS variables */
             body {
                 background-color: var(--pico-background-color);
@@ -441,6 +455,24 @@ if __name__ == "__main__":
                 background-color: var(--pico-contrast);
                 color: var(--pico-contrast-inverse);
                 border-color: var(--pico-contrast);
+            }
+            /* Improve grid columns on wider screens */
+            @media (min-width: 768px) {
+                .grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+                    gap: 2rem;
+                }
+            }
+            /* Ensure container can grow a little wider than Pico default */
+            .container {
+                max-width: 90rem; /* ~1440px */
+            }
+            /* Ensure tables use full-strength text colour */
+            table th,
+            table td {
+                color: var(--pico-color);
+                opacity: 1; /* override Pico's default fade */
             }
         </style>
     </head>
@@ -690,39 +722,53 @@ function example() {
             # Check contrasts
             contrast_checks = []
 
-            # Text on background
-            bg_color = _hex_to_rgb(css_vars["--pico-background-color"])
-            fg_color = _hex_to_rgb(css_vars["--pico-color"])
-            if bg_color and fg_color:
-                contrast_ratio = _contrast(fg_color, bg_color)
-                contrast_checks.append({
-                    "fg_name": "Text",
-                    "bg_name": "Background",
-                    "contrast": f"{contrast_ratio:.2f}",
-                    "passes": contrast_ratio >= 4.5
-                })
+            # Define relevant foreground/background variable pairs to evaluate
+            contrast_pairs = [
+                ("Text", "--pico-color", "Background", "--pico-background-color"),
+                ("Primary", "--pico-primary", "Background", "--pico-background-color"),
+                ("Secondary", "--pico-secondary", "Background", "--pico-background-color"),
+                ("Muted", "--pico-muted-color", "Background", "--pico-background-color"),
+                (
+                    "Button Text",
+                    "--pico-button-base-color",
+                    "Button Background",
+                    "--pico-button-base-background-color",
+                ),
+                (
+                    "Secondary Btn Text",
+                    "--pico-secondary-inverse",
+                    "Secondary",
+                    "--pico-secondary",
+                ),
+                (
+                    "Contrast Text",
+                    "--pico-contrast-inverse",
+                    "Contrast Background",
+                    "--pico-contrast",
+                ),
+                (
+                    "Code",
+                    "--pico-code-color",
+                    "Code Background",
+                    "--pico-code-background-color",
+                ),
+            ]
 
-            # Primary on background
-            primary_color = _hex_to_rgb(css_vars["--pico-primary"])
-            if primary_color and bg_color:
-                contrast_ratio = _contrast(primary_color, bg_color)
+            for fg_name, fg_var, bg_name, bg_var in contrast_pairs:
+                fg_hex = css_vars.get(fg_var)
+                bg_hex = css_vars.get(bg_var)
+                if not fg_hex or not bg_hex:
+                    continue
+                fg_rgb = _hex_to_rgb(fg_hex)
+                bg_rgb = _hex_to_rgb(bg_hex)
+                if fg_rgb is None or bg_rgb is None:
+                    continue
+                ratio = _contrast(fg_rgb, bg_rgb)
                 contrast_checks.append({
-                    "fg_name": "Primary",
-                    "bg_name": "Background",
-                    "contrast": f"{contrast_ratio:.2f}",
-                    "passes": contrast_ratio >= 4.5
-                })
-
-            # Button text on button background
-            button_bg = _hex_to_rgb(css_vars["--pico-button-base-background-color"])
-            button_fg = _hex_to_rgb(css_vars["--pico-button-base-color"])
-            if button_bg and button_fg:
-                contrast_ratio = _contrast(button_fg, button_bg)
-                contrast_checks.append({
-                    "fg_name": "Button Text",
-                    "bg_name": "Button Background",
-                    "contrast": f"{contrast_ratio:.2f}",
-                    "passes": contrast_ratio >= 4.5
+                    "fg_name": fg_name,
+                    "bg_name": bg_name,
+                    "contrast": f"{ratio:.2f}",
+                    "passes": ratio >= 4.5,
                 })
 
             return templates.TemplateResponse(
