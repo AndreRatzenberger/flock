@@ -246,6 +246,7 @@ def get_base_context(
         "success_message": success,
         "ui_mode": ui_mode,
         "theme_css": theme_css,  # Add generated CSS to context
+        "active_theme_name": theme_name, # Added active theme name
     }
 
 
