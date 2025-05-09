@@ -6,7 +6,7 @@ from __future__ import annotations  # Ensure forward references work
 import asyncio
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 
 # Flock core components & utilities
 from flock.config import DEFAULT_MODEL, TELEMETRY
+from flock.core.api.custom_endpoint import FlockEndpoint
 from flock.core.context.context import FlockContext
 from flock.core.context.context_manager import initialize_context
 from flock.core.execution.temporal_executor import run_temporal_workflow
@@ -685,6 +686,7 @@ class Flock(BaseModel, Serializable):
         server_name: str = "Flock API",
         create_ui: bool = False,
         ui_theme: str | None = None,
+        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
     ) -> None:
         """Starts a REST API server for this Flock instance.
         If create_ui is True, integrates the web UI, potentially with a specific theme.
@@ -734,6 +736,7 @@ class Flock(BaseModel, Serializable):
                 port=port,
                 server_name=server_name,
                 create_ui=False,  # Explicitly false for API only runner
+                custom_endpoints=custom_endpoints,
             )
 
     # --- CLI Starter ---

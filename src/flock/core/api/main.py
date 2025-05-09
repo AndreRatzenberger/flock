@@ -1,16 +1,21 @@
 # src/flock/core/api/main.py
 """Main Flock API server class and setup."""
 
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 # Flock core imports
 from flock.core.api.models import FlockBatchRequest
-from flock.core.flock import Flock
 from flock.core.logging.logging import get_logger
+
+if TYPE_CHECKING:
+    # These imports are only for type hints
+    from flock.core.flock import Flock
 
 logger = get_logger("api.main")
 
@@ -63,14 +68,57 @@ except ImportError:
         def format_result_to_html(*args, **kwargs):
             return ""
 
+from flock.core.api.custom_endpoint import FlockEndpoint
+
 
 class FlockAPI:
-    """Coordinates the Flock API server, including endpoints and UI."""
+    """Coordinates the Flock API server, including endpoints and UI.
 
-    def __init__(self, flock: Flock):
+    A user can provide custom FastAPI-style routes via the ``custom_endpoints`` dict.
+    Each key is a tuple of ``(<path:str>, <methods:list[str] | None>)`` and the
+    value is a callback ``Callable``.  ``methods`` can be ``None`` or an empty
+    list to default to ``["GET"]``.  The callback can be synchronous or
+    ``async``.  At execution time we provide the following keyword arguments and
+    filter them to the callback's signature:
+
+    • ``body``   – request json/plain payload (for POST/PUT/PATCH)
+    • ``query``  – dict of query parameters
+    • ``flock``  – current :class:`Flock` instance
+    • any path parameters extracted from the route pattern
+    """
+
+    def __init__(
+        self,
+        flock: "Flock",
+        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
+    ):
         self.flock = flock
+        # Normalize into list[FlockEndpoint]
+        self.custom_endpoints: list[FlockEndpoint] = []
+        if custom_endpoints:
+            merged: list[FlockEndpoint] = []
+            if isinstance(custom_endpoints, dict):
+                for (path, methods), cb in custom_endpoints.items():
+                    merged.append(
+                        FlockEndpoint(path=path, methods=list(methods) if methods else ["GET"], callback=cb)
+                    )
+            else:
+                merged.extend(list(custom_endpoints))
+
+            pending_endpoints = merged
+        else:
+            pending_endpoints = []
+
+        # FastAPI app instance
         self.app = FastAPI(title="Flock API")
-        self.run_store = RunStore()  # Create the run store instance
+
+        # Store run information
+        self.run_store = RunStore()
+
+        # Register any pending custom endpoints collected before app creation
+        if pending_endpoints:
+            self.custom_endpoints.extend(pending_endpoints)
+
         self._setup_routes()
 
     def _setup_routes(self):
@@ -80,6 +128,71 @@ class FlockAPI:
         self.app.include_router(api_router)
 
         # Root redirect (if UI is enabled later) will be added in start()
+
+        # --- Register user-supplied custom endpoints ---------------------
+        if self.custom_endpoints:
+            import inspect
+
+            from fastapi import Request
+
+            # Register any endpoints collected during __init__ (self.custom_endpoints)
+            if self.custom_endpoints:
+                from fastapi import Body
+
+                def _create_handler_factory(callback: Callable[..., Any], req_model: type[BaseModel] | None):
+
+                    if req_model is not None:
+
+                        async def _route_handler(body: req_model = Body(...), request: Request = None):  # type: ignore[arg-type,valid-type]
+                            payload: dict[str, Any] = {
+                                "body": body,
+                                "query": dict(request.query_params) if request else {},
+                                "flock": self.flock,
+                                **(request.path_params if request else {}),
+                            }
+
+                            sig = inspect.signature(callback)
+                            filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
+
+                            if inspect.iscoroutinefunction(callback):
+                                return await callback(**filtered_kwargs)
+                            return callback(**filtered_kwargs)
+
+                    else:
+
+                        async def _route_handler(request: Request):
+                            payload: dict[str, Any] = {
+                                "query": dict(request.query_params),
+                                "flock": self.flock,
+                                **request.path_params,
+                            }
+
+                            if request.method in {"POST", "PUT", "PATCH"}:
+                                try:
+                                    payload["body"] = await request.json()
+                                except Exception:
+                                    payload["body"] = await request.body()
+
+                            sig = inspect.signature(callback)
+                            filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
+
+                            if inspect.iscoroutinefunction(callback):
+                                return await callback(**filtered_kwargs)
+                            return callback(**filtered_kwargs)
+
+                    return _route_handler
+
+                for ep in self.custom_endpoints:
+                    self.app.add_api_route(
+                        ep.path,
+                        _create_handler_factory(ep.callback, ep.request_model),
+                        methods=ep.methods or ["GET"],
+                        name=ep.name or f"custom:{ep.path}",
+                        include_in_schema=ep.include_in_schema,
+                        response_model=ep.response_model,
+                        summary=ep.summary,
+                        description=ep.description,
+                    )
 
     # --- Core Execution Helper Methods ---
     # These remain here as they need access to self.flock and self.run_store
@@ -431,6 +544,7 @@ class FlockAPI:
         port: int = 8344,
         server_name: str = "Flock API",
         create_ui: bool = False,
+        #custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
     ):
         """Start the API server. If create_ui is True, it mounts the new webapp or the old FastHTML UI at the root."""
         if create_ui:
