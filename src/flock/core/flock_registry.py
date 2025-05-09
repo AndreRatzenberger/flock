@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from flock.core.flock_evaluator import FlockEvaluator
     from flock.core.flock_module import FlockModule
     from flock.core.flock_router import FlockRouter
-    from flock.core.flock_server import FlockMCPServerBase
+    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
     COMPONENT_BASE_TYPES = (FlockModule, FlockEvaluator, FlockRouter)
 

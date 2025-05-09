@@ -5,25 +5,15 @@ from asyncio import Lock
 import asyncio
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Annotated, Any, Callable, List, Literal, Type
-import anyio
-import httpx
-from mcp import ClientNotification, ClientSession, InitializeResult, ListToolsResult, McpError, StdioServerParameters
-from mcp.types import CallToolResult, TextContent
-from mcp.client.stdio import stdio_client
-from mcp.client.sse import sse_client
-from mcp.client.websocket import websocket_client
+from typing import Annotated, Any, Callable, List, Literal
+from mcp import ClientSession, InitializeResult, ListToolsResult, StdioServerParameters
 from pydantic import BaseModel, ConfigDict, Field, AnyUrl, UrlConstraints
 
-from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
-
-from dspy.primitives import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.mcp.types.mcp_protocols import MCPClientProto
 from flock.core.mcp.util.decorators import mcp_error_handler
 
 
@@ -68,7 +58,7 @@ class SseServerParameters(BaseModel):
     )
 
 
-class FlockMCPClientBase(BaseModel, ABC, MCPClientProto):
+class FlockMCPClientBase(BaseModel, ABC):
     """
     Wrapper for mcp ClientSession.
     Class will attempt to re-establish connection if possible.

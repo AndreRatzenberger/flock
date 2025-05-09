@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from flock.core.flock_agent import FlockAgent, SignatureType
-from flock.core.flock_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.evaluators.declarative.declarative_evaluator import (
     DeclarativeEvaluator,

@@ -17,7 +17,8 @@ def web_search_tavily(query: str):
 
         client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
         try:
-            response = client.search(query, include_answer=True)  # type: ignore
+            response = client.search(
+                query, include_answer=True)  # type: ignore
             return response
         except Exception:
             raise

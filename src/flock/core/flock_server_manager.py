@@ -8,7 +8,7 @@ from anyio import Lock
 from pydantic import BaseModel, ConfigDict, Field
 
 
-from flock.core.flock_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
 
 class FlockServerManager(BaseModel):

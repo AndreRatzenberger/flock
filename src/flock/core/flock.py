@@ -19,7 +19,7 @@ from typing import (
 from box import Box
 from temporalio import workflow
 
-from flock.core.flock_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.flock_server_manager import FlockServerManager
 
 with workflow.unsafe.imports_passed_through():
@@ -181,7 +181,7 @@ class Flock(BaseModel, Serializable):
         # (need to be registered first so that agents can retrieve them from the registry)
         # This will also add them to the managed list of self._mgr
         if servers:
-            from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockMCPServer
+            from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockMCPServer
             for server in servers:
                 if isinstance(server, ConcreteFlockMCPServer):
                     self.add_server(server)
@@ -269,7 +269,7 @@ class Flock(BaseModel, Serializable):
 
     def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
         """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by self._mgr."""
-        from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockMCPServer
+        from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockMCPServer
 
         if not isinstance(server, ConcreteFlockMCPServer):
             raise TypeError(
@@ -392,7 +392,7 @@ class Flock(BaseModel, Serializable):
         """Entry point for running an agent system asynchronously."""
         # Import here to allow forward reference resolution
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
-        from flock.core.flock_server import FlockMCPServerBase as ConcreteFlockServer
+        from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockServer
 
         with tracer.start_as_current_span("flock.run_async") as span:
             # Add passed servers first, so that agents have access to them

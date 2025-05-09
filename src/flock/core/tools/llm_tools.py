@@ -82,7 +82,7 @@ def split_by_tokens(
 
     i = 0
     while i < len(tokens):
-        chunk = tokens[i : i + max_tokens]
+        chunk = tokens[i: i + max_tokens]
         chunks.append("".join(chunk))
         i += max_tokens - overlap_tokens
 
@@ -114,7 +114,8 @@ def recursive_text_splitter(
     if not separators:
         return [
             text[:chunk_size],
-            *recursive_text_splitter(text[chunk_size:], chunk_size, separators),
+            *recursive_text_splitter(text[chunk_size:],
+                                     chunk_size, separators),
         ]
 
     separator = separators[0]
@@ -213,9 +214,9 @@ def split_code_by_functions(code: str) -> list[dict[str, Any]]:
         # Determine function content
         if i < len(matches) - 1:
             next_function_start = matches[i + 1].start()
-            content = code[current_match.start() : next_function_start]
+            content = code[current_match.start(): next_function_start]
         else:
-            content = code[current_match.start() :]
+            content = code[current_match.start():]
 
         functions.append(
             {
@@ -641,7 +642,8 @@ def format_table_from_dicts(data: list[dict[str, Any]]) -> str:
     # Create rows
     rows = []
     for item in data:
-        row = " | ".join(f"{item.get(key, '')!s:{widths[key]}}" for key in keys)
+        row = " | ".join(
+            f"{item.get(key, '')!s:{widths[key]}}" for key in keys)
         rows.append(row)
 
     # Combine everything

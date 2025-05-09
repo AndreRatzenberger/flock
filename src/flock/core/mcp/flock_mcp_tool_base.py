@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from dspy.primitives.tool import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.types.mcp_protocols import MCPClientProto, MCPConnectionMgrProto
+
 
 logger = get_logger("mcp_tool")
 
@@ -68,7 +68,7 @@ class FlockMCPToolBase(BaseModel, ABC):
         )
 
     @abstractmethod
-    def get_connection_manager(self) -> MCPConnectionMgrProto:
+    def get_connection_manager(self) -> Any:
         """
         Must return an instance of your connection manager
         """
@@ -79,7 +79,7 @@ class FlockMCPToolBase(BaseModel, ABC):
         Wrap this tool as a DSPyTool for downstream.
         """
         async def _invoke(**kwargs: Any) -> CallToolResult:
-            client: MCPClientProto | None = None
+            client: Any | None = None
             mgr = self.get_connection_manager()
             try:
                 client = await mgr.get_client()

@@ -4,21 +4,17 @@
 from abc import ABC, abstractmethod
 from asyncio import Condition, Lock
 import asyncio
-from contextlib import asynccontextmanager
 import random
-from typing import Annotated, Any, AsyncIterator, Callable, Generic, Literal, Type, TypeVar
+from typing import Annotated, Any, Callable, Generic, Literal, TypeVar
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints
 from opentelemetry import trace
 
 from mcp import InitializeResult, StdioServerParameters
 
-from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
-
 from dspy.primitives import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.types.mcp_protocols import MCPConnectionMgrProto
 
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
@@ -26,7 +22,7 @@ tracer = trace.get_tracer(__name__)
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
 
 
-class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient], MCPConnectionMgrProto[TClient]):
+class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
     """Handles a Pool of MCPClients of type TClient."""
 
     transport_type: Literal["stdio", "websockets", "sse"] = Field(

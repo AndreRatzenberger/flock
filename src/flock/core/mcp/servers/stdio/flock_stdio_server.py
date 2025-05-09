@@ -6,7 +6,7 @@ from mcp import StdioServerParameters
 from mcp.client.stdio import get_default_environment
 from pydantic import Field
 
-from flock.core.flock_server import FlockMCPServerBase, FlockMCPServerConfig
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 from flock.core.mcp.servers.stdio.flock_stdio_connection_manager import FlockStdioMCPConnectionManager
