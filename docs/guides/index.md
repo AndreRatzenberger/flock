@@ -13,5 +13,6 @@ Whether you're looking to build complex workflows, integrate specific tools, or 
 
 *   **[Chaining Agents: Building Workflows with Routers](chaining-agents.md):** Learn how to connect multiple agents together using different routing strategies, from simple static handoffs to dynamic, LLM-powered decisions.
 *   **[Configuring Temporal Execution](temporal-configuration.md):** Learn how to configure Temporal settings like task queues, timeouts, and retries for your workflows and agents.
+*   **[Exposing Custom REST Endpoints](custom-endpoints.md):** Attach bespoke FastAPI routes to your Flock server with full OpenAPI docs.
 
 *(More guides coming soon!)*

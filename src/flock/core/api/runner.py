@@ -1,8 +1,10 @@
 # src/flock/api/runner.py
 """Provides functionality to start the Flock API server."""
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any
 
+from flock.core.api.custom_endpoint import FlockEndpoint
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -17,6 +19,7 @@ def start_flock_api(
     port: int = 8344,
     server_name: str = "Flock API",
     create_ui: bool = False,
+    custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
 ) -> None:
     """Start a REST API server for the given Flock instance."""
     try:
@@ -32,7 +35,10 @@ def start_flock_api(
     logger.info(
         f"Preparing to start API server for Flock '{flock.name}' on {host}:{port} {'with UI' if create_ui else 'without UI'}"
     )
-    api_instance = FlockAPI(flock)  # Pass the Flock instance to the API
+    api_instance = FlockAPI(flock, custom_endpoints=custom_endpoints)  # Pass the Flock instance to the API
     api_instance.start(
-        host=host, port=port, server_name=server_name, create_ui=create_ui
+        host=host,
+        port=port,
+        server_name=server_name,
+        create_ui=create_ui,
     )

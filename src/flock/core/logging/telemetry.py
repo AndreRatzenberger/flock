@@ -42,6 +42,9 @@ class TelemetryConfig:
         enable_jaeger: bool = True,
         enable_file: bool = True,
         enable_sql: bool = True,
+        enable_otlp: bool = True,
+        otlp_protocol: str = "grpc",
+        otlp_endpoint: str = "http://localhost:4317",
         batch_processor_options: dict | None = None,
     ):
         """:param service_name: Name of your service.
@@ -61,6 +64,9 @@ class TelemetryConfig:
         self.enable_jaeger = enable_jaeger
         self.enable_file = enable_file
         self.enable_sql = enable_sql
+        self.enable_otlp = enable_otlp
+        self.otlp_protocol = otlp_protocol
+        self.otlp_endpoint = otlp_endpoint
         self.global_tracer = None
 
     def setup_tracing(self):
@@ -96,6 +102,32 @@ class TelemetryConfig:
                 )
 
             span_processors.append(SimpleSpanProcessor(jaeger_exporter))
+
+
+        if self.enable_otlp:
+            if self.otlp_protocol == "grpc":
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
+                otlp_exporter = OTLPSpanExporter(
+                    endpoint=self.otlp_endpoint,
+                    insecure=True,
+                )
+            elif self.otlp_protocol == "http":
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
+                otlp_exporter = OTLPSpanExporter(
+                    collector_endpoint=self.otlp_endpoint,
+                )
+            else:
+                raise ValueError(
+                    "Invalid OTEL_EXPORTER_OTLP_PROTOCOL specified. Use 'grpc' or 'http'."
+                )
+
+            span_processors.append(SimpleSpanProcessor(otlp_exporter))
 
         # If a file path is provided, add the custom file exporter.
         if self.file_export_name and self.enable_file:
