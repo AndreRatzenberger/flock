@@ -1,23 +1,29 @@
 """Represents a MCP Tool in a format which is compatible with Flock's ecosystem."""
 from abc import ABC, abstractmethod
-from typing import Any, Callable, TypeVar
+import asyncio
+import threading
+from typing import Any, Tuple, Type, TypeVar, Union
 
+import dspy
 from mcp import Tool
 from mcp.types import ToolAnnotations, CallToolResult, TextContent
 from pydantic import BaseModel, Field
 
-from dspy.primitives.tool import Tool as DSPyTool
+from dspy import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
 
 
-logger = get_logger("mcp_tool")
+logger = get_logger("core.mcp.tool_base")
 
 
 T = TypeVar("T", bound="FlockMCPToolBase")
 
+TYPE_MAPPING = {"string": str, "integer": int, "number": float,
+                "boolean": bool, "array": list, "object": dict}
 
-class FlockMCPToolBase(BaseModel, ABC):
+
+class FlockMCPToolBase(BaseModel):
     name: str = Field(
         ...,
         description="Name of the tool"
@@ -67,51 +73,111 @@ class FlockMCPToolBase(BaseModel, ABC):
             annotations=instance.annotations,
         )
 
-    @abstractmethod
-    def get_connection_manager(self) -> Any:
-        """
-        Must return an instance of your connection manager
-        """
-        ...
+    def resolve_json_schema_reference(self, schema: dict) -> dict:
+        """Recursively resolve json model schema, expanding all references"""
 
-    def as_dspy_tool(self) -> DSPyTool:
+        if "$defs" not in schema and "definitions" not in schema:
+            return schema
+
+        def resolve_refs(obj: Any) -> Any:
+            if not isinstance(obj, dict[list, list]):
+                return obj
+            if isinstance(obj, dict):
+                if "$ref" in obj:
+                    ref_path = obj["$ref"].split("/")[-1]
+                    return {resolve_refs(v) for k, v in obj.items()}
+
+            return [resolve_refs(item) for item in obj]
+
+        resolved_schema = resolve_refs(schema)
+
+        resolved_schema.pop("$defs", None)
+        return resolved_schema
+
+    def _convert_input_schema_to_tool_args(self, input_schema: dict[str, Any]) -> Tuple[dict[str, Any], dict[str, Type], dict[str, str]]:
+        """Convert an input schema to tool arguments compatible with Dspy Tool.
+
+        Args:
+            schema: an input schema describing the tool's input parameters
+
+        Returns:
+            A tuple of (args, arg_types, arg_desc) for Dspy Tool definition
+        """
+
+        args, arg_types, arg_desc = {}, {}, {}
+        properties = input_schema.get("properties", None)
+        if properties is None:
+            return args, arg_types, arg_desc
+
+        required = input_schema.get("required", [])
+
+        defs = input_schema.get("$defs", {})
+
+        for name, prop in properties.items():
+            if len(defs) > 0:
+                prop = self.resolve_json_schema_reference(
+                    {"$defs": defs, **prop})
+
+            args[name] = prop
+
+            arg_types[name] = TYPE_MAPPING.get(prop.get("type"), Any)
+            arg_desc[name] = prop.get("description", "No description provided")
+            if name in required:
+                arg_desc[name] += " (Required)"
+
+        return args, arg_types, arg_desc
+
+    def _convert_mcp_tool_result(self, call_tool_result: CallToolResult) -> Union[str, list[Any]]:
+        from mcp.types import TextContent
+
+        text_contents: list[TextContent] = []
+        non_text_contents = []
+
+        for content in call_tool_result.content:
+            if isinstance(content, TextContent):
+                text_contents.append(content)
+            else:
+                non_text_contents.append(content)
+
+        tool_content = [content.text for content in text_contents]
+        if len(text_contents) == 1:
+            tool_content = tool_content[0]
+
+        if call_tool_result.isError:
+            logger.error(f"MCP Tool '{self.name}' returned an error.")
+
+        return tool_content or non_text_contents
+
+    def on_error(self, res: CallToolResult, **kwargs) -> None:
+        """
+        Optional on error hook.
+        """
+        # leave it for now, might be useful for more sophisticated processing.
+        logger.error(f"Tool: '{self.name}' on_error: Tool returned error.")
+        return res
+
+    def as_dspy_tool(self, mgr: Any) -> DSPyTool:
         """
         Wrap this tool as a DSPyTool for downstream.
         """
-        async def _invoke(**kwargs: Any) -> CallToolResult:
-            client: Any | None = None
-            mgr = self.get_connection_manager()
+
+        args, arg_type, args_desc = self._convert_input_schema_to_tool_args(
+            self.input_schema)
+
+        async def func(*args, **kwargs):
             try:
                 client = await mgr.get_client()
-                res: CallToolResult = await client.call_tool(self.name, kwargs)
-                if res.isError:
-                    # optional hook
-                    self.on_error(res, kwargs)
-                    return res
+                result = await client.call_tool(self.name, kwargs)
+                return self._convert_mcp_tool_result(result)
             except Exception as e:
-                logger.error(f"Error in '{self.name}': {e}")
-                if client:
-                    await client.set_is_alive(False)
-                    await client.set_has_error(True)
-                    await client.set_error_message(str(e))
-                return CallToolResult(
-                    isError=True,
-                    content=[
-                        TextContent(
-                            type="text",
-                            text=f"Tool '{self.name}' failed."
-                        )
-                    ]
-                )
-            finally:
-                await mgr.release_client(client)
-
-        schema = self.input_schema or {}
-        arg_schemas = schema.get("properties", {})
+                logger.error(
+                    f"Exception ocurred when calling tool '{self.name}': {e}")
 
         return DSPyTool(
-            func=_invoke,
+            func=func,
             name=self.name,
-            desc=self.description or "",
-            args=arg_schemas,
+            desc=self.description,
+            args=args,
+            arg_types=arg_type,
+            arg_desc=args_desc,
         )

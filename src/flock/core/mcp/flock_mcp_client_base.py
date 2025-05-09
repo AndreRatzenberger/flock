@@ -2,23 +2,34 @@
 
 from abc import ABC, abstractmethod
 from asyncio import Lock
-import asyncio
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Annotated, Any, Callable, List, Literal
 from mcp import ClientSession, InitializeResult, ListToolsResult, StdioServerParameters
+from mcp.types import CallToolResult, TextContent
 from pydantic import BaseModel, ConfigDict, Field, AnyUrl, UrlConstraints
 
 
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
+
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.mcp.util.decorators import mcp_error_handler
 
 
-logger = get_logger("mcp_client")
+logger = get_logger("core.mcp.client_base")
 tracer = trace.get_tracer(__name__)
+
+_DEFAULT_EXCEPTION_TOOL_RESULT = CallToolResult(
+    isError=True,
+    content=[
+        TextContent(
+            type="text",
+            text="Tool call failed."
+        )
+    ]
+)
 
 
 class WebSocketServerParameters(BaseModel):
@@ -285,6 +296,35 @@ class FlockMCPClientBase(BaseModel, ABC):
                     flock_cmp_tools.append(converted_tool)
 
             return flock_cmp_tools
+
+    @mcp_error_handler(default_return=_DEFAULT_EXCEPTION_TOOL_RESULT, logger=logger)
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult:
+        """
+        Calls a tool on the respective mcp server.
+        """
+
+        initialized = False
+        async with self.lock:
+            if self.client_session:
+                initialized = True
+
+        if not initialized:
+            # Underlying client session has not yet been initialized
+            # This should not happen in practice, but its good to be catious
+            logger.warning(
+                F"Underlying session for connection to server '{self.server_name}' has not been initialized"
+            )
+            await self.connect(retries=self.max_retries)
+            logger.debug(
+                f"Underlying session for client for server '{self.server_name}' has been intialized."
+            )
+            initialized = True
+
+        async with self.lock:
+            logger.debug(
+                f"Calling tool '{name}' for server '{self.server_name}'"
+            )
+            return await self.client_session.call_tool(name=name, arguments=arguments)
 
     @mcp_error_handler(default_return=None, logger=logger)
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:

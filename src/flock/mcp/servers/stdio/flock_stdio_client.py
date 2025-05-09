@@ -6,7 +6,7 @@ from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
 from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
-logger = get_logger("mcp_stdio_client")
+logger = get_logger("mcp.stdio_client")
 tracer = trace.get_tracer(__name__)
 
 

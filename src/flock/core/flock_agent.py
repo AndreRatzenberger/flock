@@ -317,40 +317,14 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                     registered_tools = self.tools
 
                 # Retrieve available mcp_tools if the evaluator needs them
-                registered_mcp_tools = []
+                mcp_tools = []
                 if self.servers:
-                    # Ensure tools are actually retrieved/validated if needed by evaluator type
-                    # For now, assume evaluator handles tool resolution if necessary
                     for server in self.servers:
-                        logger.debug(
-                            f"Retrieving list of available tools from server '{server.name}' for agent '{self.name}'")
                         server_tools = await server.get_tools()
-                        if server_tools:
-                            for mcp_tool in server_tools:
-                                try:
-                                    conversion_result: Callable[..., Any] = mcp_tool.convert_to_callable(
-                                    )
-                                    if conversion_result:
-                                        registered_mcp_tools.append(
-                                            conversion_result)
-                                    else:
-                                        logger.warning(
-                                            f"Conversion of mcp tool '{mcp_tool.name}' of server '{server.name}' to callable for agent '{self.name}' resulted in no result. Skipping..."
-                                        )
-                                        continue  # Ignore it.
-                                except Exception as e:
-                                    logger.error(
-                                        f"Unable to convert mcp tool of server '{server.name}' to callable for agent '{self.name}'. Skipping..."
-                                    )
-                                    continue  # Skip over tools that cannot be converted to enable the agent to continue on
-                        else:
-                            continue  # Skip, if the server does not provide any tools
-
-                # Merge the list of registered tools with the list of mcp tools
-                registered_tools = registered_tools + registered_mcp_tools
+                        mcp_tools = mcp_tools + server_tools
 
                 result = await self.evaluator.evaluate(
-                    self, current_inputs, registered_tools
+                    self, current_inputs, registered_tools, mcp_tools=mcp_tools,
                 )
             except Exception as eval_error:
                 logger.error(
@@ -723,7 +697,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             serialized_servers = []
             for server in self.servers:
                 # Write it down as a list of server names.
-                serialized_servers.append(server.name)
+                serialized_servers.append(server.server_config.server_name)
 
             if serialized_servers:
                 data["servers"] = serialized_servers

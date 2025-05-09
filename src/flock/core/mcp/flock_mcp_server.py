@@ -10,15 +10,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Type, TypeVar
 
 from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
-from flock.core.mcp.flock_mcp_prompt_base import FlockMCPPromptBase
-from flock.core.mcp.flock_mcp_resource_base import FlockMCPResourceBase
-from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from mcp.client.session import SamplingFnT, ListRootsFnT, LoggingFnT, MessageHandlerFnT
 
 from opentelemetry import trace
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints, create_model
 
-from dspy.primitives import Tool as DSPyTool
+from dspy import Tool as DSPyTool
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
@@ -26,7 +22,7 @@ from flock.core.logging.logging import get_logger
 from flock.core.serialization.serializable import Serializable
 from flock.core.serialization.serialization_utils import deserialize_component, serialize_item
 
-logger = get_logger("mcp_server")
+logger = get_logger("core.mcp.server_base")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 M = TypeVar("M", bound="FlockMCPServerConfig")
@@ -261,10 +257,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
         # Pydantic should handle base fields based on type hints in __init__
         server = cls(**server_data)
-        logger.debug(f"Base server '{server.name}' instantiated")
+        logger.debug(
+            f"Base server '{server.server_config.server_name}' instantiated")
 
         # --- Deserialize components ---
-        logger.debug(f"Deserializing components for '{server.name}'")
+        logger.debug(
+            f"Deserializing components for '{server.server_config.server_name}'")
 
         # Modules
         if "modules" in component_configs:
@@ -278,13 +276,14 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                         # Use add_module for potential logic within it
                         server.add_module(module_instance)
                         logger.debug(
-                            f"Deserialized and added module '{module_name}' for '{server.name}'")
+                            f"Deserialized and added module '{module_name}' for '{server.server_config.server_name}'")
                 except Exception as e:
                     logger.error(
-                        f"Failed to deserialize module '{module_name}' for '{server.name}'",
+                        f"Failed to deserialize module '{module_name}' for '{server.server_config.server_name}'",
                         exc_info=True
                     )
-        logger.info(f"Successfully deserialized server '{server.name}'.")
+        logger.info(
+            f"Successfully deserialized server '{server.server_config.server_name}'.")
         return server
 
     def to_dict(self) -> dict[str, Any]:

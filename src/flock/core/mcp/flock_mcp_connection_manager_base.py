@@ -11,12 +11,12 @@ from opentelemetry import trace
 
 from mcp import InitializeResult, StdioServerParameters
 
-from dspy.primitives import Tool as DSPyTool
+from dspy import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
 
-logger = get_logger("mcp_server")
+logger = get_logger("core.mcp.connection_manager_base")
 tracer = trace.get_tracer(__name__)
 
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
@@ -369,7 +369,13 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
             tools = await client.get_tools()
 
             tool_callables = [t.as_dspy_tool(
-                connection_manager=self) for t in tools]
+                mgr=self) for t in tools]
+
+            return tool_callables
+        except Exception as e:
+            logger.error(
+                f"Exception ocurred when trying to get tools for server '{self.server_name}': {e}")
+            return []
         finally:
             await self.release_client(client)
 
@@ -435,7 +441,7 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
                         f"Replenishment task for {self.server_name} completed.")
             except asyncio.CancelledError:
                 logger.info(
-                    f"Replenishment taks for {self.server_name} was cancelled.")
+                    f"Replenishment task for server '{self.server_name}' was cancelled.")
             except Exception as e:
                 logger.error(
                     f"Unexpected error in _clear_replenish_task for {self.server_name}: {e}", exc_info=True)

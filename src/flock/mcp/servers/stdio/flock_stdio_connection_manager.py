@@ -5,8 +5,8 @@ from typing import Literal
 from mcp import StdioServerParameters
 from pydantic import Field
 from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
-from flock.core.mcp.servers.stdio.flock_stdio_client import FlockStdioClient
 from flock.core.logging.logging import get_logger
+from flock.mcp.servers.stdio.flock_stdio_client import FlockStdioClient
 
 logger = get_logger("mcp.stdio.connection_manager")
 

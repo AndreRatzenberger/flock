@@ -8,14 +8,14 @@ from mcp import McpError
 from mcp.types import CallToolResult, TextContent
 
 from flock.core.logging.logging import FlockLogger, get_logger
-from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
+
 
 R = TypeVar("R")
 P = ParamSpec("P")
 
 
 # a default logger if no logger is being passed
-_DEFAULT_LOGGER = get_logger("mcp.error_handler_decorator")
+_DEFAULT_LOGGER = get_logger("core.mcp.decorator")
 
 
 def mcp_error_handler(default_return: R, logger: FlockLogger = _DEFAULT_LOGGER) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
@@ -26,7 +26,7 @@ def mcp_error_handler(default_return: R, logger: FlockLogger = _DEFAULT_LOGGER) 
 
     def deco(fn: Callable[P, Awaitable[R]]):
         @functools.wraps(fn)
-        async def wrapper(self: FlockMCPClientBase, *args: P.args, **kwargs: P.kwargs) -> R:
+        async def wrapper(self, *args: P.args, **kwargs: P.kwargs) -> R:
             try:
                 return await fn(self, *args, **kwargs)
             except anyio.ClosedResourceError as e:

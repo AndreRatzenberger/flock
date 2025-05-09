@@ -82,9 +82,6 @@ class Flock(BaseModel, Serializable):
     Inherits from Pydantic BaseModel and Serializable.
     """
 
-    # TODO: AsyncExitStack - master stack for server stacks.
-    # TODO: Servers should initialize their contexts inside the run_async method, this ensures proper server shutdown after the agent system finishes running.
-
     name: str | None = Field(
         default_factory=lambda: f"flock_{uuid.uuid4().hex[:8]}",
         description="A unique identifier for this Flock instance.",
@@ -173,6 +170,7 @@ class Flock(BaseModel, Serializable):
         self._servers = {}
         self._start_agent_name = None
         self._start_input = {}
+        self._mgr = FlockServerManager()
 
         # Set up logging based on the enable_logging flag
         self._configure_logging(enable_logging)  # Use instance attribute
@@ -505,7 +503,7 @@ class Flock(BaseModel, Serializable):
                 # and flock is ready to execute it's agent_workflow.
                 # Befor that happens, the ServerManager needs to
                 # get the Servers up and running (Populate pools, build connections, start scripts, etc.)
-                async with self._mgr as server_manager:
+                async with self._mgr:
                     # Enter the manager's async context,
                     # running it's __aenter__ method and starting all registered servers
                     # after this block ends, self._mgr's __aexit__ will be called

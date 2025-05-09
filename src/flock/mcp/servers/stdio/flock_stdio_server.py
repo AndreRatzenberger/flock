@@ -8,14 +8,14 @@ from pydantic import Field
 
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
-from flock.core.mcp.servers.stdio.flock_stdio_connection_manager import FlockStdioMCPConnectionManager
 from flock.core.serialization.serializable import Serializable
 
-from dspy.primitives import Tool as DSPyTool
+from dspy import Tool as DSPyTool
+
+from flock.mcp.servers.stdio.flock_stdio_connection_manager import FlockStdioMCPConnectionManager
 
 
-logger = get_logger("stdio_mcp_server")
+logger = get_logger("mcp.stdio.server")
 tracer = trace.get_tracer(__name__)
 
 

@@ -9,7 +9,7 @@ from mcp.types import Resource, ReadResourceResult, TextResourceContents, BlobRe
 from flock.core.logging.logging import get_logger
 
 
-logger = get_logger("mcp_resource")
+logger = get_logger("core.mcp.resource_base")
 T = TypeVar("T", bound="FlockMCPResourceBase")
 
 
