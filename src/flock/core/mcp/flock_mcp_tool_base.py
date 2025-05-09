@@ -1,4 +1,5 @@
 """Represents a MCP Tool in a format which is compatible with Flock's ecosystem."""
+from abc import ABC, abstractmethod
 from typing import Any, Callable, TypeVar
 
 from mcp import Tool
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 from dspy.primitives.tool import Tool as DSPyTool
 
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.types.mcp_protocols import MCPClientProto, MCPConnectionMgrProto
 
 logger = get_logger("mcp_tool")
 
@@ -15,7 +17,7 @@ logger = get_logger("mcp_tool")
 T = TypeVar("T", bound="FlockMCPToolBase")
 
 
-class FlockMCPToolBase(BaseModel):
+class FlockMCPToolBase(BaseModel, ABC):
     name: str = Field(
         ...,
         description="Name of the tool"
@@ -37,19 +39,24 @@ class FlockMCPToolBase(BaseModel):
     )
 
     @classmethod
-    def try_from_mcp_tool(cls: type[T], mcp_tool: Tool) -> T | None:
-        """
-        Convert a mcp Tool into a FlockMCPTool
-        """
+    def from_mcp_tool(cls: type[T], tool: Tool) -> T:
         return cls(
-            name=mcp_tool.name,
-            description=mcp_tool.description,
-            input_schema=mcp_tool.inputSchema,
-            annotations=mcp_tool.annotations,
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.inputSchema,
+            annotations=tool.annotations,
+        )
+
+    def to_mcp_tool(self) -> Tool:
+        return Tool(
+            name=self.name,
+            description=self.description,
+            inputSchema=self.input_schema,
+            annotations=self.annotations
         )
 
     @classmethod
-    def try_to_mcp_tool(cls: type[T], instance: T) -> Tool | None:
+    def to_mcp_tool(cls: type[T], instance: T) -> Tool | None:
         """
         Convert a flock mcp tool into a mcp tool.
         """
@@ -60,61 +67,50 @@ class FlockMCPToolBase(BaseModel):
             annotations=instance.annotations,
         )
 
-    def convert_to_callable(self, client: Any) -> Callable[..., Any] | None:
+    @abstractmethod
+    def get_connection_manager(self) -> MCPConnectionMgrProto:
         """
-        Returns a dspy.Tool wrapper around this MCP tool, so that
-        dspy.ReAct / dspy.Predict can consume its name/desc/args.
+        Must return an instance of your connection manager
         """
-        async def _call(**arguments: Any) -> CallToolResult:
+        ...
 
-            logger.debug(
-                f"MCP Tool '{self.name}' called with arguments: {arguments}")
+    def as_dspy_tool(self) -> DSPyTool:
+        """
+        Wrap this tool as a DSPyTool for downstream.
+        """
+        async def _invoke(**kwargs: Any) -> CallToolResult:
+            client: MCPClientProto | None = None
+            mgr = self.get_connection_manager()
             try:
-                tool_call_result: CallToolResult = await client.call_tool(
-                    tool_name=self.name,
-                    arguments=arguments,
-                )
-
-                if tool_call_result.isError:
-                    # log the error for tracking purposes.
-                    logger.warning(
-                        f"LLM Tried to call mcp function '{self.name}' with arguments {arguments} and produced exception.")
-
-                return tool_call_result
-
+                client = await mgr.get_client()
+                res: CallToolResult = await client.call_tool(self.name, kwargs)
+                if res.isError:
+                    # optional hook
+                    self.on_error(res, kwargs)
+                    return res
             except Exception as e:
-                # Log it, but do not return the Exception to the LLM
-                # The reason being, that any exception here likely
-                # originates from the surrounding code-framework
-                # and not from how the llm called the Function
-                # Also, passing on exceptions from the inside
-                # of the framework might expose sensitive information.
-                logger.error(
-                    f"Unexpected Exception ocurred when calling mcp_function '{self.name}': {e}")
-
-                # However, we need to return *something* to the llm, so
-                # we tell the llm, that something went wrong in order to inform it.
+                logger.error(f"Error in '{self.name}': {e}")
+                if client:
+                    await client.set_is_alive(False)
+                    await client.set_has_error(True)
+                    await client.set_error_message(str(e))
                 return CallToolResult(
                     isError=True,
                     content=[
                         TextContent(
-                            type='text',
-                            text=f"Tool call for tool '{self.name}' failed. An Exception ocurred."
+                            type="text",
+                            text=f"Tool '{self.name}' failed."
                         )
                     ]
                 )
-
-        # The dspy.Tool wants a dict of
-        # {arg_name: JSON_SCHEMA_for_that_arg}
-        # not the "root" object schema, so extract
-        # the properties first.
+            finally:
+                await mgr.release_client(client)
 
         schema = self.input_schema or {}
         arg_schemas = schema.get("properties", {})
 
-        # wrap the inner coroutinge in a Dspy Tool
         return DSPyTool(
-            func=_call,
+            func=_invoke,
             name=self.name,
             desc=self.description or "",
             args=arg_schemas,

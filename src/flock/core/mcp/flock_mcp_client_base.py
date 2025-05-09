@@ -5,7 +5,7 @@ from asyncio import Lock
 import asyncio
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Annotated, Any, Callable, Literal, Type
+from typing import Annotated, Any, Callable, List, Literal, Type
 import anyio
 import httpx
 from mcp import ClientNotification, ClientSession, InitializeResult, ListToolsResult, McpError, StdioServerParameters
@@ -23,14 +23,9 @@ from flock.core.logging.logging import get_logger
 from opentelemetry import trace
 
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
+from flock.core.mcp.types.mcp_protocols import MCPClientProto
+from flock.core.mcp.util.decorators import mcp_error_handler
 
-# TODO: fine-grained error handling
-# Standard JSON-RPC error codes
-PARSE_ERROR = -32700
-INVALID_REQUEST = -32600
-METHOD_NOT_FOUND = -32601
-INVALID_PARAMS = -32602
-INTERNAL_ERROR = -32603
 
 logger = get_logger("mcp_client")
 tracer = trace.get_tracer(__name__)
@@ -73,7 +68,7 @@ class SseServerParameters(BaseModel):
     )
 
 
-class FlockMCPClientBase(BaseModel, ABC):
+class FlockMCPClientBase(BaseModel, ABC, MCPClientProto):
     """
     Wrapper for mcp ClientSession.
     Class will attempt to re-establish connection if possible.
@@ -207,7 +202,8 @@ class FlockMCPClientBase(BaseModel, ABC):
     )
 
     @abstractmethod
-    async def connect(self, retries: int | None) -> InitializeResult:
+    @mcp_error_handler(default_return=Exception("Client Intialization failed"), logger=logger)
+    async def connect(self, retries: int | None = None) -> InitializeResult | None:
         """
         Connects to the client.
 
@@ -263,193 +259,70 @@ class FlockMCPClientBase(BaseModel, ABC):
             self.error_message = message
 
     # TODO: caching
-    async def get_tools(self) -> list[DSPyTool]:
+    @mcp_error_handler(default_return=[], logger=logger)
+    async def get_tools(self) -> List[FlockMCPToolBase]:
         """
-        Gets the list of available tools from the server.
+        Gets a list of available tools from the server.
         """
-        # Check if underlying client session has been initialized.
+        # Check of the underlying client session has been initialized
         initialized = False
         async with self.lock:
             if self.client_session:
                 initialized = True
 
         if not initialized:
-            # Underlying client session has not yet been initialized.
-            # This should never happen in practice, but it is good to be extra cautious
+            # Underlying client session has not yet been initialized
+            # This should not happen in practice, but it is good to be cautious
             logger.warning(
-                f"Underlying session for connection has not been initialized.")
-            try:
-                await self.connect(retries=self.max_retries)
-                logger.debug(f"Underlying session has been established.")
-                initialized = True
-            except Exception as e:
-                logger.error(
-                    f"Exception ocurred while initializing connection: {e}")
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(e)
-                # Return an empty list as to not impede application flow.
-                return []
-
-        # Get the tools
-        # Lock the client beforehand
-        async with self.lock:
-            try:
-                response: ListToolsResult = await self.client_session.list_tools()
-
-                flock_mcp_tools = []
-
-                for tool in response.tools:
-                    converted_tool = FlockMCPToolBase.try_from_mcp_tool(tool)
-                    if converted_tool:
-                        flock_mcp_tools.append(
-                            converted_tool.convert_to_callable(client=self))
-
-                return flock_mcp_tools
-            except anyio.ClosedResourceError as closed_from_our_side:
-                logger.error(
-                    f"Exception ocurred during list/tools request to server '{self.server_name}' (Stream closed from our side): {closed_from_our_side}"
-                )
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(closed_from_our_side)
-                return []  # FIXME: More fine-grained return values.
-            except anyio.BrokenResourceError as closed_from_remote_side:
-                logger.error(
-                    f"Exception ocurred during list/tools request to server '{self.server_name}' (Connection closed by remote): {closed_from_remote_side}"
-                )
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(closed_from_remote_side)
-                return []  # FIXME: More fine-grained return values.
-            except McpError as mcp_error:
-                if mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
-                    # This means the server is simply receiving too many requests.
-                    # But the client itself didn't crap its pants.
-                    # This means, we can try again in the future.
-                    # FIXME: Backoff-Logic. For now, we simply return an empty list of tools.
-                    logger.warning(
-                        f"Server '{self.server_name}' returned Code: {mcp_error.error.code}")
-                    self.is_alive = True
-                    self.has_error = False
-                    self.error_message = None
-                elif mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
-                    logger.error(
-                        f"Call to list/tools for Server '{self.server_name}' timed out: {mcp_error}"
-                    )
-                    self.is_alive = False
-                    self.has_error = True
-                    self.error_message = str(mcp_error)
-                return []  # FIXME: More fine-grained return values.
-            except Exception as e:
-                logger.error(
-                    f"Unexpected Exception ocurred for list/tools request to server '{self.server_name}': {e}")
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(e)
-                return []  # FIXME: More fine-grained return values.
-
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
-        """
-        Send a tool call request to a server.
-        """
-        needs_initialization = False
-        async with self.lock:
-            if not self.client_session:
-                needs_initialization = True
-
-        # Make sure the session is intialized.
-        if needs_initialization:
-            await self.connect(retries=self.max_retries)
+                f"Underlying session for connection has not been initialized"
+            )
+            result = await self.connect(retries=self.max_retries)
+            if isinstance(result, Exception):
+                # This means that the connection failed.
+                raise Exception(
+                    f"Connection for client for server '{self.server_name}' failed with exception: {result}")
+            logger.debug(f"Underlying session has been established.")
+            initialized = True
 
         async with self.lock:
+            response: ListToolsResult = await self.client_session.list_tools()
 
-            try:
-                result: CallToolResult = await self.client_session.call_tool(
-                    name=tool_name,
-                    arguments=arguments,
-                    read_timeout_seconds=self.read_timeout_seconds,
-                )
-                return result
-            except Exception as e:
-                # Log it, but do not return the exception to the LLM
-                # Any exception here, is an underlying exception in the code-base
-                # And not a result of how the llm called the tool
-                # However, we still need to pass the information that *something* went
-                # wrong to the llm, to inform it.
-                # But, simply passing on an exception stack trace from
-                # the inside of our framework might expose sensitive data.
-                # So, we just send a call-tools result with a generic text.
-                logger.error(
-                    f"Unexpected Exception ocurred during tool call for tool '{tool_name}': {e}"
-                )
+            flock_cmp_tools = []
 
-                return CallToolResult(
-                    isError=True,
-                    content=[
-                        TextContent(
-                            type='text',
-                            text="An Exception ocurred while calling tool; '{tool_name}': EXCEPTION REDACTED"
-                        )
-                    ]
-                )
+            for tool in response.tools:
+                converted_tool = FlockMCPToolBase.from_mcp_tool(tool)
+                if converted_tool:
+                    flock_cmp_tools.append(converted_tool)
 
+            return flock_cmp_tools
+
+    @mcp_error_handler(default_return=None, logger=logger)
     async def set_roots(self, roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None) -> None:
-        """Sets the roots for this Client."""
-        # TODO: Callback notifcation handling tomorrow (or rather on tuesday).
+        """
+        Sets the roots for this client.
+        """
+        # TODO: Callback notification handling
         # TODO: Caching
+
+        initialized = False
         async with self.lock:
-            try:
-                logger.debug(f"Setting roots for client {self} to: {roots}")
-                if self.client_session:
-                    # Set the roots
-                    self.current_roots = roots
-                    self.client_session.send_notification(
-                        ClientNotification()
-                    )
-                    # The actual update will be handled by the list_roots_callback
-                    await self.client_session.send_roots_list_changed()
-                # else:
-                    # TODO: Connection reinitialization. (IF needed.)
-                    # await self.init_connection()
-            except anyio.ClosedResourceError as closed_on_our_end:
-                # This error indicates that the connection to the remote has been closed from our side.
-                logger.error(
-                    f"Exception Occurred during setting of roots for client {self} (Send stream closed): {closed_on_our_end}")
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(e)
-            except anyio.BrokenResourceError as broken_on_remote_end:
-                # This error indicates that the connection was terminated from the other side.
-                logger.error(
-                    f"Exception Occurred during setting of roots for client {self} (Remote closed send stream): {broken_on_remote_end}")
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(e)
-            except McpError as mcp_error:
-                if mcp_error.error.code == httpx.codes.REQUEST_TIMEOUT:
-                    logger.error(
-                        f"MCP Excpetion ocurred during list_tools call for client {self} (Request timed out.): {mcp_error}")
-                    self.is_alive = True  # On Timeout we dare try again in the future
-                    self.has_error = False
-                    self.error_message = None
-                elif mcp_error.error.code == httpx.codes.TOO_MANY_REQUESTS or mcp_error.error.code == httpx.codes.TOO_EARLY:
-                    logger.error(
-                        f"MCP Exception ocurred during list_tools call for client {self} (Too many requests or too early to call again): {mcp_error}"
-                    )
-                    self.is_alive = True
-                    self.has_error = False
-                    self.error_message = None
-                else:
-                    logger.error(
-                        f"MCP Exception ocurred during list_tools call for client {self}: {mcp_error}")
-                    self.is_alive = False
-                    self.has_error = True
-                    self.error_message = str(mcp_error)
-            except Exception as e:
-                logger.error(
-                    f"Unexpected Excpetion occurred during setting of roots for client {self}: {e}")
-                self.is_alive = False
-                self.has_error = True
-                self.error_message = str(e)
-                # TODO: Close connection immediately
+            if self.client_session:
+                initialized = True
+
+        if not initialized:
+            # Underlying client session has not yet been initialized
+            # This should not happen in practice, but it is good to cautious
+            logger.warning(
+                f"Underlying session for connection has not been initialized")
+            await self.connect(retries=self.max_retries)
+            logger.debug(
+                f"Underlying session for client for server '{self.server_name}' has been initialized")
+            initialized = True
+
+        async with self.lock:
+            logger.debug(
+                f"Setting roots for client for server '{self.server_name}' to: {roots}")
+            self.current_roots = roots
+            self.client_session.send_roots_list_changed()
+            # TODO: handle roots/listChanged callback
+            return

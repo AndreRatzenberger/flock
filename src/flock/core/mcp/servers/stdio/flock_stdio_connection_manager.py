@@ -6,6 +6,9 @@ from mcp import StdioServerParameters
 from pydantic import Field
 from flock.core.mcp.flock_mcp_connection_manager_base import FlockMCPConnectionManagerBase
 from flock.core.mcp.servers.stdio.flock_stdio_client import FlockStdioClient
+from flock.core.logging.logging import get_logger
+
+logger = get_logger("mcp.stdio.connection_manager")
 
 
 class FlockStdioMCPConnectionManager(FlockMCPConnectionManagerBase[FlockStdioClient]):
@@ -28,7 +31,7 @@ class FlockStdioMCPConnectionManager(FlockMCPConnectionManagerBase[FlockStdioCli
         return await super().initialize()
 
     async def _make_client(self) -> FlockStdioClient:
-
+        logger.debug(f"Creating Stdio Client for server '{self.server_name}'")
         try:
             return FlockStdioClient(
                 server_name=self.server_name,
@@ -42,4 +45,6 @@ class FlockStdioMCPConnectionManager(FlockMCPConnectionManagerBase[FlockStdioCli
                 read_timeout_seconds=timedelta(seconds=5),
             )
         except Exception as e:
+            logger.error(
+                f"Exception ocurred while attempting to create stdio client for server '{self.server_name}': {e}")
             raise e

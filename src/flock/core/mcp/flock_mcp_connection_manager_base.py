@@ -18,6 +18,7 @@ from dspy.primitives import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.types.mcp_protocols import MCPConnectionMgrProto
 
 logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
@@ -25,7 +26,7 @@ tracer = trace.get_tracer(__name__)
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
 
 
-class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
+class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient], MCPConnectionMgrProto[TClient]):
     """Handles a Pool of MCPClients of type TClient."""
 
     transport_type: Literal["stdio", "websockets", "sse"] = Field(
@@ -369,7 +370,10 @@ class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
 
         try:
             client = await self.get_client()
-            return await client.get_tools()
+            tools = await client.get_tools()
+
+            tool_callables = [t.as_dspy_tool(
+                connection_manager=self) for t in tools]
         finally:
             await self.release_client(client)
 

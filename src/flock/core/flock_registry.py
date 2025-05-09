@@ -54,7 +54,7 @@ _COMPONENT_CONFIG_MAP: dict[type[BaseModel], type[any]] = {}
 
 
 class FlockRegistry:
-    """Singleton registry for Agents, Callables (functions/methods).
+    """Singleton registry for Agents, Callables (functions/methods) and MCP Servers.
 
     Types (Pydantic/Dataclasses used in signatures), and Component Classes
     (Modules, Evaluators, Routers).

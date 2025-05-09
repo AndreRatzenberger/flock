@@ -61,6 +61,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     """
 
     name: str = Field(..., description="Unique identifier for the agent.")
+
     model: str | None = Field(
         None,
         description="The model identifier to use (e.g., 'openai/gpt-4o'). If None, uses Flock's default.",
