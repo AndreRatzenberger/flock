@@ -23,6 +23,7 @@ def mcp_error_handler(default_return: R, logger: FlockLogger = _DEFAULT_LOGGER) 
     Decorator to catch MCP, transport and other exceptions,
     update client state via the protocol and return a safe default.
     """
+    logger.debug(f"Entering error handler decorator")
 
     def deco(fn: Callable[P, Awaitable[R]]):
         @functools.wraps(fn)

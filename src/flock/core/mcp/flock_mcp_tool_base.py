@@ -29,6 +29,16 @@ class FlockMCPToolBase(BaseModel):
         description="Name of the tool"
     )
 
+    agent_id: str = Field(
+        ...,
+        description="Associated agent_id. Used for internal tracking."
+    )
+
+    run_id: str = Field(
+        ...,
+        description="Associated run_id. Used for internal tracking."
+    )
+
     description: str | None = Field(
         ...,
         description="A human-readable description of the tool"
@@ -45,9 +55,11 @@ class FlockMCPToolBase(BaseModel):
     )
 
     @classmethod
-    def from_mcp_tool(cls: type[T], tool: Tool) -> T:
+    def from_mcp_tool(cls: type[T], tool: Tool, agent_id: str, run_id: str) -> T:
         return cls(
             name=tool.name,
+            agent_id=agent_id,
+            run_id=run_id,
             description=tool.description,
             input_schema=tool.inputSchema,
             annotations=tool.annotations,
@@ -166,12 +178,22 @@ class FlockMCPToolBase(BaseModel):
 
         async def func(*args, **kwargs):
             try:
-                client = await mgr.get_client()
+                logger.debug(f"Tool: {self.name}: getting client.")
+                client = await mgr.get_client(agent_id=self.agent_id, run_id=self.run_id)
+                server_name = await client.get_server_name()
+                logger.debug(
+                    f"Tool: {self.name}: got client for server '{server_name}' for agent {self.agent_id} on run {self.run_id}")
+                logger.debug(
+                    f"Tool: {self.name}: calling server '{server_name}'"
+                )
                 result = await client.call_tool(self.name, kwargs)
+                logger.debug(
+                    f"Tool: Called Tool: {self.name} on server '{server_name}'. Returning result to LLM."
+                )
                 return self._convert_mcp_tool_result(result)
             except Exception as e:
                 logger.error(
-                    f"Exception ocurred when calling tool '{self.name}': {e}")
+                    f"Tool: Exception ocurred when calling tool '{self.name}': {e}")
 
         return DSPyTool(
             func=func,

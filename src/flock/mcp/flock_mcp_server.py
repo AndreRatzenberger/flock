@@ -2,18 +2,19 @@
 
 
 import asyncio
+import json
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Coroutine, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Type, TypeVar
 
 from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager
 
 from opentelemetry import trace
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints, create_model, field_validator, validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, UrlConstraints, create_model
 
 from dspy import Tool as DSPyTool
-from mcp.types import LoggingMessageNotificationParams
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
@@ -21,7 +22,7 @@ from flock.core.logging.logging import get_logger
 from flock.core.serialization.serializable import Serializable
 from flock.core.serialization.serialization_utils import deserialize_component, serialize_item
 
-logger = get_logger("core.mcp.server_base")
+logger = get_logger("mcp_server")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 M = TypeVar("M", bound="FlockMCPServerConfig")
@@ -86,24 +87,15 @@ class FlockMCPServerConfig(BaseModel):
         description="Callback for handling list_roots request."
     )
 
-    logging_callback: Callable[[LoggingMessageNotificationParams], Coroutine[Any, Any, None]] | None = Field(
+    logging_callback: Callable[..., Any] | None = Field(
         default=None,
-        description="Callback for logging. MCP Servers send the output they are generating directly to the client."
+        description="Callback for logging."
     )
 
     message_handler: Callable[..., Any] | None = Field(
         default=None,
         description="Message Handler Callback."
     )
-
-    @field_validator("logging_callback", "sampling_callback", "list_roots_callback", "message_handler", mode="after")
-    @classmethod
-    def ensure_async(cls, fn):
-        if fn is None:
-            return fn
-        elif not asyncio.iscoroutinefunction(fn):
-            raise ValueError(f"{fn} must be an async function")
-        return fn
 
     @classmethod
     def with_fields(cls: type[M], **field_definitions) -> type[M]:

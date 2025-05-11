@@ -22,7 +22,7 @@ tracer = trace.get_tracer(__name__)
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
 
 
-class FlockMCPConnectionManagerBase(BaseModel, ABC, Generic[TClient]):
+class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
     """Handles a Pool of MCPClients of type TClient."""
 
     transport_type: Literal["stdio", "websockets", "sse"] = Field(
