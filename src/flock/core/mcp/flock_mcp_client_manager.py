@@ -16,6 +16,7 @@ from dspy import Tool as DSPyTool
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, ServerParameters, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.types.mcp_callbacks import FlockListRootsMCPCallback, FlockLoggingMCPCallback, FlockMessageHandlerMCPCallback, FlockSamplingMCPCallback
+from flock.core.mcp.types.mcp_types import Root
 
 logger = get_logger("core.mcp.connection_manager_base")
 tracer = trace.get_tracer(__name__)
@@ -74,6 +75,11 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
     list_roots_callback: FlockListRootsMCPCallback | None = Field(
         default=None,
         description="List Roots callback to pass on to clients."
+    )
+
+    initial_roots: list[Root] | None = Field(
+        default=None,
+        description="Initial Roots (mounting-points) for the clients."
     )
 
     # --- Pydantic v2 Configuratioin ---

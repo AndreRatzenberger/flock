@@ -270,6 +270,7 @@ class FlockMCPClientBase(BaseModel, ABC):
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
+        extra="allow",
     )
 
     def __init__(
@@ -316,7 +317,6 @@ class FlockMCPClientBase(BaseModel, ABC):
             resource_list_cache_max_ttl=resource_list_cache_max_ttl,
             resource_contents_cache_max_ttl=resource_contents_cache_max_ttl,
             resource_contents_cache_max_size=resource_contents_cache_max_size,
-            resource_contents_cache_max_ttl=resource_contents_cache_max_ttl,
             read_timeout_seconds=read_timeout_seconds,
             connection_parameters=connection_parameters,
             sampling_enabled=sampling_enabled,

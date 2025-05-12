@@ -2,10 +2,10 @@ from abc import ABC
 from pathlib import Path
 from typing import Literal
 from opentelemetry import trace
-from mcp import StdioServerParameters
 from mcp.client.stdio import get_default_environment
 from pydantic import Field
 
+from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.core.logging.logging import get_logger
 from flock.core.serialization.serializable import Serializable
@@ -107,27 +107,22 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
                 # Initialize the underlying Connection Pool
                 if not self.connection_manager:
                     self.connection_manager = FlockStdioMCPClientManager(
-                        transport_type="stdio",
-                        server_name=self.server_config.server_name,
                         connection_parameters=StdioServerParameters(
                             command=self.server_config.command,
                             args=self.server_config.args,
                             env=self.server_config.env,
                             cwd=self.server_config.cwd,
                             encoding=self.server_config.encoding,
-                            encoding_error_handler=self.server_config.encoding_error_handler
+                            encoding_error_handler=self.server_config.encoding_error_handler,
                         ),
-                        min_connections=1,
-                        max_connections=1,
-                        max_reconnect_attemtps=self.server_config.max_restart_attempts,
-                        original_roots=self.server_config.mount_points,
+                        max_retries=self.server_config.max_restart_attempts,
                         sampling_callback=self.server_config.sampling_callback,
                         logging_callback=self.server_config.logging_callback,
-                        message_handler=self.server_config.message_handler,
                         list_roots_callback=self.server_config.list_roots_callback,
+                        initial_roots=self.server_config.mount_points,
+                        server_name=self.server_config.server_name,
                     )
                     self.initialized = True
-            self.condition.notify()
 
     async def get_tools(self) -> list[DSPyTool]:
         """

@@ -18,6 +18,8 @@ from mcp.types import LoggingMessageNotificationParams
 from flock.core.context.context import FlockContext
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.types.mcp_callbacks import FlockListRootsMCPCallback, FlockLoggingMCPCallback, FlockMessageHandlerMCPCallback, FlockSamplingMCPCallback
+from flock.core.mcp.types.mcp_types import Root
 from flock.core.serialization.serializable import Serializable
 from flock.core.serialization.serialization_utils import deserialize_component, serialize_item
 
@@ -44,6 +46,11 @@ class FlockMCPServerConfig(BaseModel):
     description: str | Callable[..., str] | None = Field(
         "",
         description="A human-readable description or a callable returning one."
+    )
+
+    mount_points: list[Root] | None = Field(
+        default=None,
+        description="The initial mounting points of the server."
     )
 
     resources_enabled: bool = Field(
@@ -76,22 +83,22 @@ class FlockMCPServerConfig(BaseModel):
         description="The original set of mount points",
     )
 
-    sampling_callback: Callable[..., Any] | None = Field(
+    sampling_callback: FlockSamplingMCPCallback | None = Field(
         default=None,
         description="Callback for handling sampling requests."
     )
 
-    list_roots_callback: Callable[..., Any] | None = Field(
+    list_roots_callback: FlockListRootsMCPCallback | None = Field(
         default=None,
         description="Callback for handling list_roots request."
     )
 
-    logging_callback: Callable[[LoggingMessageNotificationParams], Coroutine[Any, Any, None]] | None = Field(
+    logging_callback: FlockLoggingMCPCallback | None = Field(
         default=None,
         description="Callback for logging. MCP Servers send the output they are generating directly to the client."
     )
 
-    message_handler: Callable[..., Any] | None = Field(
+    message_handler: FlockMessageHandlerMCPCallback | None = Field(
         default=None,
         description="Message Handler Callback."
     )

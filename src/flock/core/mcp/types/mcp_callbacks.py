@@ -1,5 +1,6 @@
 """Default Callback functions and factories for MCP Clients"""
-from typing import Any, Literal, Protocol
+from collections.abc import Callable
+from typing import Any, Awaitable, Literal, Protocol
 import anyio
 import anyio.lowlevel
 from mcp import ClientSession, CreateMessageResult, LoggingLevel
@@ -25,7 +26,6 @@ from mcp.types import ServerRequest, ClientResult
 
 
 from flock.core.logging.logging import FlockLogger, get_logger
-from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase
 
 default_logging_callback_logger = get_logger("core.mcp.callback.logging")
 default_sampling_callback_logger = get_logger("core.mcp.callback.sampling")
@@ -102,56 +102,30 @@ class FlockLoggingMessageNotificationParams(LoggingMessageNotificationParams):
     )
 
 
-class FlockSamplingMCPCallback(Protocol):
-    """
-    Defines the type signature for a MCP Sampling Callback.
-    """
+FlockSamplingMCPCallback = Callable[
+    [RequestContext, CreateMessageRequestParams],
+    Awaitable[CreateMessageResult | ErrorData],
+]
 
-    async def __call__(
-        self,
-        ctx: RequestContext,
-        params: CreateMessageRequestParams,
-    ) -> CreateMessageResult | ErrorData: ...
+FlockMessageHandlerMCPCallback = Callable[
+    [RequestResponder[ServerRequest, ClientResult] | ServerNotification | Exception],
+    Awaitable[None],
+]
 
+FlockListRootsMCPCallback = Callable[
+    [RequestContext["ClientSession", Any]],
+    Awaitable[ListRootsResult | ErrorData],
+]
 
-class FlockMessageHandlerMCPCallback(Protocol):
-    """
-    Defines the type signature for a MCP Message Handler Callback
-    """
-
-    async def __call__(
-        self,
-        message: RequestResponder[ServerRequest, ClientResult]
-        | ServerNotification
-        | Exception
-    ) -> None: ...
-
-
-class FlockListRootsMCPCallback(Protocol):
-    """
-    Defines the type signature for a MCP List Roots Callback.
-    """
-
-    async def __call__(
-        self,
-        context: RequestContext["ClientSession", Any],
-    ) -> ListRootsResult | ErrorData: ...
-
-
-class FlockLoggingMCPCallback(Protocol):
-    """
-    Defines the type signature for a MCP logging callback.
-    """
-
-    async def __call__(
-        self,
-        params: FlockLoggingMessageNotificationParams,
-    ) -> None: ...
+FlockLoggingMCPCallback = Callable[
+    [FlockLoggingMessageNotificationParams],
+    Awaitable[None],
+]
 
 # --- Default Callback Factories ---
 
 
-def default_flock_mcp_sampling_callback_factory(associated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
+def default_flock_mcp_sampling_callback_factory(associated_client: Any, logger: FlockLogger | None = None) -> FlockLoggingMCPCallback:
     """
     Creates a fallback for handling incoming sampling requests.
     """
@@ -173,7 +147,7 @@ def default_flock_mcp_sampling_callback_factory(associated_client: FlockMCPClien
     return default_sampling_callback
 
 
-def default_flock_mcp_message_handler_callback_factory(associated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
+def default_flock_mcp_message_handler_callback_factory(associated_client: Any, logger: FlockLogger | None = None) -> FlockMessageHandlerMCPCallback:
     """
     Creates a fallback for handling incoming messages.
 
@@ -225,7 +199,7 @@ def default_flock_mcp_message_handler_callback_factory(associated_client: FlockM
     return default_message_handler
 
 
-def default_flock_mcp_list_roots_callback_factory(asscociated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
+def default_flock_mcp_list_roots_callback_factory(asscociated_client: Any, logger: FlockLogger | None = None) -> FlockListRootsMCPCallback:
     """
     Creates a fallback for a list roots callback for a client.
     """
@@ -293,7 +267,7 @@ def default_flock_mcp_logging_callback_factory(server_name: str, logger: FlockLo
 
 
 # --- Helper functions ---
-async def handle_incoming_exception(e: Exception, logger_to_use: FlockLogger, associated_client: FlockMCPClientBase) -> None:
+async def handle_incoming_exception(e: Exception, logger_to_use: FlockLogger, associated_client: Any) -> None:
     """
     Process an incoming exception Message.
     """
@@ -330,7 +304,7 @@ async def handle_cancellation_notification(n: CancelledNotification, logger_to_u
     logger_to_use.warning(message)
 
 
-async def handle_resource_update_notification(n: ResourceUpdatedNotification, logger_to_use: FlockLogger, associated_client: FlockMCPClientBase) -> None:
+async def handle_resource_update_notification(n: ResourceUpdatedNotification, logger_to_use: FlockLogger, associated_client: Any) -> None:
     # This also means that the associated client needs to invalidate its resource_contents-cache at the entriy with the associated uri.
 
     params = n.params
@@ -344,7 +318,7 @@ async def handle_resource_update_notification(n: ResourceUpdatedNotification, lo
     await associated_client.invalidate_resource_contents_cache_entry(key=uri)
 
 
-async def handle_resource_list_changed_notification(n: ResourceListChangedNotification, logger_to_use: FlockLogger, associated_client: FlockMCPClientBase) -> None:
+async def handle_resource_list_changed_notification(n: ResourceListChangedNotification, logger_to_use: FlockLogger, associated_client: Any) -> None:
     # This also means that the associated client needs to invalidate its resource cache.
 
     params = n.params or {}
@@ -356,7 +330,7 @@ async def handle_resource_list_changed_notification(n: ResourceListChangedNotifi
     await associated_client.invalidate_resource_list_cache()
 
 
-async def handle_tool_list_changed_notification(n: ToolListChangedNotification, logger_to_use: FlockLogger, associated_client: FlockMCPClientBase) -> None:
+async def handle_tool_list_changed_notification(n: ToolListChangedNotification, logger_to_use: FlockLogger, associated_client: Any) -> None:
     # This also means that the associated client needs to invalidate it's tool cache.
 
     params = n.params or {}
@@ -368,7 +342,7 @@ async def handle_tool_list_changed_notification(n: ToolListChangedNotification, 
     await associated_client.invalidate_tool_cache()
 
 
-async def handle_incoming_request(req: RequestResponder[ServerRequest, ClientResult], logger_to_use: FlockLogger, associated_client: FlockMCPClientBase):
+async def handle_incoming_request(req: RequestResponder[ServerRequest, ClientResult], logger_to_use: FlockLogger, associated_client: Any):
     """
     This will only be triggered if 
     the underlying session's _received_request
