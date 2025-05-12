@@ -117,7 +117,7 @@ class Flock(BaseModel, Serializable):
     # Internal agent storage - not part of the Pydantic model for direct serialization
     _agents: dict[str, FlockAgent]
     _start_agent_name: str | None = None  # For potential pre-configuration
-    _start_input: dict = {}  # For potential pre-configuration
+    _start_input: dict = {}  # Instance attribute overwritten in __init__; kept for typing clarity
 
     # Pydantic v2 model config
     model_config = {
@@ -277,7 +277,7 @@ class Flock(BaseModel, Serializable):
     def run(
         self,
         start_agent: FlockAgent | str | None = None,
-        input: dict = {},
+        input: dict | None = None,
         context: FlockContext | None = None,
         run_id: str = "",
         box_result: bool = True,

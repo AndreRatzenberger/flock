@@ -169,17 +169,31 @@ class FlockRegistry:
             return None
 
     # --- Agent Registration ---
-    def register_agent(self, agent: FlockAgent) -> None:
-        """Registers a FlockAgent instance by its name."""
+    def register_agent(self, agent: FlockAgent, *, force: bool = False) -> None:
+        """Registers a FlockAgent instance by its name.
+
+        Args:
+            agent: The agent instance to register.
+            force: If True, allow overwriting an existing **different** agent registered under the same name.
+                   If False and a conflicting registration exists, a ValueError is raised.
+        """
         if not hasattr(agent, "name") or not agent.name:
             logger.error(
                 "Attempted to register an agent without a valid 'name' attribute."
             )
             return
-        if agent.name in self._agents and self._agents[agent.name] != agent:
+
+        if agent.name in self._agents and self._agents[agent.name] is not agent:
+            # Same agent already registered → silently ignore; different instance → error/force.
+            if not force:
+                raise ValueError(
+                    f"Agent '{agent.name}' already registered with a different instance. "
+                    "Pass force=True to overwrite the existing registration."
+                )
             logger.warning(
-                f"Agent '{agent.name}' already registered. Overwriting."
+                f"Overwriting existing agent '{agent.name}' registration due to force=True."
             )
+
         self._agents[agent.name] = agent
         logger.debug(f"Registered agent: {agent.name}")
 
