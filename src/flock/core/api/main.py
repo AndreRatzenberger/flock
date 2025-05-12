@@ -133,65 +133,82 @@ class FlockAPI:
         if self.custom_endpoints:
             import inspect
 
-            from fastapi import Request
+            from fastapi import Body, Depends, Request
 
             # Register any endpoints collected during __init__ (self.custom_endpoints)
             if self.custom_endpoints:
-                from fastapi import Body
+                def _create_handler_factory(callback: Callable[..., Any], req_model: type[BaseModel] | None, query_model: type[BaseModel] | None):
+                    async def _invoke(request: Request, body, query):
+                        payload: dict[str, Any] = {"flock": self.flock}
+                        if request:
+                            payload.update(request.path_params)
+                            if query is None:
+                                payload["query"] = dict(request.query_params)
+                            else:
+                                payload["query"] = query
+                        else:
+                            payload["query"] = query or {}
+                        if body is not None:
+                            payload["body"] = body
+                        elif request and request.method in {"POST", "PUT", "PATCH"} and req_model is None:
+                            try:
+                                payload["body"] = await request.json()
+                            except Exception:
+                                payload["body"] = await request.body()
 
-                def _create_handler_factory(callback: Callable[..., Any], req_model: type[BaseModel] | None):
+                        sig = inspect.signature(callback)
+                        filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
+                        if inspect.iscoroutinefunction(callback):
+                            return await callback(**filtered_kwargs)
+                        return callback(**filtered_kwargs)
 
+                    # Dynamically build wrapper with appropriate signature so FastAPI can document it
+                    params: list[str] = []
                     if req_model is not None:
+                        params.append("body")
+                    if query_model is not None:
+                        params.append("query")
 
-                        async def _route_handler(body: req_model = Body(...), request: Request = None):  # type: ignore[arg-type,valid-type]
-                            payload: dict[str, Any] = {
-                                "body": body,
-                                "query": dict(request.query_params) if request else {},
-                                "flock": self.flock,
-                                **(request.path_params if request else {}),
-                            }
+                    # Build wrapper function based on which params are present
+                    if req_model and query_model:
+                        async def _route_handler(
+                            request: Request,
+                            body: req_model = Body(...),  # type: ignore[arg-type,valid-type]
+                            query: query_model = Depends(),  # type: ignore[arg-type,valid-type]
+                        ):
+                            return await _invoke(request, body, query)
 
-                            sig = inspect.signature(callback)
-                            filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
+                    elif req_model and not query_model:
+                        async def _route_handler(
+                            request: Request,
+                            body: req_model = Body(...),  # type: ignore[arg-type,valid-type]
+                        ):
+                            return await _invoke(request, body, None)
 
-                            if inspect.iscoroutinefunction(callback):
-                                return await callback(**filtered_kwargs)
-                            return callback(**filtered_kwargs)
+                    elif query_model and not req_model:
+                        async def _route_handler(
+                            request: Request,
+                            query: query_model = Depends(),  # type: ignore[arg-type,valid-type]
+                        ):
+                            return await _invoke(request, None, query)
 
                     else:
-
                         async def _route_handler(request: Request):
-                            payload: dict[str, Any] = {
-                                "query": dict(request.query_params),
-                                "flock": self.flock,
-                                **request.path_params,
-                            }
-
-                            if request.method in {"POST", "PUT", "PATCH"}:
-                                try:
-                                    payload["body"] = await request.json()
-                                except Exception:
-                                    payload["body"] = await request.body()
-
-                            sig = inspect.signature(callback)
-                            filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
-
-                            if inspect.iscoroutinefunction(callback):
-                                return await callback(**filtered_kwargs)
-                            return callback(**filtered_kwargs)
+                            return await _invoke(request, None, None)
 
                     return _route_handler
 
                 for ep in self.custom_endpoints:
                     self.app.add_api_route(
                         ep.path,
-                        _create_handler_factory(ep.callback, ep.request_model),
+                        _create_handler_factory(ep.callback, ep.request_model, ep.query_model),
                         methods=ep.methods or ["GET"],
                         name=ep.name or f"custom:{ep.path}",
                         include_in_schema=ep.include_in_schema,
                         response_model=ep.response_model,
                         summary=ep.summary,
                         description=ep.description,
+                        dependencies=ep.dependencies,
                     )
 
     # --- Core Execution Helper Methods ---
