@@ -15,4 +15,11 @@ class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
     """Handles Clients that connect to a Stdio-Transport Type Server."""
 
     async def make_client(self, agent_id, run_id):
-        return await super().make_client(agent_id, run_id)
+
+        new_client = FlockStdioClient(
+            server_name=self.server_name,
+            agent_id=agent_id,
+            run_id=run_id,
+            transport_type="stdio",
+            connection_parameters=self.connection_parameters,
+        )

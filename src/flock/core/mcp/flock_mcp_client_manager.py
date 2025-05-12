@@ -15,7 +15,7 @@ from dspy import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, ServerParameters, SseServerParameters, WebSocketServerParameters
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.types.mcp_callbacks import FlockLoggingMCPCallback
+from flock.core.mcp.types.mcp_callbacks import FlockListRootsMCPCallback, FlockLoggingMCPCallback, FlockMessageHandlerMCPCallback, FlockSamplingMCPCallback
 
 logger = get_logger("core.mcp.connection_manager_base")
 tracer = trace.get_tracer(__name__)
@@ -45,6 +45,11 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
         exclude=True,
     )
 
+    max_retries: int = Field(
+        default=3,
+        description="How many times to try to reconnect if an Exception occurs."
+    )
+
     clients: dict[str, dict[str, FlockMCPClientBase]] = Field(
         default_factory=dict,
         exclude=True,
@@ -54,6 +59,21 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
     logging_callback: FlockLoggingMCPCallback | None = Field(
         default=None,
         description="Logging Callback to pass on to clients"
+    )
+
+    message_handler_callback: FlockMessageHandlerMCPCallback | None = Field(
+        default=None,
+        description="Message Handler callback to pass on to clients."
+    )
+
+    sampling_callback: FlockSamplingMCPCallback | None = Field(
+        default=None,
+        description="Sampling Callback to pass on to clients."
+    )
+
+    list_roots_callback: FlockListRootsMCPCallback | None = Field(
+        default=None,
+        description="List Roots callback to pass on to clients."
     )
 
     # --- Pydantic v2 Configuratioin ---
@@ -131,5 +151,6 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                     logger.debug(
                         f"Shutting down client for agent_id {agent_id} and run_id {run_id}")
                     await client.disconnect()
+            self.clients = {}  # Let the GC take care of the rest.
             logger.info(
                 f"All clients disconnected for server '{self.server_name}'")
