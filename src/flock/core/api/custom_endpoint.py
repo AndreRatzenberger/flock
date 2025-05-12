@@ -36,6 +36,9 @@ class FlockEndpoint(BaseModel):
     name: str | None = None  # Route name in FastAPI
     include_in_schema: bool = True
 
+    # FastAPI dependency injections (e.g. security)
+    dependencies: list[Any] | None = None
+
     model_config = {
         "arbitrary_types_allowed": True,
         "validate_default": True,

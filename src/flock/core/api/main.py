@@ -208,6 +208,7 @@ class FlockAPI:
                         response_model=ep.response_model,
                         summary=ep.summary,
                         description=ep.description,
+                        dependencies=ep.dependencies,
                     )
 
     # --- Core Execution Helper Methods ---
