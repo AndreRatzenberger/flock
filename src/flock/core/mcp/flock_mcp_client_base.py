@@ -454,6 +454,53 @@ class FlockMCPClientBase(BaseModel, ABC):
             self._client_session = await self._client_context_manager.__aenter__()
             return self._client_session
 
+    @mcp_error_handler(default_return=None, logger=logger)
+    async def communicate_client_state(self) -> None:
+        """
+        tell the server who we are, what capabilities we have,
+        and what roots we're interested in.
+        """
+
+        # 1) do the LSP-style initialize handshake
+        logger.debug(
+            f"Performing intialize handshake with server '{self.server_name}'")
+        init: InitializeResult = await self._client_session.initialize()
+
+        init_report = f"""
+        Server Init Handshake completed Server '{self.server_name}' 
+        Lists the following Capabilities:
+        
+        - Protocol Version: {init.protocolVersion}
+        - Instructions: {init.instructions or "No specific Instructions"}
+        - MCP Implementation:
+          - Name: {init.serverInfo.name}
+          - Version: {init.serverInfo.version}
+        - Capabilities:
+          {init.capabilities}
+        """
+
+        logger.debug(init_report)
+
+        # 2) if we already know our current roots, notify the server
+        #    so that it will follow up with a ListRootsRequest
+        if self.current_roots:
+            await self._client_session.send_roots_list_changed()
+
+    async def _ensure_connected(self) -> None:
+        # if we've never connected, then connect.
+        if not self._client_session:
+            await self.connect()
+            return
+
+        # otherwise, ping and reconnect on error
+        try:
+            await self._client_session.send_ping()
+        except Exception:
+            logger.warning(
+                f"Session to '{self.server_name}' died, reconnecting.")
+            await self.disconnect()
+            await self.connect()
+
     async def disconnect(self) -> None:
         """
         If previously connected via `self.connect()`, tear it down.
