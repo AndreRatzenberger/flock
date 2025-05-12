@@ -710,6 +710,7 @@ class Flock(BaseModel, Serializable):
                     port=port,
                     server_name=server_name,
                     theme_name=ui_theme,
+                    custom_endpoints=custom_endpoints,
                 )
             except ImportError:
                 # Log error - cannot start integrated UI

@@ -1,9 +1,12 @@
 import os  # For environment variable
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
+
+from flock.core.api.custom_endpoint import FlockEndpoint
 
 if TYPE_CHECKING:
     from flock.core import Flock
@@ -17,6 +20,7 @@ def start_integrated_server(
     port: int,
     server_name: str,  # Currently unused as UI sets its own title
     theme_name: str | None = None,
+    custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
 ):
     """Starts the webapp, preloads flock & theme, includes API routes (TODO)."""
     print(
@@ -29,6 +33,10 @@ def start_integrated_server(
             sys.path.insert(0, str(src_dir))
 
         # Import necessary webapp components *after* path setup
+        from flock.core.api.endpoints import (
+            create_api_router,  # Need to adapt this later
+        )
+        from flock.core.api.main import FlockAPI
         from flock.core.api.run_store import (
             RunStore,  # Needed for API routes later
         )
@@ -40,7 +48,6 @@ def start_integrated_server(
         from flock.webapp.app.services.flock_service import (
             set_current_flock_instance_programmatically,
         )
-        # from flock.core.api.endpoints import create_api_router # Need to adapt this later
 
         # 1. Set Theme (use provided or default)
         set_current_theme_name(
@@ -55,11 +62,9 @@ def start_integrated_server(
         )
         print(f"Flock '{flock_instance.name}' preloaded.")
 
-        # 3. TODO: Adapt and Include API Routes
-        # run_store = RunStore()
-        # api_router = create_api_router(flock_instance, run_store) # Assuming refactored signature
-        # webapp_fastapi_app.include_router(api_router, prefix="/api")
-        # print("API routes included.")
+        flock_api = FlockAPI(flock_instance, custom_endpoints)
+        webapp_fastapi_app.include_router(flock_api.app.router, prefix="/api")
+        print("API routes included.")
 
         # 4. Run Uvicorn - STILL PASSING INSTANCE here because we need to modify it (add routes)
         #    and set state BEFORE running. Reload won't work well here.
