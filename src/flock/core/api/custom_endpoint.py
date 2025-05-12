@@ -27,6 +27,8 @@ class FlockEndpoint(BaseModel):
     # Optional schema models
     request_model: type[BaseModel] | None = None
     response_model: type[BaseModel] | None = None
+    # Query-string parameters as a Pydantic model (treated as Depends())
+    query_model: type[BaseModel] | None = None
 
     # OpenAPI / Swagger metadata
     summary: str | None = None
