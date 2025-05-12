@@ -2,7 +2,7 @@
 from typing import Any, Literal, Protocol
 import anyio
 import anyio.lowlevel
-from mcp import ClientSession, LoggingLevel
+from mcp import ClientSession, CreateMessageResult, LoggingLevel
 from mcp.types import LoggingMessageNotificationParams as _MCPParams
 from mcp.types import ServerNotification as _MCPServerNotification
 from mcp.types import CancelledNotification as _MCPCancelledNotification
@@ -14,7 +14,14 @@ from mcp.types import ToolListChangedNotification as _MCPToolListChangedNotifica
 from mcp.types import PromptListChangedNotification as _MCPPromptListChangedNotification
 from mcp.types import ListRootsResult, LoggingMessageNotificationParams, LoggingMessageNotification
 from mcp.shared.context import RequestContext
+from mcp.shared.session import RequestResponder
+from mcp.types import ServerRequest, ClientResult, ErrorData, INTERNAL_ERROR, INVALID_REQUEST, ListRootsRequest, ListRootsResult
 from pydantic import BaseModel, ConfigDict, Field
+from mcp.types import CreateMessageRequest, ListRootsRequest, PingRequest, EmptyResult, CreateMessageRequestParams
+from mcp.client.session import ClientResponse
+from mcp.shared.context import RequestContext
+from mcp.shared.session import RequestResponder
+from mcp.types import ServerRequest, ClientResult
 
 
 from flock.core.logging.logging import FlockLogger, get_logger
@@ -26,7 +33,6 @@ default_list_roots_callback_logger = get_logger("core.mcp.callback.sampling")
 default_message_handler_logger = get_logger("core.mcp.callback.message")
 
 # --- Types ---
-# TODO: Continue tomorrow (12.05.2025)
 
 
 class ServerNotification(_MCPServerNotification):
@@ -96,6 +102,42 @@ class FlockLoggingMessageNotificationParams(LoggingMessageNotificationParams):
     )
 
 
+class FlockSamplingMCPCallback(Protocol):
+    """
+    Defines the type signature for a MCP Sampling Callback.
+    """
+
+    async def __call__(
+        self,
+        ctx: RequestContext,
+        params: CreateMessageRequestParams,
+    ) -> CreateMessageResult | ErrorData: ...
+
+
+class FlockMessageHandlerMCPCallback(Protocol):
+    """
+    Defines the type signature for a MCP Message Handler Callback
+    """
+
+    async def __call__(
+        self,
+        message: RequestResponder[ServerRequest, ClientResult]
+        | ServerNotification
+        | Exception
+    ) -> None: ...
+
+
+class FlockListRootsMCPCallback(Protocol):
+    """
+    Defines the type signature for a MCP List Roots Callback.
+    """
+
+    async def __call__(
+        self,
+        context: RequestContext["ClientSession", Any],
+    ) -> ListRootsResult | ErrorData: ...
+
+
 class FlockLoggingMCPCallback(Protocol):
     """
     Defines the type signature for a MCP logging callback.
@@ -109,7 +151,29 @@ class FlockLoggingMCPCallback(Protocol):
 # --- Default Callback Factories ---
 
 
-def default_flock_mcp_message_handler_callback_factory(associated_client: FlockMCPClientBase, logger: FlockLogger) -> None:
+def default_flock_mcp_sampling_callback_factory(associated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
+    """
+    Creates a fallback for handling incoming sampling requests.
+    """
+    logger_to_use = logger or default_sampling_callback_logger
+    server_name = associated_client.server_name
+
+    # TODO: enabling content-moderation
+    async def default_sampling_callback(
+        ctx: RequestContext,
+        params: CreateMessageRequestParams,
+    ) -> ErrorData:
+        logger_to_use.warning(
+            f"Rejecting sampling request from server '{server_name}'")
+        return ErrorData(
+            code=INVALID_REQUEST,
+            message="Sampling not supported",
+        )
+
+    return default_sampling_callback
+
+
+def default_flock_mcp_message_handler_callback_factory(associated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
     """
     Creates a fallback for handling incoming messages.
 
@@ -149,11 +213,6 @@ def default_flock_mcp_message_handler_callback_factory(associated_client: FlockM
             case CancelledNotification():
                 await handle_cancellation_notification(n=n.root, logger_to_use=logger_to_use, server_name=server_name)
 
-    async def handle_incoming_message(req: RequestResponder[ServerRequest, ClientResult]) -> None:
-        """
-        Process an incoming server message.
-        """
-
     async def default_message_handler(req: RequestResponder[ServerRequest, ClientResult] | ServerNotification | Exception) -> None:
 
         if isinstance(req, Exception):
@@ -161,21 +220,29 @@ def default_flock_mcp_message_handler_callback_factory(associated_client: FlockM
         elif isinstance(req, ServerNotification):
             await handle_incoming_server_notification(req)
         elif isinstance(req, RequestResponder[ServerRequest, ClientResult]):
-            await handle_incoming_message(req)
-
-            # Check for cancellation.
-        await anyio.lowlevel.checkpoint()
-        pass
+            await handle_incoming_request(req)
 
     return default_message_handler
 
 
-def default_flock_mcp_sampling_callback_factory(server_name: str, logger: FlockLogger, sampling_agent: Any, enabled: bool = False) -> None:
-    pass
+def default_flock_mcp_list_roots_callback_factory(asscociated_client: FlockMCPClientBase, logger: FlockLogger | None = None) -> None:
+    """
+    Creates a fallback for a list roots callback for a client.
+    """
+    logger_to_use = logger or default_list_roots_callback_logger
+    server_name = asscociated_client.server_name
 
-
-def default_flock_mcp_list_roots_callback_factory() -> None:
-    pass
+    async def default_list_roots_callback(context: RequestContext["ClientSession", Any]) -> ListRootsResult | ErrorData:
+        if asscociated_client.list_roots_enabled:
+            current_roots = await asscociated_client.get_current_roots()
+            return ListRootsResult(
+                roots=current_roots,
+            )
+        else:
+            return ErrorData(
+                code=INVALID_REQUEST,
+                message="List roots not supported",
+            )
 
 
 def default_flock_mcp_logging_callback_factory(server_name: str, logger: FlockLogger | None = None) -> FlockLoggingMCPCallback:
@@ -299,3 +366,66 @@ async def handle_tool_list_changed_notification(n: ToolListChangedNotification, 
 
     logger_to_use.info(message)
     await associated_client.invalidate_tool_cache()
+
+
+async def handle_incoming_request(req: RequestResponder[ServerRequest, ClientResult], logger_to_use: FlockLogger, associated_client: FlockMCPClientBase):
+    """
+    This will only be triggered if 
+    the underlying session's _received_request
+    did not manage to set req._completed = True.
+    See BaseSession class for how the _receive_loop works.
+
+    So in practice, we should never execute the following code.
+    But still, it is good to have a fallback.
+    """
+
+    # build a request context just like ClientSession does
+    ctx = RequestContext(
+        request_id=req.request_id,
+        meta=req.request_meta,
+        session=req._session,
+        lifespan_context=None,
+    )
+
+    try:
+        match req.request.root:
+
+            case CreateMessageRequest(params=req.request.root.params):
+                with req:
+                    # invoke user's sampling callback
+                    # type: ignore
+                    response = await associated_client.sampling_callback(ctx, req.request.root.params)
+                    client_resp = ClientResponse.validate_python(response)
+                    await req.respond(client_resp)
+
+            case ListRootsRequest():
+                with req:
+                    # type: ignore
+                    response = await associated_client.list_roots_callback(ctx)
+                    client_resp = ClientResponse.validate_python(response)
+                    await req.respond(client_resp)
+
+            case PingRequest():
+                with req:
+                    await req.respond(ClientResult(root=EmptyResult()))
+
+            case _:
+                # unrecognized -> no-op
+                return
+
+    except Exception as e:
+        # 1) log the error and stacktrace
+        logger_to_use.error(
+            f"Error in fallback handle_incoming_request (id={req.request_id}): {e}",
+            exc_info=True,
+        )
+        # 2) If the request wasn't already completed, send a JSON-RPC error back
+        if not getattr(req, "_completed", False):
+            with req:
+                err = ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=f"Server-side error: {e}"
+                )
+                client_err = ClientResponse.validate_python(err)
+                await req.respond(client_err)
+    return

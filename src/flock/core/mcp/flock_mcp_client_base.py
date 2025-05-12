@@ -6,7 +6,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontext
 from datetime import timedelta
 from typing import Annotated, Any, Callable, Generator, List, Literal, Tuple, Type, Union
 from cachetools import TTLCache, cached
-from mcp import ClientSession, InitializeResult, ListToolsResult
+from mcp import ClientSession, InitializeResult, ListToolsResult, ServerCapabilities
 from mcp import StdioServerParameters as _MCPStdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
@@ -20,12 +20,17 @@ from opentelemetry import trace
 
 
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.mcp.types.mcp_callbacks import FlockLoggingMCPCallback, default_flock_mcp_list_roots_callback_factory, default_flock_mcp_message_handler_callback_factory, default_flock_mcp_logging_callback_factory, default_flock_mcp_sampling_callback_factory
+from flock.core.mcp.types.mcp_callbacks import FlockListRootsMCPCallback, FlockLoggingMCPCallback, FlockMessageHandlerMCPCallback, FlockSamplingMCPCallback, default_flock_mcp_list_roots_callback_factory, default_flock_mcp_message_handler_callback_factory, default_flock_mcp_logging_callback_factory, default_flock_mcp_sampling_callback_factory
+from flock.core.mcp.types.mcp_types import Root
 from flock.core.mcp.util.decorators import mcp_error_handler
 
 
 logger = get_logger("core.mcp.client_base")
 tracer = trace.get_tracer(__name__)
+
+LoggingLevel = Literal[
+    "debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"
+]
 
 _DEFAULT_EXCEPTION_TOOL_RESULT = CallToolResult(
     isError=True,
@@ -154,7 +159,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Lock for the client. Enabling it to act as a mutex."
     )
 
-    current_roots: list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] | list[str] | None = Field(
+    current_roots: list[Root] | None = Field(
         default=None,
         description="Roots to operate under."
     )
@@ -164,12 +169,12 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="How many seconds to wait until the request times out."
     )
 
-    sampling_callback: Callable[..., Any] | None = Field(
+    sampling_callback: FlockSamplingMCPCallback | None = Field(
         default=None,
         description="Callback for sampling requests from external server. Take a look at mcp/client/session.py for how it is used."
     )
 
-    list_roots_callback: Callable[..., Any] | None = Field(
+    list_roots_callback: FlockListRootsMCPCallback | None = Field(
         default=None,
         description="Callback for list_roots requests from external server."
     )
@@ -179,7 +184,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Callback for logging purposes."
     )
 
-    message_handler: Callable[..., Any] | None = Field(
+    message_handler: FlockMessageHandlerMCPCallback | None = Field(
         default=None,
         description="Message Handler Callback."
     )
@@ -224,6 +229,31 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Maximum TTL in seconds for the Tool Result Cache"
     )
 
+    logging_level: LoggingLevel = Field(
+        default="error",
+        description="The logging level for the remote server of this client."
+    )
+
+    list_roots_enabled: bool = Field(
+        default=False,
+        description="Whether or not list roots requests from remote servers should be accepted."
+    )
+
+    sampling_enabled: bool = Field(
+        default=False,
+        description="Whether or not sampling requests from remote servers should be accepted."
+    )
+
+    tools_enabled: bool = Field(
+        default=False,
+        description="Whether or not tools are enabled for this client."
+    )
+
+    prompts_enabled: bool = Field(
+        default=False,
+        description="Whether or not prompts are enabled for this client."
+    )
+
     _tool_cache: TTLCache
 
     _tool_result_cache: TTLCache
@@ -236,6 +266,8 @@ class FlockMCPClientBase(BaseModel, ABC):
 
     _client_session: ClientSession
 
+    _connected_server_capabilites: ServerCapabilities
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
     )
@@ -243,6 +275,7 @@ class FlockMCPClientBase(BaseModel, ABC):
     def __init__(
         self,
         server_name: str,
+        logging_level: LoggingLevel,
         transport_type: Literal["stdio", "websockets", "sse"],
         tool_cache_max_size: float,
         tool_cache_max_ttl: float,
@@ -254,22 +287,26 @@ class FlockMCPClientBase(BaseModel, ABC):
         resource_contents_cache_max_ttl: float,
         read_timeout_seconds: timedelta,
         connection_parameters: ServerParameters,
+        list_roots_enabled: bool = False,
+        sampling_enabled: bool = False,
+        tools_enabled: bool = False,
+        prompts_enabled: bool = False,
         is_busy: bool = False,
         is_alive: bool = True,
         has_error: bool = False,
         error_message: str | None = None,
-        sampling_callback: Callable[..., Any] | None = None,
-        list_roots_callback: Callable[..., Any] | None = None,
-        logging_callback: Callable[..., Any] | None = None,
-        message_handler: Callable[..., Any] | None = None,
+        sampling_callback: FlockSamplingMCPCallback | None = None,
+        list_roots_callback: FlockListRootsMCPCallback | None = None,
+        logging_callback: FlockLoggingMCPCallback | None = None,
+        message_handler: FlockMessageHandlerMCPCallback | None = None,
         max_retries: int = 3,
         lock: Lock = Lock(),
-        current_roots: list[Annotated[AnyUrl, UrlConstraints(
-            host_required=False)]] | list[str] | None = None,
+        current_roots: list[Root] | None = None,
         **kwargs,
     ):
         super().__init__(
             server_name=server_name,
+            logging_level=logging_level,
             transport_type=transport_type,
             tool_cache_max_size=tool_cache_max_size,
             tool_cache_max_ttl=tool_cache_max_ttl,
@@ -282,6 +319,10 @@ class FlockMCPClientBase(BaseModel, ABC):
             resource_contents_cache_max_ttl=resource_contents_cache_max_ttl,
             read_timeout_seconds=read_timeout_seconds,
             connection_parameters=connection_parameters,
+            sampling_enabled=sampling_enabled,
+            list_roots_enabled=list_roots_enabled,
+            tools_enabled=tools_enabled,
+            prompts_enabled=prompts_enabled,
             is_busy=is_busy,
             is_alive=is_alive,
             has_error=has_error,
@@ -341,6 +382,14 @@ class FlockMCPClientBase(BaseModel, ABC):
     async def get_server_name(self) -> str:
         async with self.lock:
             return self.server_name
+
+    async def get_current_roots(self) -> list[Root] | None:
+        async with self.lock:
+            return self.current_roots
+
+    async def set_current_roots(self, new_roots: list[Root]) -> None:
+        async with self.lock:
+            self.current_roots = new_roots
 
     async def get_is_busy(self) -> bool:
         async with self.lock:
@@ -452,39 +501,50 @@ class FlockMCPClientBase(BaseModel, ABC):
 
             # manually __aenter__ the context manager
             self._client_session = await self._client_context_manager.__aenter__()
-            return self._client_session
+
+        # Tell the server about our state.
+        await self.perform_initial_handshake()
+
+        return self._client_session
 
     @mcp_error_handler(default_return=None, logger=logger)
-    async def communicate_client_state(self) -> None:
+    async def perform_initial_handshake(self) -> None:
         """
         tell the server who we are, what capabilities we have,
         and what roots we're interested in.
         """
 
-        # 1) do the LSP-style initialize handshake
-        logger.debug(
-            f"Performing intialize handshake with server '{self.server_name}'")
-        init: InitializeResult = await self._client_session.initialize()
+        async with self.lock:
 
-        init_report = f"""
-        Server Init Handshake completed Server '{self.server_name}' 
-        Lists the following Capabilities:
+            # 1) do the LSP-style initialize handshake
+            logger.debug(
+                f"Performing intialize handshake with server '{self.server_name}'")
+            init: InitializeResult = await self._client_session.initialize()
+
+            self._connected_server_capabilites = init
+
+            init_report = f"""
+            Server Init Handshake completed Server '{self.server_name}' 
+            Lists the following Capabilities:
         
-        - Protocol Version: {init.protocolVersion}
-        - Instructions: {init.instructions or "No specific Instructions"}
-        - MCP Implementation:
-          - Name: {init.serverInfo.name}
-          - Version: {init.serverInfo.version}
-        - Capabilities:
-          {init.capabilities}
-        """
+            - Protocol Version: {init.protocolVersion}
+            - Instructions: {init.instructions or "No specific Instructions"}
+            - MCP Implementation:
+                - Name: {init.serverInfo.name}
+                - Version: {init.serverInfo.version}
+            - Capabilities:
+                {init.capabilities}
+            """
 
-        logger.debug(init_report)
+            logger.debug(init_report)
 
-        # 2) if we already know our current roots, notify the server
-        #    so that it will follow up with a ListRootsRequest
-        if self.current_roots:
-            await self._client_session.send_roots_list_changed()
+            # 2) if we already know our current roots, notify the server
+            #    so that it will follow up with a ListRootsRequest
+            if self.current_roots:
+                await self._client_session.send_roots_list_changed()
+
+            # 3) Tell the server, what logging level we would like to use
+            await self._client_session.set_logging_level(level=self.logging_level)
 
     async def _ensure_connected(self) -> None:
         # if we've never connected, then connect.
@@ -603,6 +663,11 @@ class FlockMCPClientBase(BaseModel, ABC):
 
         @cached(cache=self._tool_cache)
         async def _get_tools_cached(agent_id: str, run_id: str) -> List[FlockMCPToolBase]:
+
+            async with self.lock:
+                if not self.tools_enabled:
+                    return []
+
             initialized = False
             async with self.lock:
                 if self._client_session:
