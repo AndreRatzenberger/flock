@@ -1,6 +1,5 @@
 # src/flock/webapp/app/main.py
 import json
-import os
 import shutil
 import urllib.parse
 from contextlib import asynccontextmanager
@@ -63,8 +62,8 @@ except ImportError:
     THEME_LOADER_AVAILABLE = False
 
 # --- .env helpers (copied from original main.py for self-containment) ---
-ENV_FILE_PATH = Path(os.getenv("FLOCK_WEB_ENV_FILE", Path.home() / ".flock" / ".env"))
-ENV_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+ENV_FILE_PATH = Path(".env") #Path(os.getenv("FLOCK_WEB_ENV_FILE", Path.home() / ".flock" / ".env"))
+#ENV_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
 SHOW_SECRETS_KEY = "SHOW_SECRETS"
 
 def load_env_file_web() -> dict[str, str]:
@@ -143,9 +142,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 core_api_router = create_api_router()
 app.include_router(core_api_router, prefix="/api", tags=["Flock API Core"])
-app.include_router(flock_management.router, prefix="/ui/api/flocks", tags=["UI Flock Management"])
-app.include_router(agent_management.router, prefix="/ui/api/flocks", tags=["UI Agent Management"])
-app.include_router(execution.router, prefix="/ui/api/flocks", tags=["UI Execution"])
+app.include_router(flock_management.router, prefix="/ui/api/flock", tags=["UI Flock Management"])
+app.include_router(agent_management.router, prefix="/ui/api/flock", tags=["UI Agent Management"])
+app.include_router(execution.router, prefix="/ui/api/flock", tags=["UI Execution"])
 app.include_router(registry_viewer.router, prefix="/ui/api/registry", tags=["UI Registry"])
 
 def generate_theme_css_web(theme_name: str | None) -> str:
@@ -225,7 +224,7 @@ async def page_editor_section(
 
     context = get_base_context_web(request, error, success, ui_mode)
     content_map = {
-        "properties": "/ui/api/flocks/htmx/flock-properties-form",
+        "properties": "/ui/api/flock/htmx/flock-properties-form",
         "agents": "/ui/htmx/agent-manager-view",
         "execute": "/ui/htmx/execution-view-container"
     }
@@ -277,9 +276,14 @@ async def htmx_get_create_flock_form(request: Request, error: str = None, succes
 
 @app.get("/ui/htmx/agent-manager-view", response_class=HTMLResponse)
 async def htmx_get_agent_manager_view(request: Request):
-    context = get_base_context_web(request)
-    if not context.get("current_flock"): return HTMLResponse("<article class='error'><p>No flock loaded. Cannot manage agents.</p></article>")
-    return templates.TemplateResponse("partials/_agent_manager_view.html", context)
+    context = get_base_context_web(request) # This gets flock from app.state
+    if not context.get("current_flock"): # Check if flock exists in the context
+        return HTMLResponse("<article class='error'><p>No flock loaded. Cannot manage agents.</p></article>")
+    # Pass the 'current_flock' from the context to the template as 'flock'
+    return templates.TemplateResponse(
+        "partials/_agent_manager_view.html",
+        {"request": request, "flock": context.get("current_flock")}
+    )
 
 @app.get("/ui/htmx/registry-viewer", response_class=HTMLResponse)
 async def htmx_get_registry_viewer(request: Request):
@@ -300,58 +304,67 @@ async def htmx_scoped_no_flock_view(request: Request):
 async def ui_load_flock_by_name_action(request: Request, selected_flock_filename: str = Form(...)):
     loaded_flock = load_flock_from_file_service(selected_flock_filename, request.app.state)
     response_headers = {}
+    ui_mode_query = request.query_params.get("ui_mode", "standalone")
     if loaded_flock:
-        success_message = f"Flock '{loaded_flock.name}' loaded from '{selected_flock_filename}'."
+        success_message_text = f"Flock '{loaded_flock.name}' loaded from '{selected_flock_filename}'."
         response_headers["HX-Push-Url"] = "/ui/editor/properties?ui_mode=" + request.query_params.get("ui_mode", "standalone")
-        response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_message}})
+        response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_message_text}})
         # Use get_base_context_web to ensure all necessary context vars are present for the partial
-        context = get_base_context_web(request, success_message=success_message)
+        context = get_base_context_web(request, success=success_message_text, ui_mode=ui_mode_query)
         return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
     else:
-        error_message = f"Failed to load flock file '{selected_flock_filename}'."
-        response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": error_message}})
-        context = get_base_context_web(request, error=error_message)
-        context["error_message_inline"] = error_message # For direct display in partial
+        error_message_text = f"Failed to load flock file '{selected_flock_filename}'."
+        response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": error_message_text}})
+        context = get_base_context_web(request, error=error_message_text, ui_mode=ui_mode_query)
+        context["error_message_inline"] = error_message_text # For direct display in partial
         return templates.TemplateResponse("partials/_load_manager_view.html", context, headers=response_headers)
 
 @app.post("/ui/load-flock-action/by-upload", response_class=HTMLResponse)
 async def ui_load_flock_by_upload_action(request: Request, flock_file_upload: UploadFile = File(...)):
-    error_message, filename_to_load, response_headers = None, None, {}
+    error_message_text, filename_to_load, response_headers = None, None, {}
+    ui_mode_query = request.query_params.get("ui_mode", "standalone")
+
     if flock_file_upload and flock_file_upload.filename:
-        if not flock_file_upload.filename.endswith((".yaml", ".yml", ".flock")): error_message = "Invalid file type."
+        if not flock_file_upload.filename.endswith((".yaml", ".yml", ".flock")): error_message_text = "Invalid file type."
         else:
             upload_path = FLOCK_FILES_DIR / flock_file_upload.filename
             try:
                 with upload_path.open("wb") as buffer: shutil.copyfileobj(flock_file_upload.file, buffer)
                 filename_to_load = flock_file_upload.filename
-            except Exception as e: error_message = f"Upload failed: {e}"
+            except Exception as e: error_message_text = f"Upload failed: {e}"
             finally: await flock_file_upload.close()
-    else: error_message = "No file uploaded."
+    else: error_message_text = "No file uploaded."
 
-    if filename_to_load and not error_message:
+    if filename_to_load and not error_message_text:
         loaded_flock = load_flock_from_file_service(filename_to_load, request.app.state)
         if loaded_flock:
-            success_message = f"Flock '{loaded_flock.name}' loaded from '{filename_to_load}'."
-            response_headers["HX-Push-Url"] = "/ui/editor/properties?ui_mode=" + request.query_params.get("ui_mode", "standalone")
-            response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "flockFileListChanged": None, "notify": {"type": "success", "message": success_message}})
-            context = get_base_context_web(request, success_message=success_message)
+            success_message_text = f"Flock '{loaded_flock.name}' loaded from '{filename_to_load}'."
+            response_headers["HX-Push-Url"] = f"/ui/editor/properties?ui_mode={ui_mode_query}"
+            response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "flockFileListChanged": None, "notify": {"type": "success", "message": success_message_text}})
+            # CORRECTED CALL:
+            context = get_base_context_web(request, success=success_message_text, ui_mode=ui_mode_query)
             return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
-        else: error_message = f"Failed to process uploaded '{filename_to_load}'."
+        else: error_message_text = f"Failed to process uploaded '{filename_to_load}'."
 
-    response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": error_message or "Upload failed."}})
-    context = get_base_context_web(request, error=error_message or "Upload action failed.")
+    final_error_msg = error_message_text or "Upload failed."
+    response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": final_error_msg}})
+    # CORRECTED CALL:
+    context = get_base_context_web(request, error=final_error_msg, ui_mode=ui_mode_query)
     return templates.TemplateResponse("partials/_create_flock_form.html", context, headers=response_headers)
 
 @app.post("/ui/create-flock", response_class=HTMLResponse)
 async def ui_create_flock_action(request: Request, flock_name: str = Form(...), default_model: str = Form(None), description: str = Form(None)):
+    ui_mode_query = request.query_params.get("ui_mode", "standalone")
     if not flock_name.strip():
-        context = get_base_context_web(request, error="Flock name cannot be empty.")
+        # CORRECTED CALL:
+        context = get_base_context_web(request, error="Flock name cannot be empty.", ui_mode=ui_mode_query)
         return templates.TemplateResponse("partials/_create_flock_form.html", context)
 
     new_flock = create_new_flock_service(flock_name, default_model, description, request.app.state)
-    success_msg = f"New flock '{new_flock.name}' created. Configure properties and save."
-    response_headers = {"HX-Push-Url": "/ui/editor/properties?ui_mode=" + request.query_params.get("ui_mode", "standalone"), "HX-Trigger": json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_msg}})}
-    context = get_base_context_web(request, success_message=success_msg)
+    success_msg_text = f"New flock '{new_flock.name}' created. Configure properties and save."
+    response_headers = {"HX-Push-Url": f"/ui/editor/properties?ui_mode={ui_mode_query}", "HX-Trigger": json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_msg_text}})}
+    # CORRECTED CALL:
+    context = get_base_context_web(request, success=success_msg_text, ui_mode=ui_mode_query)
     return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
 
 # --- Settings Page & Endpoints ---

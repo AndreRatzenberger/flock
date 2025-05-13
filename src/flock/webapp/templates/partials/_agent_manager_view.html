@@ -20,7 +20,7 @@
             <header class="grid">
               <h2>Agents ({{ flock.agents|length }}) </h2>
               <div style="text-align: right;">
-                  <button role="button" class="outline" hx-get="/api/flocks/htmx/agents/new-agent-form" hx-target="#agent-detail-panel" hx-swap="innerHTML">Add New Agent</button>
+                  <button role="button" class="outline" hx-get="/ui/api/flock/htmx/agents/new-agent-form" hx-target="#agent-detail-panel" hx-swap="innerHTML">Add New Agent</button>
               </div>
               
           </header>
@@ -28,7 +28,7 @@
        
             {# Content of the left pane now goes into this article #}
             <div style="padding: var(--pico-block-spacing-vertical) var(--pico-block-spacing-horizontal); flex-grow: 1; display: flex; flex-direction: column;">
-                <div hx-get="/api/flocks/htmx/agent-list" 
+                <div hx-get="/ui/api/flock/htmx/agent-list" 
                      hx-trigger="load, agentListChanged from:body"
                      hx-swap="innerHTML"
                      id="agent-list-panel"

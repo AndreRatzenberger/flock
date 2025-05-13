@@ -3,7 +3,7 @@
         <h2>Run Flock</h2>
     </header>
     {% if flock and flock.agents %}
-    <form hx-post="/ui/api/flocks/htmx/run" 
+    <form hx-post="/ui/api/flock/htmx/run" 
           hx-target="#results-display" 
           hx-swap="innerHTML" 
           hx-indicator="#run-loading-indicator"
@@ -16,7 +16,7 @@
                 x-model="selectedAgentForInput"
                 @change="
                     if ($event.target.value) {
-                        htmx.ajax('GET', '/ui/api/flocks/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
+                        htmx.ajax('GET', '/ui/api/flock/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
                     } else {
                         document.getElementById('dynamic-input-form-fields').innerHTML = '<p><small>Select an agent to see its input fields.</small></p>';
                     }

@@ -1,7 +1,7 @@
 <article class="two-pane-flex-container">
     <section id="execution-left-pane" style="flex: 1; min-width: 300px;">
         {# The Execution Form will be loaded here #}
-        <div id="execution-form-wrapper" hx-get="/ui/api/flocks/htmx/execution-form-content" {# New endpoint for just the
+        <div id="execution-form-wrapper" hx-get="/ui/api/flock/htmx/execution-form-content" {# New endpoint for just the
             form #} hx-trigger="load" hx-swap="innerHTML">
             <p>Loading execution form...</p><progress indeterminate></progress>
         </div>

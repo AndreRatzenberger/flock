@@ -6,7 +6,7 @@
     {% if flock.agents %}
     <ul>
         {% for agent_name, agent in flock.agents.items() %}
-        <li hx-get="/api/flocks/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading">
+        <li hx-get="/ui/api/flock/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading">
             <strong>{{ agent.name }}</strong><br>
             <small>{{ agent.description|truncate(80) if agent.description else 'No description' }}</small>
         </li>
