@@ -29,6 +29,7 @@ body.chat-page {
     padding: 1rem 1.5rem; 
     display: flex;
     flex-direction: column;
+    min-height: 60vh;
     gap: 1rem;
     background-color: rgba(0, 0, 0, 0.05);
     background-image: 
@@ -117,10 +118,10 @@ body.chat-page {
     box-shadow: 0 0 0 2px rgba(var(--pico-primary-rgb, 0, 123, 255), 0.25);
 }
 
-#chat-container form button { 
+#chat-form button { 
     flex: 0 0 auto; 
     min-width: auto;
-    width: 120px; /* Wider send button */
+    width: 150px; /* Wider send button */
     padding: 0 1rem;
     border-radius: 2rem;
     background: var(--pico-primary);
@@ -131,7 +132,7 @@ body.chat-page {
     height: 3rem;
 }
 
-#chat-container form button:hover {
+#chat-form button:hover {
     background: var(--pico-primary-hover, var(--pico-primary));
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -190,4 +191,37 @@ body:not(.chat-page) .chat-container {
     width: 100%;
     max-width: 80%;
     margin: 0 auto;
+}
+
+/* Settings form inside chat container should stack vertically */
+.chat-settings-form {
+    display: flex;
+    flex-direction: column;
+    min-height: 60vh;
+    min-width: 100%;
+}
+
+.chat-settings-form label,
+.chat-settings-form input,
+.chat-settings-form select {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+
+.chat-settings-form .grid {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Button sizing for Save Settings */
+.chat-settings-form .grid button:first-child {
+    flex: 1 1 auto; /* expand in standalone */
+    width: 50%;
+}
+
+/* In integrated UI (non chat-page) keep natural size */
+body:not(.chat-page) .chat-settings-form .grid button:first-child {
+    flex: 0 0 auto;
+    width: auto;
 }

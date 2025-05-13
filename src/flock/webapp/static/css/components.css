@@ -160,3 +160,8 @@ nav ul[role="group"] li button { width: 100%; }
 .sidebar progress { width: 80%; margin: 1rem auto; display: block; }
 progress { border-radius: 10px; height: 8px; }
 progress:indeterminate { background: rgba(var(--pico-primary-rgb, 0, 0, 0), 0.2); } 
+
+
+
+
+

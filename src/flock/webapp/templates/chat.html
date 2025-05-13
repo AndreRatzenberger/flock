@@ -20,22 +20,25 @@
 </head>
 <body class="chat-page">
     <div id="chat-container">
-        <div class="chat-header">
+        <div class="chat-header" style="justify-content: space-between;">
             <hgroup>
                 <h2>Flock Chat</h2>
-                <h3>Echo demo</h3>
+                <h3>{{ chat_subtitle }}</h3>
             </hgroup>
+            <button class="secondary outline" hx-get="/chat/htmx/settings-form" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
         </div>
-        
-        <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
-            <p><em>Loading chat…</em></p>
+
+        <div id="chat-content-area">
+            <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
+                <p><em>Loading chat…</em></p>
+            </div>
+            
+            <form id="chat-form" hx-post="/chat/send" hx-target="#chat-log" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+                <input type="text" name="message" placeholder="Type a message…" required autofocus>
+                <button type="submit">Send</button>
+            </form>
         </div>
-        
-        <form id="chat-form" hx-post="/chat/send" hx-target="#chat-log" hx-swap="innerHTML" hx-on::after-request="this.reset()">
-            <input type="text" name="message" placeholder="Type a message…" required autofocus>
-            <button type="submit">Send</button>
-        </form>
-        
+
         <div class="chat-footer">
             <small>Built with FastAPI • HTMX • Pico.css – Theme: {{ active_theme_name | default('default') }}</small>
         </div>
