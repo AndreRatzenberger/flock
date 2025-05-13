@@ -118,7 +118,7 @@ body.chat-page {
     box-shadow: 0 0 0 2px rgba(var(--pico-primary-rgb, 0, 123, 255), 0.25);
 }
 
-#chat-form button { 
+#chat-container form button[type="submit"] { 
     flex: 0 0 auto; 
     min-width: auto;
     width: 150px; /* Wider send button */
@@ -132,7 +132,7 @@ body.chat-page {
     height: 3rem;
 }
 
-#chat-form button:hover {
+#chat-container form button[type="submit"]:hover {
     background: var(--pico-primary-hover, var(--pico-primary));
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -186,7 +186,7 @@ body.chat-page {
 body:not(.chat-page) #chat-container,
 body:not(.chat-page) .chat-container {
     height: 100%;
-    min-height: 0;
+    min-height: 100%;
     /* allow full width inside the main content area */
     width: 100%;
     max-width: 100%;
