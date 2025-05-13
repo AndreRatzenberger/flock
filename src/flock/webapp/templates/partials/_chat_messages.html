@@ -1,0 +1,13 @@
+{% for entry in history %}
+    {% if entry.role == 'user' %}
+        <div class="bubble user">
+            {{ entry.text }}
+            <span class="chat-timestamp">{{ entry.timestamp|default(now().strftime('%H:%M')) }}</span>
+        </div>
+    {% else %}
+        <div class="bubble bot">
+            {{ entry.text }}
+            <span class="chat-timestamp">{{ entry.timestamp|default(now().strftime('%H:%M')) }}{% if entry.agent %} - {{ entry.agent }}{% endif %}{% if entry.duration_ms is defined %} - {{ entry.duration_ms }}ms{% endif %}</span>
+        </div>
+    {% endif %}
+{% endfor %}

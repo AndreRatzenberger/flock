@@ -38,7 +38,7 @@
             </button>
         </li>
         <li>
-            <button hx-get="/api/flocks/htmx/flock-properties-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
+            <button hx-get="/ui/api/flock/htmx/flock-properties-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
                 hx-push-url="/ui/editor/properties?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
                 class="contrast {% if request.url.path == '/ui/editor/properties' %}active-nav{% endif %}">
                 <i class="fas fa-cog"></i> Properties
@@ -64,6 +64,22 @@
                 <i class="fas fa-sliders-h"></i> Settings
             </button>
         </li>
+        {% if chat_enabled %}
+        <li>
+            <button hx-get="/ui/htmx/chat-view?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
+                hx-push-url="/ui/chat?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
+                class="contrast {% if request.url.path == '/ui/chat' %}active-nav{% endif %}">
+                <i class="fas fa-comments"></i> Chat
+            </button>
+        </li>
+        <li>
+            <button hx-get="/ui/htmx/chat-settings-form?ui_mode={{ ui_mode }}" hx-target="#main-content-area"
+                hx-push-url="/ui/chat-settings?ui_mode={{ ui_mode }}" hx-indicator="#content-loading-indicator-main"
+                class="contrast {% if request.url.path == '/ui/chat-settings' %}active-nav{% endif %}">
+                <i class="fas fa-sliders-h"></i> Chat Settings
+            </button>
+        </li>
+        {% endif %}
     </ul>
     <div id="content-loading-indicator-main" class="htmx-indicator" style="text-align:center; padding:1rem;"><progress
             indeterminate></progress></div>

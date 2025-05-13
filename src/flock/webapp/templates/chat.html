@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flock Chat</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="/static/css/chat.css">
+    {# Inject active theme variables #}
+    {% if theme_css %}
+    <style>
+        /* Start Theme CSS */
+        /* stylelint-disable */
+        {{ theme_css | safe }}
+        /* stylelint-enable */
+        /* End Theme CSS */
+    </style>
+    {% endif %}
+    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+</head>
+<body class="chat-page">
+    <div id="chat-container">
+        <div class="chat-header" style="justify-content: space-between;">
+            <hgroup>
+                <h2>Flock Chat</h2>
+                <h3>{{ chat_subtitle }}</h3>
+            </hgroup>
+            <button class="secondary outline" hx-get="/chat/htmx/settings-form" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
+        </div>
+
+        <div id="chat-content-area">
+            <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
+                <p><em>Loading chat…</em></p>
+            </div>
+            
+            <form id="chat-form" hx-post="/chat/send" hx-target="#chat-log" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+                <input type="text" name="message" placeholder="Type a message…" required autofocus>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+
+        <div class="chat-footer">
+            <small>Built with FastAPI • HTMX • Pico.css – Theme: {{ active_theme_name | default('default') }}</small>
+        </div>
+    </div>
+
+<script>
+    (function() {
+        const log = document.getElementById('chat-log');
+        function scrollBottom() {
+            log.scrollTop = log.scrollHeight;
+        }
+        document.addEventListener('htmx:afterSwap', e => {
+            if (e.detail.target.id === 'chat-log') scrollBottom();
+        });
+        window.addEventListener('load', scrollBottom);
+    })();
+</script>
+</body>
+</html>

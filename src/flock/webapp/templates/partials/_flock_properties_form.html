@@ -23,7 +23,7 @@
         </div>
     {% endif %}
 
-    <form hx-post="/api/flocks/htmx/flock-properties" hx-target="#flock-properties-form-article" hx-swap="innerHTML" hx-indicator="#flock-props-loading">
+    <form hx-post="/api/flock/htmx/flock-properties" hx-target="#flock-properties-form-article" hx-swap="innerHTML" hx-indicator="#flock-props-loading">
         <label for="flock_name">Flock Name</label>
         <input type="text" id="flock_name" name="flock_name" value="{{ flock.name if flock else '' }}" required>
 
@@ -38,7 +38,7 @@
         </div>
     </form>
     <hr>
-     <form hx-post="/api/flocks/htmx/save-flock" hx-target="#flock-properties-form-article" hx-swap="innerHTML" hx-indicator="#flock-save-loading">
+     <form hx-post="/api/flock/htmx/save-flock" hx-target="#flock-properties-form-article" hx-swap="innerHTML" hx-indicator="#flock-save-loading">
         <label for="save_filename">Save Flock As:</label>
         <input type="text" id="save_filename" name="save_filename" 
                value="{{ current_filename if current_filename else (flock.name.replace(' ', '_').lower() + '.flock.yaml' if flock and flock.name else 'my_flock.flock.yaml') }}" 
