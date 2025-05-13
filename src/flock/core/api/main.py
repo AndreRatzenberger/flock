@@ -1,681 +1,468 @@
-# src/flock/core/api/main.py
-"""Main Flock API server class and setup."""
+# src/flock/webapp/app/main.py
+import json
+import os
+import shutil
+import urllib.parse
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
-
-# Flock core imports
-from flock.core.api.models import FlockBatchRequest
-from flock.core.logging.logging import get_logger
+from flock.core.api.endpoints import create_api_router
+from flock.core.api.run_store import RunStore
 
 if TYPE_CHECKING:
     # These imports are only for type hints
     from flock.core.flock import Flock
 
-logger = get_logger("api.main")
 
-from .endpoints import create_api_router
+# Import core Flock components and API related modules
+from flock.core.logging.logging import get_logger
 
-# Import components from the api package
-from .run_store import RunStore
+# Import UI-specific routers
+from flock.webapp.app.api import (
+    agent_management,
+    execution,
+    flock_management,
+    registry_viewer,
+)
+from flock.webapp.app.config import (
+    DEFAULT_THEME_NAME,
+    FLOCK_FILES_DIR,
+    THEMES_DIR,
+    get_current_theme_name,
+)
 
-# Conditionally import for the new UI integration
-NEW_UI_SERVICE_AVAILABLE = False
-WEBAPP_FASTAPI_APP = None
+# Import dependency management and config
+from flock.webapp.app.dependencies import (
+    get_pending_custom_endpoints_and_clear,
+    set_global_flock_services,
+)
+
+# Import service functions (which now expect app_state)
+from flock.webapp.app.services.flock_service import (
+    clear_current_flock_service,
+    create_new_flock_service,
+    get_available_flock_files,
+    get_flock_preview_service,
+    load_flock_from_file_service,
+    # get_current_flock_instance and get_current_flock_filename are NO LONGER HERE
+)
+from flock.webapp.app.theme_mapper import alacritty_to_pico
+
+logger = get_logger("webapp.main")
+
 try:
-    from flock.webapp.app.main import (
-        app as webapp_fastapi_app,  # Import the FastAPI app instance
+    from flock.core.logging.formatters.themed_formatter import (
+        load_theme_from_file,
     )
-    from flock.webapp.app.services.flock_service import (
-        set_current_flock_instance_programmatically,
-    )
-
-    WEBAPP_FASTAPI_APP = webapp_fastapi_app
-    NEW_UI_SERVICE_AVAILABLE = True
+    THEME_LOADER_AVAILABLE = True
 except ImportError:
-    logger.warning(
-        "New webapp components (flock.webapp.app.main:app or flock.webapp.app.services.flock_service) not found. "
-        "UI mode will fall back to old FastHTML UI if available."
-    )
-    # Fallback: Import old UI components if new one isn't available and create_ui is True
+    logger.warning("Could not import flock.core theme loading utilities.")
+    THEME_LOADER_AVAILABLE = False
+
+# --- .env helpers ---
+ENV_FILE_PATH = Path(os.getenv("FLOCK_WEB_ENV_FILE", Path.home() / ".flock" / ".env"))
+ENV_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+SHOW_SECRETS_KEY = "SHOW_SECRETS"
+
+def load_env_file_web() -> dict[str, str]:
+    env_vars: dict[str, str] = {}
+    if not ENV_FILE_PATH.exists(): return env_vars
+    with open(ENV_FILE_PATH) as f: lines = f.readlines()
+    for line in lines:
+        line = line.strip()
+        if not line: env_vars[""] = ""; continue
+        if line.startswith("#"): env_vars[line] = ""; continue
+        if "=" in line: k, v = line.split("=", 1); env_vars[k] = v
+        else: env_vars[line] = ""
+    return env_vars
+
+def save_env_file_web(env_vars: dict[str, str]):
     try:
-        from .ui.routes import FASTHTML_AVAILABLE, create_ui_app
+        with open(ENV_FILE_PATH, "w") as f:
+            for k, v in env_vars.items():
+                if k.startswith("#"): f.write(f"{k}\n")
+                elif not k: f.write("\n")
+                else: f.write(f"{k}={v}\n")
+    except Exception as e: logger.error(f"[Settings] Failed to save .env: {e}")
 
-        if FASTHTML_AVAILABLE:  # Only import utils if fasthtml is there
-            from .ui.utils import format_result_to_html, parse_input_spec
+def is_sensitive_web(key: str) -> bool:
+    patterns = ["key", "token", "secret", "password", "api", "pat"]; low = key.lower()
+    return any(p in low for p in patterns)
+
+def mask_sensitive_value_web(value: str) -> str:
+    if not value: return value
+    if len(value) <= 4: return "••••"
+    return value[:2] + "•" * (len(value) - 4) + value[-2:]
+
+def get_show_secrets_setting_web(env_vars: dict[str, str]) -> bool:
+    return env_vars.get(SHOW_SECRETS_KEY, "false").lower() == "true"
+
+def set_show_secrets_setting_web(show: bool):
+    env_vars = load_env_file_web()
+    env_vars[SHOW_SECRETS_KEY] = str(show)
+    save_env_file_web(env_vars)
+# --- End .env helpers ---
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("FastAPI application starting up...")
+    pending_endpoints = get_pending_custom_endpoints_and_clear()
+    if pending_endpoints:
+        flock_instance_from_state: Flock | None = getattr(app.state, "flock_instance", None)
+        if flock_instance_from_state:
+            from flock.core.api.main import FlockAPI
+            temp_flock_api_service = FlockAPI(
+                flock_instance_from_state,
+                custom_endpoints=pending_endpoints
+            )
+            temp_flock_api_service.add_custom_routes_to_app(app)
+            logger.info(f"Lifespan: Added {len(pending_endpoints)} custom API routes to main app.")
         else:
-            # Define placeholders if fasthtml itself is not available
-            def parse_input_spec(*args, **kwargs):
-                return []
+            logger.warning("Lifespan: Pending custom endpoints found, but no Flock instance in app.state. Cannot add custom routes.")
+    yield
+    logger.info("FastAPI application shutting down...")
 
-            def format_result_to_html(*args, **kwargs):
-                return ""
+app = FastAPI(title="Flock Web UI & API", lifespan=lifespan)
 
-            FASTHTML_AVAILABLE = False  # Ensure it's false if import failed
+BASE_DIR = Path(__file__).resolve().parent.parent.parent / "webapp"
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-    except ImportError:
-        FASTHTML_AVAILABLE = False  # Ensure it's defined as false
+core_api_router = create_api_router()
+app.include_router(core_api_router, prefix="/api", tags=["Flock API Core"])
+app.include_router(flock_management.router, prefix="/ui/api/flocks", tags=["UI Flock Management"])
+app.include_router(agent_management.router, prefix="/ui/api/flocks", tags=["UI Agent Management"])
+app.include_router(execution.router, prefix="/ui/api/flocks", tags=["UI Execution"])
+app.include_router(registry_viewer.router, prefix="/ui/api/registry", tags=["UI Registry"])
 
-        # Define placeholders if utils can't be imported
-        def parse_input_spec(*args, **kwargs):
-            return []
-
-        def format_result_to_html(*args, **kwargs):
+def generate_theme_css_web(theme_name: str | None) -> str:
+    if not THEME_LOADER_AVAILABLE or THEMES_DIR is None: return ""
+    active_theme_name = theme_name or get_current_theme_name() or DEFAULT_THEME_NAME
+    theme_filename = f"{active_theme_name}.toml"
+    theme_path = THEMES_DIR / theme_filename
+    if not theme_path.exists():
+        logger.warning(f"Theme file not found: {theme_path}. Using default: {DEFAULT_THEME_NAME}.toml")
+        theme_path = THEMES_DIR / f"{DEFAULT_THEME_NAME}.toml"
+        active_theme_name = DEFAULT_THEME_NAME
+        if not theme_path.exists():
+            logger.warning(f"Default theme file not found: {theme_path}. No theme CSS.")
             return ""
+    try: theme_dict = load_theme_from_file(str(theme_path))
+    except Exception as e: logger.error(f"Error loading theme {theme_path}: {e}"); return ""
 
-from flock.core.api.custom_endpoint import FlockEndpoint
+    pico_vars = alacritty_to_pico(theme_dict)
+    if not pico_vars: return ""
+    css_rules = [f"    {name}: {value};" for name, value in pico_vars.items()]
+    css_string = ":root {\n" + "\n".join(css_rules) + "\n}"
+    return css_string
 
+# =============================================================================
+# MODIFIED get_base_context_web
+# =============================================================================
+def get_base_context_web(
+    request: Request, error: str = None, success: str = None, ui_mode: str = "standalone"
+) -> dict:
+    # Get flock instance and filename directly from request.app.state
+    flock_instance_from_state: Flock | None = getattr(request.app.state, "flock_instance", None)
+    current_flock_filename_from_state: str | None = getattr(request.app.state, "flock_filename", None)
 
-class FlockAPI:
-    """Coordinates the Flock API server, including endpoints and UI.
+    theme_name = get_current_theme_name()
+    theme_css = generate_theme_css_web(theme_name)
 
-    A user can provide custom FastAPI-style routes via the ``custom_endpoints`` dict.
-    Each key is a tuple of ``(<path:str>, <methods:list[str] | None>)`` and the
-    value is a callback ``Callable``.  ``methods`` can be ``None`` or an empty
-    list to default to ``["GET"]``.  The callback can be synchronous or
-    ``async``.  At execution time we provide the following keyword arguments and
-    filter them to the callback's signature:
+    # logger.debug(f"get_base_context_web: Flock from state: {flock_instance_from_state.name if flock_instance_from_state else 'None'}")
+    # logger.debug(f"get_base_context_web: Filename from state: {current_flock_filename_from_state}")
 
-    • ``body``   – request json/plain payload (for POST/PUT/PATCH)
-    • ``query``  – dict of query parameters
-    • ``flock``  – current :class:`Flock` instance
-    • any path parameters extracted from the route pattern
-    """
+    return {
+        "request": request,
+        "current_flock": flock_instance_from_state,
+        "current_filename": current_flock_filename_from_state,
+        "error_message": error,
+        "success_message": success,
+        "ui_mode": ui_mode,
+        "theme_css": theme_css,
+        "active_theme_name": theme_name,
+    }
+# =============================================================================
 
-    def __init__(
-        self,
-        flock: "Flock",
-        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
-    ):
-        self.flock = flock
-        # Normalize into list[FlockEndpoint]
-        self.custom_endpoints: list[FlockEndpoint] = []
-        if custom_endpoints:
-            merged: list[FlockEndpoint] = []
-            if isinstance(custom_endpoints, dict):
-                for (path, methods), cb in custom_endpoints.items():
-                    merged.append(
-                        FlockEndpoint(path=path, methods=list(methods) if methods else ["GET"], callback=cb)
-                    )
-            else:
-                merged.extend(list(custom_endpoints))
+@app.get("/", response_class=HTMLResponse)
+async def page_dashboard(
+    request: Request, error: str = None, success: str = None, ui_mode: str = Query(None)
+):
+    effective_ui_mode = ui_mode
+    flock_is_preloaded = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
 
-            pending_endpoints = merged
+    if effective_ui_mode is None:
+        effective_ui_mode = "scoped" if flock_is_preloaded else "standalone"
+        if effective_ui_mode == "scoped":
+             return RedirectResponse(url=f"/?ui_mode=scoped&initial_load=true", status_code=307)
+
+    if effective_ui_mode == "standalone" and flock_is_preloaded:
+        clear_current_flock_service(request.app.state)
+        logger.info("Switched to standalone mode, cleared preloaded Flock instance from app.state.")
+
+    context = get_base_context_web(request, error, success, effective_ui_mode)
+    flock_in_state = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
+
+    if effective_ui_mode == "scoped":
+        context["initial_content_url"] = "/ui/htmx/execution-view-container" if flock_in_state else "/ui/htmx/scoped-no-flock-view"
+    else:
+        context["initial_content_url"] = "/ui/htmx/load-flock-view"
+    return templates.TemplateResponse("base.html", context)
+
+@app.get("/ui/editor/{section:path}", response_class=HTMLResponse)
+async def page_editor_section(
+    request: Request, section: str, success: str = None, error: str = None, ui_mode: str = Query("standalone")
+):
+    # Use get_base_context_web which now correctly pulls from app.state
+    context = get_base_context_web(request, error, success, ui_mode)
+    flock_instance_from_context = context.get("current_flock")
+
+    if not flock_instance_from_context: # Check context instead of direct app.state
+        err_msg = "No flock loaded. Please load or create a flock first."
+        redirect_url = f"/?error={urllib.parse.quote(err_msg)}"
+        if ui_mode == "scoped": redirect_url += "&ui_mode=scoped"
+        return RedirectResponse(url=redirect_url, status_code=303)
+
+    content_map = {
+        "properties": "/ui/api/flocks/htmx/flock-properties-form",
+        "agents": "/ui/htmx/agent-manager-view",
+        "execute": "/ui/htmx/execution-view-container"
+    }
+    context["initial_content_url"] = content_map.get(section, "/ui/htmx/load-flock-view")
+    if section not in content_map: context["error_message"] = "Invalid editor section."
+    return templates.TemplateResponse("base.html", context)
+
+@app.get("/ui/registry", response_class=HTMLResponse)
+async def page_registry(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
+    context = get_base_context_web(request, error, success, ui_mode)
+    context["initial_content_url"] = "/ui/htmx/registry-viewer"
+    return templates.TemplateResponse("base.html", context)
+
+@app.get("/ui/create", response_class=HTMLResponse)
+async def page_create(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
+    clear_current_flock_service(request.app.state)
+    context = get_base_context_web(request, error, success, "standalone")
+    context["initial_content_url"] = "/ui/htmx/create-flock-form"
+    return templates.TemplateResponse("base.html", context)
+
+@app.get("/ui/htmx/sidebar", response_class=HTMLResponse)
+async def htmx_get_sidebar(request: Request, ui_mode: str = Query("standalone")):
+    return templates.TemplateResponse("partials/_sidebar.html", get_base_context_web(request, ui_mode=ui_mode))
+
+@app.get("/ui/htmx/header-flock-status", response_class=HTMLResponse)
+async def htmx_get_header_flock_status(request: Request, ui_mode: str = Query("standalone")):
+    return templates.TemplateResponse("partials/_header_flock_status.html", get_base_context_web(request, ui_mode=ui_mode))
+
+@app.get("/ui/htmx/load-flock-view", response_class=HTMLResponse)
+async def htmx_get_load_flock_view(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
+    return templates.TemplateResponse("partials/_load_manager_view.html", get_base_context_web(request, error, success, ui_mode))
+
+@app.get("/ui/htmx/dashboard-flock-file-list", response_class=HTMLResponse)
+async def htmx_get_dashboard_flock_file_list_partial(request: Request):
+    return templates.TemplateResponse("partials/_dashboard_flock_file_list.html", {"request": request, "flock_files": get_available_flock_files()})
+
+@app.get("/ui/htmx/dashboard-default-action-pane", response_class=HTMLResponse)
+async def htmx_get_dashboard_default_action_pane(request: Request):
+    return HTMLResponse("""<article style="text-align:center; margin-top: 2rem; border: none; background: transparent;"><p>Select a Flock from the list to view its details and load it into the editor.</p><hr><p>Or, create a new Flock or upload an existing one using the "Create New Flock" option in the sidebar.</p></article>""")
+
+@app.get("/ui/htmx/dashboard-flock-properties-preview/{filename}", response_class=HTMLResponse)
+async def htmx_get_dashboard_flock_properties_preview(request: Request, filename: str):
+    preview_flock_data = get_flock_preview_service(filename)
+    return templates.TemplateResponse("partials/_dashboard_flock_properties_preview.html", {"request": request, "selected_filename": filename, "preview_flock": preview_flock_data})
+
+@app.get("/ui/htmx/create-flock-form", response_class=HTMLResponse)
+async def htmx_get_create_flock_form(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
+    return templates.TemplateResponse("partials/_create_flock_form.html", get_base_context_web(request, error, success, ui_mode))
+
+@app.get("/ui/htmx/agent-manager-view", response_class=HTMLResponse)
+async def htmx_get_agent_manager_view(request: Request):
+    context = get_base_context_web(request)
+    if not context.get("current_flock"): return HTMLResponse("<article class='error'><p>No flock loaded. Cannot manage agents.</p></article>")
+    return templates.TemplateResponse("partials/_agent_manager_view.html", context)
+
+@app.get("/ui/htmx/registry-viewer", response_class=HTMLResponse)
+async def htmx_get_registry_viewer(request: Request):
+    return templates.TemplateResponse("partials/_registry_viewer_content.html", get_base_context_web(request))
+
+@app.get("/ui/htmx/execution-view-container", response_class=HTMLResponse)
+async def htmx_get_execution_view_container(request: Request):
+    context = get_base_context_web(request)
+    if not context.get("current_flock"): return HTMLResponse("<article class='error'><p>No Flock loaded. Cannot execute.</p></article>")
+    return templates.TemplateResponse("partials/_execution_view_container.html", context)
+
+@app.get("/ui/htmx/scoped-no-flock-view", response_class=HTMLResponse)
+async def htmx_scoped_no_flock_view(request: Request):
+    return HTMLResponse("""<article style="text-align:center; margin-top: 2rem; border: none; background: transparent;"><hgroup><h2>Scoped Flock Mode</h2><h3>No Flock Loaded</h3></hgroup><p>This UI is in a scoped mode, expecting a Flock to be pre-loaded.</p><p>Please ensure the calling application provides a Flock instance.</p></article>""")
+
+@app.post("/ui/load-flock-action/by-name", response_class=HTMLResponse)
+async def ui_load_flock_by_name_action(request: Request, selected_flock_filename: str = Form(...)):
+    # Pass request.app.state to the service function
+    loaded_flock = load_flock_from_file_service(selected_flock_filename, request.app.state)
+    response_headers = {}
+    ui_mode_query = request.query_params.get("ui_mode", "standalone") # Get ui_mode for HX-Push-Url
+
+    if loaded_flock:
+        success_message = f"Flock '{loaded_flock.name}' loaded from '{selected_flock_filename}'."
+        response_headers["HX-Push-Url"] = f"/ui/editor/properties?ui_mode={ui_mode_query}"
+        response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_message}})
+        context = get_base_context_web(request, success_message=success_message, ui_mode=ui_mode_query) # Use updated state
+        return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
+    else:
+        error_message = f"Failed to load flock file '{selected_flock_filename}'."
+        response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": error_message}})
+        context = get_base_context_web(request, error=error_message, ui_mode=ui_mode_query)
+        context["error_message_inline"] = error_message
+        return templates.TemplateResponse("partials/_load_manager_view.html", context, headers=response_headers)
+
+@app.post("/ui/load-flock-action/by-upload", response_class=HTMLResponse)
+async def ui_load_flock_by_upload_action(request: Request, flock_file_upload: UploadFile = File(...)):
+    error_message, filename_to_load, response_headers = None, None, {}
+    ui_mode_query = request.query_params.get("ui_mode", "standalone")
+
+    if flock_file_upload and flock_file_upload.filename:
+        if not flock_file_upload.filename.endswith((".yaml", ".yml", ".flock")): error_message = "Invalid file type."
         else:
-            pending_endpoints = []
-
-        # FastAPI app instance
-        self.app = FastAPI(title="Flock API")
-
-        # Store run information
-        self.run_store = RunStore()
-
-        # Register any pending custom endpoints collected before app creation
-        if pending_endpoints:
-            self.custom_endpoints.extend(pending_endpoints)
-
-        self._setup_routes()
-
-    def _setup_routes(self):
-        """Includes API routers."""
-        # Create and include the API router, passing self
-        api_router = create_api_router(self)
-        self.app.include_router(api_router)
-
-        # Root redirect (if UI is enabled later) will be added in start()
-
-        # --- Register user-supplied custom endpoints ---------------------
-        if self.custom_endpoints:
-            import inspect
-
-            from fastapi import Body, Depends, Request
-
-            # Register any endpoints collected during __init__ (self.custom_endpoints)
-            if self.custom_endpoints:
-                def _create_handler_factory(callback: Callable[..., Any], req_model: type[BaseModel] | None, query_model: type[BaseModel] | None):
-                    async def _invoke(request: Request, body, query):
-                        payload: dict[str, Any] = {"flock": self.flock}
-                        if request:
-                            payload.update(request.path_params)
-                            if query is None:
-                                payload["query"] = dict(request.query_params)
-                            else:
-                                payload["query"] = query
-                        else:
-                            payload["query"] = query or {}
-                        if body is not None:
-                            payload["body"] = body
-                        elif request and request.method in {"POST", "PUT", "PATCH"} and req_model is None:
-                            try:
-                                payload["body"] = await request.json()
-                            except Exception:
-                                payload["body"] = await request.body()
-
-                        sig = inspect.signature(callback)
-                        filtered_kwargs = {k: v for k, v in payload.items() if k in sig.parameters}
-                        if inspect.iscoroutinefunction(callback):
-                            return await callback(**filtered_kwargs)
-                        return callback(**filtered_kwargs)
-
-                    # Dynamically build wrapper with appropriate signature so FastAPI can document it
-                    params: list[str] = []
-                    if req_model is not None:
-                        params.append("body")
-                    if query_model is not None:
-                        params.append("query")
-
-                    # Build wrapper function based on which params are present
-                    if req_model and query_model:
-                        async def _route_handler(
-                            request: Request,
-                            body: req_model = Body(...),  # type: ignore[arg-type,valid-type]
-                            query: query_model = Depends(),  # type: ignore[arg-type,valid-type]
-                        ):
-                            return await _invoke(request, body, query)
-
-                    elif req_model and not query_model:
-                        async def _route_handler(
-                            request: Request,
-                            body: req_model = Body(...),  # type: ignore[arg-type,valid-type]
-                        ):
-                            return await _invoke(request, body, None)
-
-                    elif query_model and not req_model:
-                        async def _route_handler(
-                            request: Request,
-                            query: query_model = Depends(),  # type: ignore[arg-type,valid-type]
-                        ):
-                            return await _invoke(request, None, query)
-
-                    else:
-                        async def _route_handler(request: Request):
-                            return await _invoke(request, None, None)
-
-                    return _route_handler
-
-                for ep in self.custom_endpoints:
-                    self.app.add_api_route(
-                        ep.path,
-                        _create_handler_factory(ep.callback, ep.request_model, ep.query_model),
-                        methods=ep.methods or ["GET"],
-                        name=ep.name or f"custom:{ep.path}",
-                        include_in_schema=ep.include_in_schema,
-                        response_model=ep.response_model,
-                        summary=ep.summary,
-                        description=ep.description,
-                        dependencies=ep.dependencies,
-                    )
-
-    # --- Core Execution Helper Methods ---
-    # These remain here as they need access to self.flock and self.run_store
-
-    async def _run_agent(
-        self, run_id: str, agent_name: str, inputs: dict[str, Any]
-    ):
-        """Executes a single agent run (internal helper)."""
-        try:
-            if agent_name not in self.flock.agents:
-                raise ValueError(f"Agent '{agent_name}' not found")
-            agent = self.flock.agents[agent_name]
-            # Type conversion (remains important)
-            typed_inputs = self._type_convert_inputs(agent_name, inputs)
-
-            logger.debug(
-                f"Executing single agent '{agent_name}' (run_id: {run_id})",
-                inputs=typed_inputs,
-            )
-            result = await agent.run_async(typed_inputs)
-            logger.info(
-                f"Single agent '{agent_name}' completed (run_id: {run_id})"
-            )
-
-            # Use RunStore to update
-            self.run_store.update_run_result(run_id, result)
-
-        except Exception as e:
-            logger.error(
-                f"Error in single agent run {run_id} ('{agent_name}'): {e!s}",
-                exc_info=True,
-            )
-            # Update store status
-            self.run_store.update_run_status(run_id, "failed", str(e))
-            raise  # Re-raise for the endpoint handler
-
-    async def _run_flock(
-        self, run_id: str, agent_name: str, inputs: dict[str, Any]
-    ):
-        """Executes a flock workflow run (internal helper)."""
-        try:
-            if agent_name not in self.flock.agents:
-                raise ValueError(f"Starting agent '{agent_name}' not found")
-
-            # Type conversion
-            typed_inputs = self._type_convert_inputs(agent_name, inputs)
-
-            logger.debug(
-                f"Executing flock workflow starting with '{agent_name}' (run_id: {run_id})",
-                inputs=typed_inputs,
-            )
-            result = await self.flock.run_async(
-                start_agent=agent_name, input=typed_inputs
-            )
-            # Result is potentially a Box object
-
-            # Use RunStore to update
-            self.run_store.update_run_result(run_id, result)
-
-            # Log using the local result variable
-            final_agent_name = (
-                result.get("agent_name", "N/A") if result is not None else "N/A"
-            )
-            logger.info(
-                f"Flock workflow completed (run_id: {run_id})",
-                final_agent=final_agent_name,
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error in flock run {run_id} (started with '{agent_name}'): {e!s}",
-                exc_info=True,
-            )
-            # Update store status
-            self.run_store.update_run_status(run_id, "failed", str(e))
-            raise  # Re-raise for the endpoint handler
-
-    async def _run_batch(self, batch_id: str, request: "FlockBatchRequest"):
-        """Executes a batch of runs (internal helper)."""
-        try:
-            if request.agent_name not in self.flock.agents:
-                raise ValueError(f"Agent '{request.agent_name}' not found")
-
-            logger.debug(
-                f"Executing batch run starting with '{request.agent_name}' (batch_id: {batch_id})",
-                batch_size=len(request.batch_inputs)
-                if isinstance(request.batch_inputs, list)
-                else "CSV",
-            )
-
-            # Import the thread pool executor here to avoid circular imports
-            import asyncio
-            import threading
-            from concurrent.futures import ThreadPoolExecutor
-
-            # Define a synchronous function to run the batch processing
-            def run_batch_sync():
-                # Use a new event loop for the batch processing
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Set the total number of batch items if possible
-                    batch_size = (
-                        len(request.batch_inputs)
-                        if isinstance(request.batch_inputs, list)
-                        else 0
-                    )
-                    if batch_size > 0:
-                        # Directly call the store method - no need for asyncio here
-                        # since we're already in a separate thread
-                        self.run_store.set_batch_total_items(
-                            batch_id, batch_size
-                        )
-
-                    # Custom progress tracking wrapper
-                    class ProgressTracker:
-                        def __init__(self, store, batch_id, total_size):
-                            self.store = store
-                            self.batch_id = batch_id
-                            self.current_count = 0
-                            self.total_size = total_size
-                            self._lock = threading.Lock()
-                            self.partial_results = []
-
-                        def increment(self, result=None):
-                            with self._lock:
-                                self.current_count += 1
-                                if result is not None:
-                                    # Store partial result
-                                    self.partial_results.append(result)
-
-                                # Directly call the store method - no need for asyncio here
-                                # since we're already in a separate thread
-                                try:
-                                    self.store.update_batch_progress(
-                                        self.batch_id,
-                                        self.current_count,
-                                        self.partial_results,
-                                    )
-                                except Exception as e:
-                                    logger.error(
-                                        f"Error updating progress: {e}"
-                                    )
-                                return self.current_count
-
-                    # Create a progress tracker
-                    progress_tracker = ProgressTracker(
-                        self.run_store, batch_id, batch_size
-                    )
-
-                    # Define a custom worker that reports progress
-                    async def progress_aware_worker(index, item_inputs):
-                        try:
-                            result = await self.flock.run_async(
-                                start_agent=request.agent_name,
-                                input=item_inputs,
-                                box_result=request.box_results,
-                            )
-                            # Report progress after each item
-                            progress_tracker.increment(result)
-                            return result
-                        except Exception as e:
-                            logger.error(
-                                f"Error processing batch item {index}: {e}"
-                            )
-                            progress_tracker.increment(
-                                e if request.return_errors else None
-                            )
-                            if request.return_errors:
-                                return e
-                            return None
-
-                    # Process the batch items with progress tracking
-                    batch_inputs = request.batch_inputs
-                    if isinstance(batch_inputs, list):
-                        # Process list of inputs with progress tracking
-                        tasks = []
-                        for i, item_inputs in enumerate(batch_inputs):
-                            # Combine with static inputs if provided
-                            full_inputs = {
-                                **(request.static_inputs or {}),
-                                **item_inputs,
-                            }
-                            tasks.append(progress_aware_worker(i, full_inputs))
-
-                        # Run all tasks
-                        if request.parallel and request.max_workers > 1:
-                            # Run in parallel with semaphore for max_workers
-                            semaphore = asyncio.Semaphore(request.max_workers)
-
-                            async def bounded_worker(i, inputs):
-                                async with semaphore:
-                                    return await progress_aware_worker(
-                                        i, inputs
-                                    )
-
-                            bounded_tasks = []
-                            for i, item_inputs in enumerate(batch_inputs):
-                                full_inputs = {
-                                    **(request.static_inputs or {}),
-                                    **item_inputs,
-                                }
-                                bounded_tasks.append(
-                                    bounded_worker(i, full_inputs)
-                                )
-
-                            results = loop.run_until_complete(
-                                asyncio.gather(*bounded_tasks)
-                            )
-                        else:
-                            # Run sequentially
-                            results = []
-                            for i, item_inputs in enumerate(batch_inputs):
-                                full_inputs = {
-                                    **(request.static_inputs or {}),
-                                    **item_inputs,
-                                }
-                                result = loop.run_until_complete(
-                                    progress_aware_worker(i, full_inputs)
-                                )
-                                results.append(result)
-                    else:
-                        # Let the original run_batch_async handle DataFrame or CSV
-                        results = loop.run_until_complete(
-                            self.flock.run_batch_async(
-                                start_agent=request.agent_name,
-                                batch_inputs=request.batch_inputs,
-                                input_mapping=request.input_mapping,
-                                static_inputs=request.static_inputs,
-                                parallel=request.parallel,
-                                max_workers=request.max_workers,
-                                use_temporal=request.use_temporal,
-                                box_results=request.box_results,
-                                return_errors=request.return_errors,
-                                silent_mode=request.silent_mode,
-                                write_to_csv=request.write_to_csv,
-                            )
-                        )
-
-                    # Update progress one last time with final count
-                    if results:
-                        progress_tracker.current_count = len(results)
-                        self.run_store.update_batch_progress(
-                            batch_id,
-                            len(results),
-                            results,  # Include all results as partial results
-                        )
-
-                    # Update store with results from this thread
-                    self.run_store.update_batch_result(batch_id, results)
-
-                    logger.info(
-                        f"Batch run completed (batch_id: {batch_id})",
-                        num_results=len(results),
-                    )
-                    return results
-                except Exception as e:
-                    logger.error(
-                        f"Error in batch run {batch_id} (started with '{request.agent_name}'): {e!s}",
-                        exc_info=True,
-                    )
-                    # Update store status
-                    self.run_store.update_batch_status(
-                        batch_id, "failed", str(e)
-                    )
-                    return None
-                finally:
-                    loop.close()
-
-            # Run the batch processing in a thread pool
+            upload_path = FLOCK_FILES_DIR / flock_file_upload.filename
             try:
-                loop = asyncio.get_running_loop()
-                with ThreadPoolExecutor() as pool:
-                    await loop.run_in_executor(pool, run_batch_sync)
-            except Exception as e:
-                error_msg = f"Error running batch in thread pool: {e!s}"
-                logger.error(error_msg, exc_info=True)
-                self.run_store.update_batch_status(
-                    batch_id, "failed", error_msg
-                )
+                with upload_path.open("wb") as buffer: shutil.copyfileobj(flock_file_upload.file, buffer)
+                filename_to_load = flock_file_upload.filename
+            except Exception as e: error_message = f"Upload failed: {e}"
+            finally: await flock_file_upload.close()
+    else: error_message = "No file uploaded."
 
-        except Exception as e:
-            logger.error(
-                f"Error setting up batch run {batch_id} (started with '{request.agent_name}'): {e!s}",
-                exc_info=True,
-            )
-            # Update store status
-            self.run_store.update_batch_status(batch_id, "failed", str(e))
-            raise  # Re-raise for the endpoint handler
+    if filename_to_load and not error_message:
+        loaded_flock = load_flock_from_file_service(filename_to_load, request.app.state)
+        if loaded_flock:
+            success_message = f"Flock '{loaded_flock.name}' loaded from '{filename_to_load}'."
+            response_headers["HX-Push-Url"] = f"/ui/editor/properties?ui_mode={ui_mode_query}"
+            response_headers["HX-Trigger"] = json.dumps({"flockLoaded": None, "flockFileListChanged": None, "notify": {"type": "success", "message": success_message}})
+            context = get_base_context_web(request, success_message=success_message, ui_mode=ui_mode_query)
+            return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
+        else: error_message = f"Failed to process uploaded '{filename_to_load}'."
 
-    # --- UI Helper Methods (kept here as they are called by endpoints via self) ---
+    response_headers["HX-Trigger"] = json.dumps({"notify": {"type": "error", "message": error_message or "Upload failed."}})
+    context = get_base_context_web(request, error=error_message or "Upload action failed.", ui_mode=ui_mode_query)
+    return templates.TemplateResponse("partials/_create_flock_form.html", context, headers=response_headers)
 
-    def _parse_input_spec(self, input_spec: str) -> list[dict[str, str]]:
-        """Parses an agent input string into a list of field definitions."""
-        # Use the implementation moved to ui.utils
-        return parse_input_spec(input_spec)
+@app.post("/ui/create-flock", response_class=HTMLResponse)
+async def ui_create_flock_action(request: Request, flock_name: str = Form(...), default_model: str = Form(None), description: str = Form(None)):
+    ui_mode_query = request.query_params.get("ui_mode", "standalone")
+    if not flock_name.strip():
+        context = get_base_context_web(request, error="Flock name cannot be empty.", ui_mode=ui_mode_query)
+        return templates.TemplateResponse("partials/_create_flock_form.html", context)
 
-    def _format_result_to_html(self, data: Any) -> str:
-        """Recursively formats a Python object into an HTML string."""
-        # Use the implementation moved to ui.utils
-        return format_result_to_html(data)
+    new_flock = create_new_flock_service(flock_name, default_model, description, request.app.state)
+    success_msg = f"New flock '{new_flock.name}' created. Configure properties and save."
+    response_headers = {"HX-Push-Url": f"/ui/editor/properties?ui_mode={ui_mode_query}", "HX-Trigger": json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_msg}})}
+    context = get_base_context_web(request, success_message=success_msg, ui_mode=ui_mode_query)
+    return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
 
-    def _type_convert_inputs(
-        self, agent_name: str, inputs: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Converts input values (esp. from forms) to expected Python types."""
-        typed_inputs = {}
-        agent_def = self.flock.agents.get(agent_name)
-        if not agent_def or not agent_def.input:
-            return inputs  # Return original if no spec
+@app.get("/ui/settings", response_class=HTMLResponse)
+async def page_settings(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
+    context = get_base_context_web(request, error, success, ui_mode)
+    context["initial_content_url"] = "/ui/htmx/settings-view"
+    return templates.TemplateResponse("base.html", context)
 
-        parsed_fields = self._parse_input_spec(agent_def.input)
-        field_types = {f["name"]: f["type"] for f in parsed_fields}
+def _prepare_env_vars_for_template_web():
+    env_vars_raw = load_env_file_web(); show_secrets = get_show_secrets_setting_web(env_vars_raw)
+    env_vars_list = []
+    for name, value in env_vars_raw.items():
+        if name.startswith("#") or name == "": continue
+        display_value = value if (not is_sensitive_web(name) or show_secrets) else mask_sensitive_value_web(value)
+        env_vars_list.append({"name": name, "value": display_value})
+    return env_vars_list, show_secrets
 
-        for k, v in inputs.items():
-            target_type = field_types.get(k)
-            if target_type and target_type.startswith("bool"):
-                typed_inputs[k] = (
-                    str(v).lower() in ["true", "on", "1", "yes"]
-                    if isinstance(v, str)
-                    else bool(v)
-                )
-            elif target_type and target_type.startswith("int"):
-                try:
-                    typed_inputs[k] = int(v)
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"Could not convert input '{k}' value '{v}' to int for agent '{agent_name}'"
-                    )
-                    typed_inputs[k] = v
-            elif target_type and target_type.startswith("float"):
-                try:
-                    typed_inputs[k] = float(v)
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"Could not convert input '{k}' value '{v}' to float for agent '{agent_name}'"
-                    )
-                    typed_inputs[k] = v
-            # TODO: Add list/dict parsing (e.g., json.loads) if needed
-            else:
-                typed_inputs[k] = v  # Assume string or already correct type
-        return typed_inputs
+@app.get("/ui/htmx/settings-view", response_class=HTMLResponse)
+async def htmx_get_settings_view(request: Request):
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    theme_name = get_current_theme_name()
+    themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")] if THEMES_DIR and THEMES_DIR.exists() else []
+    return templates.TemplateResponse("partials/_settings_view.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets, "themes": themes_available, "current_theme": theme_name})
 
-    # --- Server Start/Stop ---
+@app.post("/ui/htmx/toggle-show-secrets", response_class=HTMLResponse)
+async def htmx_toggle_show_secrets(request: Request):
+    env_vars_raw = load_env_file_web(); current = get_show_secrets_setting_web(env_vars_raw)
+    set_show_secrets_setting_web(not current)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-    def start(
-        self,
-        host: str = "0.0.0.0",
-        port: int = 8344,
-        server_name: str = "Flock API",
-        create_ui: bool = False,
-        #custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
-    ):
-        """Start the API server. If create_ui is True, it mounts the new webapp or the old FastHTML UI at the root."""
-        if create_ui:
-            if NEW_UI_SERVICE_AVAILABLE and WEBAPP_FASTAPI_APP:
-                logger.info(
-                    f"Preparing to mount new Scoped Web UI at root for Flock: {self.flock.name}"
-                )
-                try:
-                    # Set the flock instance for the webapp
-                    set_current_flock_instance_programmatically(
-                        self.flock,
-                        f"{self.flock.name.replace(' ', '_').lower()}_api_scoped.flock",
-                    )
-                    logger.info(
-                        f"Flock '{self.flock.name}' set for the new web UI (now part of the main app)."
-                    )
+@app.post("/ui/htmx/env-delete", response_class=HTMLResponse)
+async def htmx_env_delete(request: Request, var_name: str = Form(...)):
+    env_vars_raw = load_env_file_web()
+    if var_name in env_vars_raw: del env_vars_raw[var_name]; save_env_file_web(env_vars_raw)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-                    # Mount the new web UI app at the root of self.app
-                    # The WEBAPP_FASTAPI_APP handles its own routes including '/', static files etc.
-                    # It will need to be started with ui_mode=scoped, which should be handled by
-                    # the client accessing /?ui_mode=scoped initially.
-                    self.app.mount(
-                        "/", WEBAPP_FASTAPI_APP, name="flock_ui_root"
-                    )
-                    logger.info(
-                        f"New Web UI (scoped mode) mounted at root. Access at http://{host}:{port}/?ui_mode=scoped"
-                    )
-                    # No explicit root redirect needed from self.app to WEBAPP_FASTAPI_APP's root,
-                    # as WEBAPP_FASTAPI_APP now *is* the handler for "/".
-                    # The API's own routes (e.g. /api/...) will still be served by self.app if they don't conflict.
+@app.post("/ui/htmx/env-edit", response_class=HTMLResponse)
+async def htmx_env_edit(request: Request, var_name: str = Form(...)):
+    new_value = request.headers.get("HX-Prompt")
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    if new_value is not None:
+        env_vars_raw = load_env_file_web()
+        env_vars_raw[var_name] = new_value
+        save_env_file_web(env_vars_raw)
+        env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-                    logger.info(
-                        f"API server '{server_name}' (with integrated UI) starting on http://{host}:{port}"
-                    )
-                    logger.info(
-                        f"Access the Scoped UI for '{self.flock.name}' at http://{host}:{port}/?ui_mode=scoped"
-                    )
+@app.get("/ui/htmx/env-add-form", response_class=HTMLResponse)
+async def htmx_env_add_form(request: Request):
+    return HTMLResponse("""<form hx-post='/ui/htmx/env-add' hx-target='#env-vars-container' hx-swap='outerHTML' style='display:flex; gap:0.5rem; margin-bottom:0.5rem;'><input name='var_name' placeholder='NAME' required style='flex:2;'><input name='var_value' placeholder='VALUE' style='flex:3;'><button type='submit'>Add</button></form>""")
 
-                except Exception as e:
-                    logger.error(
-                        f"Error setting up or mounting new scoped UI at root: {e}. "
-                        "API will start, UI might be impacted.",
-                        exc_info=True,
-                    )
-            elif FASTHTML_AVAILABLE:  # Fallback to old FastHTML UI
-                logger.warning(
-                    "New webapp not available or WEBAPP_FASTAPI_APP is None. Falling back to old FastHTML UI (mounted at /ui)."
-                )
-                try:
-                    from .ui.routes import create_ui_app
-                except ImportError:
-                    logger.error(
-                        "Failed to import create_ui_app for old UI. API running without UI."
-                    )
-                    FASTHTML_AVAILABLE = False
+@app.post("/ui/htmx/env-add", response_class=HTMLResponse)
+async def htmx_env_add(request: Request, var_name: str = Form(...), var_value: str = Form("")):
+    env_vars_raw = load_env_file_web()
+    env_vars_raw[var_name] = var_value; save_env_file_web(env_vars_raw)
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-                if FASTHTML_AVAILABLE:
-                    logger.info(
-                        "Attempting to create and mount old FastHTML UI at /ui"
-                    )  # Old UI stays at /ui
-                    try:
-                        fh_app = create_ui_app(
-                            self,
-                            api_host=host,
-                            api_port=port,
-                            server_name=server_name,
-                        )
-                        self.app.mount(
-                            "/ui", fh_app, name="old_flock_ui"
-                        )  # Old UI still at /ui
-                        logger.info(
-                            "Old FastHTML UI mounted successfully at /ui."
-                        )
+@app.get("/ui/htmx/theme-preview", response_class=HTMLResponse)
+async def htmx_theme_preview(request: Request, theme: str = Query(None)):
+    theme_name = theme or get_current_theme_name() or DEFAULT_THEME_NAME
+    try:
+        theme_path = THEMES_DIR / f"{theme_name}.toml" if THEMES_DIR else None
+        if not (theme_path and theme_path.exists()): return HTMLResponse("<p>Theme not found.</p>")
+        theme_data = load_theme_from_file(str(theme_path))
+    except Exception as e: return HTMLResponse(f"<p>Error loading theme: {e}</p>")
+    css_vars = alacritty_to_pico(theme_data)
+    css_vars_str = ":root {\n" + "\n".join([f"  {k}: {v};" for k, v in css_vars.items()]) + "\n}"
+    main_colors = [("Background", css_vars.get("--pico-background-color")), ("Text", css_vars.get("--pico-color")), ("Primary", css_vars.get("--pico-primary")), ("Secondary", css_vars.get("--pico-secondary")), ("Muted", css_vars.get("--pico-muted-color"))]
+    return templates.TemplateResponse("partials/_theme_preview.html", {"request": request, "theme_name": theme_name, "css_vars_str": css_vars_str, "main_colors": main_colors})
 
-                        @self.app.get(
-                            "/",
-                            include_in_schema=False,
-                            response_class=RedirectResponse,
-                        )
-                        async def root_redirect_to_old_ui():  # Redirect / to /ui/ for old UI
-                            logger.debug("Redirecting / to /ui/ (old UI)")
-                            return RedirectResponse(url="/ui/", status_code=303)
+@app.post("/ui/apply-theme")
+async def apply_theme(request: Request, theme: str = Form(...)):
+    try:
+        from flock.webapp.app.config import set_current_theme_name
+        set_current_theme_name(theme)
+        headers = {"HX-Refresh": "true"}
+        return HTMLResponse("", headers=headers)
+    except Exception as e: return HTMLResponse(f"Failed to apply theme: {e}", status_code=500)
 
-                        logger.info(
-                            f"Old FastHTML UI available at http://{host}:{port}/ui/"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"An error occurred setting up the old FastHTML UI: {e}. Running API only.",
-                            exc_info=True,
-                        )
-            else:
-                logger.error(
-                    "No UI components available. API running without UI."
-                )
+@app.get("/ui/htmx/settings/env-vars", response_class=HTMLResponse)
+async def htmx_settings_env_vars(request: Request):
+    env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
+    return templates.TemplateResponse("partials/_settings_env_content.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-        if not create_ui:
-            logger.info(
-                f"API server '{server_name}' starting on http://{host}:{port} (UI not requested)."
-            )
-        elif (
-            not (NEW_UI_SERVICE_AVAILABLE and WEBAPP_FASTAPI_APP)
-            and not FASTHTML_AVAILABLE
-        ):
-            logger.info(
-                f"API server '{server_name}' starting on http://{host}:{port}. UI was requested but no components found."
-            )
+@app.get("/ui/htmx/settings/theme", response_class=HTMLResponse)
+async def htmx_settings_theme(request: Request):
+    theme_name = get_current_theme_name()
+    themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")] if THEMES_DIR and THEMES_DIR.exists() else []
+    return templates.TemplateResponse("partials/_settings_theme_content.html", {"request": request, "themes": themes_available, "current_theme": theme_name})
 
-        uvicorn.run(self.app, host=host, port=port)
+if __name__ == "__main__":
+    import uvicorn
+    temp_run_store = RunStore()
+    dev_flock_instance = Flock(name="DevStandaloneFlock", model="test/dummy", enable_logging=True, show_flock_banner=False)
 
-    async def stop(self):
-        """Stop the API server."""
-        logger.info("Stopping API server (cleanup if necessary)")
-        pass
+    set_global_flock_services(dev_flock_instance, temp_run_store)
+    app.state.flock_instance = dev_flock_instance
+    app.state.run_store = temp_run_store
+    app.state.flock_filename = "development_standalone.flock.yaml"
 
-
-# --- End of file ---
+    logger.info("Running webapp.app.main directly for development with a dummy Flock instance.")
+    uvicorn.run(app, host="127.0.0.1", port=8344, reload=True)

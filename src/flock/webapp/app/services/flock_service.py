@@ -1,154 +1,187 @@
-import yaml  # For parsing issues, if any, during load
+# src/flock/webapp/app/services/flock_service.py
+from typing import TYPE_CHECKING, Optional  # Added TYPE_CHECKING
 
-from flock.core import Flock, FlockFactory
+import yaml
+
+# Conditional import for Flock to break the circular dependency
+if TYPE_CHECKING:
+    from flock.core.flock import Flock
+    from flock.core.flock_factory import (
+        FlockFactory,  # If needed for type hints
+    )
+else:
+    # Provide a forward reference or a generic type if needed at runtime before full import
+    # This is often not strictly necessary if it's only used for type hints.
+    # Pydantic v2 handles forward references well.
+    Flock = "flock.core.flock.Flock" # Forward reference as a string
+    FlockFactory = "flock.core.flock_factory.FlockFactory"
+
+
+# Keep other top-level imports that don't cause cycles
+from flock.core.api.run_store import RunStore
 from flock.core.flock_registry import get_registry
-from flock.webapp.app.config import (
-    CURRENT_FLOCK_FILENAME,
-    CURRENT_FLOCK_INSTANCE,
-    FLOCK_FILES_DIR,
-)
+from flock.core.logging.logging import get_logger
+from flock.webapp.app.config import FLOCK_FILES_DIR
+from flock.webapp.app.dependencies import set_global_flock_services
+
+logger = get_logger("webapp.service")
 
 
 def get_available_flock_files() -> list[str]:
+    """Returns a sorted list of available .yaml, .yml, or .flock files."""
     if not FLOCK_FILES_DIR.exists():
         return []
     return sorted(
         [
             f.name
             for f in FLOCK_FILES_DIR.iterdir()
-            if f.is_file() and (f.suffix in [".yaml", ".yml", ".flock"])
+            if f.is_file() and (f.suffix.lower() in [".yaml", ".yml", ".flock"])
         ]
     )
 
+def _ensure_run_store_in_app_state(app_state: dict) -> RunStore:
+    """Ensures a RunStore instance exists in app_state, creating if necessary."""
+    if 'run_store' not in app_state or not isinstance(app_state['run_store'], RunStore):
+        logger.info("RunStore not found or invalid in app_state, creating a new one.")
+        app_state['run_store'] = RunStore()
+    return app_state['run_store']
 
-def load_flock_from_file_service(filename: str) -> Flock | None:
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
+
+def load_flock_from_file_service(filename: str, app_state: dict) -> Optional["Flock"]: # Use string literal for type hint
+    """Loads a Flock instance from a specified file.
+    Updates app_state with the loaded flock and its filename.
+    Updates the global dependency injection services.
+    """
+    # Import Flock here, inside the function, to ensure it's fully loaded when called
+    from flock.core.flock import Flock as ConcreteFlock
+
     file_path = FLOCK_FILES_DIR / filename
     if not file_path.exists():
-        print(f"Error: File not found {file_path}")
-        CURRENT_FLOCK_INSTANCE = None
-        CURRENT_FLOCK_FILENAME = None
+        logger.error(f"Flock file not found: {file_path}")
+        clear_current_flock_service(app_state)
         return None
     try:
-        # Temporarily clear registry parts that might be file-specific if needed,
-        # or ensure load_from_file handles re-registration gracefully.
-        # For MVP, assume load_from_file is robust enough.
-        CURRENT_FLOCK_INSTANCE = Flock.load_from_file(str(file_path))
-        CURRENT_FLOCK_FILENAME = filename
-        print(
-            f"Successfully loaded flock: {CURRENT_FLOCK_INSTANCE.name if CURRENT_FLOCK_INSTANCE else 'None'}"
-        )
-        return CURRENT_FLOCK_INSTANCE
+        logger.info(f"Loading flock from: {file_path}")
+        loaded_flock = ConcreteFlock.load_from_file(str(file_path)) # Use ConcreteFlock
+
+        app_state['flock_instance'] = loaded_flock
+        app_state['flock_filename'] = filename
+        run_store = _ensure_run_store_in_app_state(app_state)
+        set_global_flock_services(loaded_flock, run_store)
+
+        logger.info(f"Service: Successfully loaded flock '{loaded_flock.name if loaded_flock else 'None'}' from '{filename}'. DI updated.")
+        return loaded_flock
     except Exception as e:
-        print(f"Error loading flock from {file_path}: {e}")
-        CURRENT_FLOCK_INSTANCE = None
-        CURRENT_FLOCK_FILENAME = None
+        logger.error(f"Service: Error loading flock from {file_path}: {e}", exc_info=True)
+        clear_current_flock_service(app_state)
         return None
 
 
 def create_new_flock_service(
-    name: str, model: str | None, description: str | None
-) -> Flock:
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
+    name: str, model: str | None, description: str | None, app_state: dict
+) -> "Flock": # Use string literal
+    """Creates a new Flock instance.
+    Updates app_state and DI services.
+    """
+    from flock.core.flock import Flock as ConcreteFlock  # Local import
+
     effective_model = model.strip() if model and model.strip() else None
-    CURRENT_FLOCK_INSTANCE = Flock(
+    new_flock = ConcreteFlock( # Use ConcreteFlock
         name=name,
         model=effective_model,
         description=description,
         show_flock_banner=False,
-        enable_logging=False,
+        enable_logging=True,
     )
-    CURRENT_FLOCK_FILENAME = f"{name.replace(' ', '_').lower()}.flock.yaml"
-    print(f"Created new flock: {name}")
-    return CURRENT_FLOCK_INSTANCE
+    default_filename = f"{name.replace(' ', '_').lower()}.flock.yaml"
+
+    app_state['flock_instance'] = new_flock
+    app_state['flock_filename'] = default_filename
+    run_store = _ensure_run_store_in_app_state(app_state)
+    set_global_flock_services(new_flock, run_store)
+
+    logger.info(f"Service: Created new flock '{name}'. DI updated. Default filename: '{default_filename}'.")
+    return new_flock
 
 
-def get_current_flock_instance() -> Flock | None:
-    return CURRENT_FLOCK_INSTANCE
-
-
-def get_current_flock_filename() -> str | None:
-    return CURRENT_FLOCK_FILENAME
-
-
-def set_current_flock_instance_programmatically(flock: Flock, filename: str):
-    """Sets the current flock instance and filename programmatically.
-    Used when launching the UI with a pre-loaded flock from an external source (e.g., API server).
+def clear_current_flock_service(app_state: dict):
+    """Clears the current Flock from app_state and updates DI services.
     """
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
-    CURRENT_FLOCK_INSTANCE = flock
-    CURRENT_FLOCK_FILENAME = filename
-    print(
-        f"Programmatically set flock: {filename} (Name: {flock.name if flock else 'None'})"
-    )
+    app_state.pop('flock_instance', None)
+    app_state.pop('flock_filename', None)
+
+    run_store = _ensure_run_store_in_app_state(app_state)
+    set_global_flock_services(None, run_store)
+    logger.info("Service: Current flock cleared from app_state. DI updated (Flock is None).")
 
 
-def set_current_flock_filename(filename: str | None):
-    global CURRENT_FLOCK_FILENAME
-    CURRENT_FLOCK_FILENAME = filename
-
-
-def clear_current_flock():
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
-    CURRENT_FLOCK_INSTANCE = None
-    CURRENT_FLOCK_FILENAME = None
-    print("Current flock cleared.")
-
-
-def save_current_flock_to_file_service(new_filename: str) -> tuple[bool, str]:
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
-    if not CURRENT_FLOCK_INSTANCE:
+def save_current_flock_to_file_service(new_filename: str, app_state: dict) -> tuple[bool, str]:
+    """Saves the Flock from app_state to a file. Updates app_state's filename on success.
+    """
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal for hint
+    if not current_flock:
         return False, "No flock loaded to save."
     if not new_filename.strip():
         return False, "Filename cannot be empty."
+
     save_path = FLOCK_FILES_DIR / new_filename
     try:
-        CURRENT_FLOCK_INSTANCE.to_yaml_file(str(save_path))
-        CURRENT_FLOCK_FILENAME = new_filename
-        return True, f"Flock saved to {new_filename}."
+        current_flock.to_yaml_file(str(save_path))
+        app_state['flock_filename'] = new_filename
+        logger.info(f"Service: Flock '{current_flock.name}' saved to '{new_filename}'.")
+        return True, f"Flock saved to '{new_filename}'."
     except Exception as e:
+        logger.error(f"Service: Error saving flock '{current_flock.name}' to {save_path}: {e}", exc_info=True)
         return False, f"Error saving flock: {e}"
 
 
 def update_flock_properties_service(
-    name: str, model: str | None, description: str | None
+    name: str, model: str | None, description: str | None, app_state: dict
 ) -> bool:
-    # ... (same as before)
-    global CURRENT_FLOCK_INSTANCE, CURRENT_FLOCK_FILENAME
-    if not CURRENT_FLOCK_INSTANCE:
-        return False
-    old_name_default_filename = (
-        f"{CURRENT_FLOCK_INSTANCE.name.replace(' ', '_').lower()}.flock.yaml"
-    )
-    if (
-        old_name_default_filename == CURRENT_FLOCK_FILENAME
-        and CURRENT_FLOCK_INSTANCE.name != name
-    ):
-        CURRENT_FLOCK_FILENAME = f"{name.replace(' ', '_').lower()}.flock.yaml"
+    """Updates properties of the Flock in app_state. Updates app_state's filename if name changes.
+    """
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal
+    current_filename: str | None = app_state.get('flock_filename')
 
-    CURRENT_FLOCK_INSTANCE.name = name
-    CURRENT_FLOCK_INSTANCE.model = (
-        model.strip() if model and model.strip() else None
-    )
-    CURRENT_FLOCK_INSTANCE.description = description
+    if not current_flock:
+        logger.warning("Service: Attempted to update properties, but no flock loaded.")
+        return False
+
+    old_name = current_flock.name
+    old_name_default_filename = f"{old_name.replace(' ', '_').lower()}.flock.yaml"
+
+    current_flock.name = name
+    current_flock.model = model.strip() if model and model.strip() else None
+    current_flock.description = description
+
+    if current_filename == old_name_default_filename and old_name != name:
+        new_default_filename = f"{name.replace(' ', '_').lower()}.flock.yaml"
+        app_state['flock_filename'] = new_default_filename
+        logger.info(f"Service: Default filename updated to '{new_default_filename}' due to flock name change.")
+
+    logger.info(f"Service: Flock properties updated for '{name}'.")
     return True
 
 
-def add_agent_to_current_flock_service(agent_config: dict) -> bool:
-    # ... (same as before) ...
-    global CURRENT_FLOCK_INSTANCE
-    if not CURRENT_FLOCK_INSTANCE:
+def add_agent_to_current_flock_service(agent_config: dict, app_state: dict) -> bool:
+    """Adds an agent to the Flock in app_state."""
+    from flock.core.flock_factory import (
+        FlockFactory as ConcreteFlockFactory,  # Local import
+    )
+
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal
+    if not current_flock:
+        logger.warning("Service: Cannot add agent, no flock loaded.")
         return False
+
     registry = get_registry()
     tools_instances = []
     if agent_config.get("tools_names"):
         for tool_name in agent_config["tools_names"]:
-            try:
-                tools_instances.append(registry.get_callable(tool_name))
-            except KeyError:
-                print(f"Warning: Tool '{tool_name}' not found. Skipping.")
+            try: tools_instances.append(registry.get_callable(tool_name))
+            except KeyError: logger.warning(f"Service: Tool '{tool_name}' not found in registry. Skipping for agent '{agent_config['name']}'.")
     try:
-        agent = FlockFactory.create_default_agent(
+        agent = ConcreteFlockFactory.create_default_agent( # Use ConcreteFlockFactory
             name=agent_config["name"],
             description=agent_config.get("description"),
             model=agent_config.get("model"),
@@ -156,127 +189,121 @@ def add_agent_to_current_flock_service(agent_config: dict) -> bool:
             output=agent_config["output"],
             tools=tools_instances or None,
         )
-        handoff_target = agent_config.get("default_router_handoff")
-        if handoff_target:
-            from flock.routers.default.default_router import DefaultRouterConfig
-
-            agent.add_component(DefaultRouterConfig(hand_off=handoff_target))
-        CURRENT_FLOCK_INSTANCE.add_agent(agent)
+        current_flock.add_agent(agent)
+        logger.info(f"Service: Agent '{agent.name}' added to flock '{current_flock.name}'.")
         return True
     except Exception as e:
-        print(f"Error adding agent: {e}")
+        logger.error(f"Service: Error adding agent to flock '{current_flock.name}': {e}", exc_info=True)
         return False
 
 
 def update_agent_in_current_flock_service(
-    original_agent_name: str, agent_config: dict
+    original_agent_name: str, agent_config: dict, app_state: dict
 ) -> bool:
-    # ... (same as before) ...
-    global CURRENT_FLOCK_INSTANCE
-    if not CURRENT_FLOCK_INSTANCE:
+    """Updates an agent in the Flock in app_state."""
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal
+    if not current_flock:
+        logger.warning("Service: Cannot update agent, no flock loaded.")
         return False
-    agent_to_update = CURRENT_FLOCK_INSTANCE.agents.get(original_agent_name)
+
+    agent_to_update = current_flock.agents.get(original_agent_name)
     if not agent_to_update:
+        logger.warning(f"Service: Agent '{original_agent_name}' not found in flock '{current_flock.name}' for update.")
         return False
+
     registry = get_registry()
     tools_instances = []
     if agent_config.get("tools_names"):
         for tool_name in agent_config["tools_names"]:
-            try:
-                tools_instances.append(registry.get_callable(tool_name))
-            except KeyError:
-                print(f"Warning: Tool '{tool_name}' not found. Skipping.")
+            try: tools_instances.append(registry.get_callable(tool_name))
+            except KeyError: logger.warning(f"Service: Tool '{tool_name}' not found. Skipping for agent update.")
     try:
         new_name = agent_config["name"]
         agent_to_update.description = agent_config.get("description")
-        agent_to_update.model = agent_config.get("model")
+        current_agent_model = agent_config.get("model")
+        agent_to_update.model = current_agent_model if current_agent_model and current_agent_model.strip() else None
         agent_to_update.input = agent_config["input"]
         agent_to_update.output = agent_config["output"]
-        agent_to_update.tools = tools_instances or None
-        handoff_target = agent_config.get("default_router_handoff")
-        if handoff_target:
-            from flock.routers.default.default_router import DefaultRouterConfig
+        agent_to_update.tools = tools_instances or []
 
-            agent_to_update.add_component(
-                DefaultRouterConfig(hand_off=handoff_target)
-            )
-        elif agent_to_update.handoff_router:
-            agent_to_update.handoff_router = None
         if original_agent_name != new_name:
-            CURRENT_FLOCK_INSTANCE._agents[new_name] = (
-                CURRENT_FLOCK_INSTANCE._agents.pop(original_agent_name)
-            )
-        agent_to_update.name = new_name
+            current_flock._agents.pop(original_agent_name)
+            agent_to_update.name = new_name
+            current_flock.add_agent(agent_to_update)
+            logger.info(f"Service: Agent '{original_agent_name}' renamed to '{new_name}' and updated in flock '{current_flock.name}'.")
+        else:
+            logger.info(f"Service: Agent '{original_agent_name}' updated in flock '{current_flock.name}'.")
         return True
     except Exception as e:
-        print(f"Error updating agent: {e}")
+        logger.error(f"Service: Error updating agent '{original_agent_name}' in flock '{current_flock.name}': {e}", exc_info=True)
         return False
 
 
-def remove_agent_from_current_flock_service(agent_name: str) -> bool:
-    # ... (same as before) ...
-    global CURRENT_FLOCK_INSTANCE
-    if (
-        not CURRENT_FLOCK_INSTANCE
-        or agent_name not in CURRENT_FLOCK_INSTANCE.agents
-    ):
+def remove_agent_from_current_flock_service(agent_name: str, app_state: dict) -> bool:
+    """Removes an agent from the Flock in app_state."""
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal
+    if not current_flock or agent_name not in current_flock.agents:
+        logger.warning(f"Service: Cannot remove agent '{agent_name}', no flock or agent not found.")
         return False
-    del CURRENT_FLOCK_INSTANCE._agents[agent_name]
-    return True
+    try:
+        del current_flock._agents[agent_name]
+        logger.info(f"Service: Agent '{agent_name}' removed from flock '{current_flock.name}'.")
+        return True
+    except Exception as e:
+        logger.error(f"Service: Error removing agent '{agent_name}' from flock '{current_flock.name}': {e}", exc_info=True)
+        return False
 
 
 async def run_current_flock_service(
-    start_agent_name: str, inputs: dict
+    start_agent_name: str, inputs: dict, app_state: dict
 ) -> dict | str:
-    global CURRENT_FLOCK_INSTANCE
-    if not CURRENT_FLOCK_INSTANCE:
+    """Runs the Flock instance from app_state."""
+    current_flock: Flock | None = getattr(app_state, 'flock_instance', None) # Use string literal
+    if not current_flock:
+        logger.error("Service: Execution failed, no flock loaded.")
         return "Error: No flock loaded."
-    if (
-        not start_agent_name
-        or start_agent_name not in CURRENT_FLOCK_INSTANCE.agents
-    ):
+    if not start_agent_name or start_agent_name not in current_flock.agents:
+        logger.error(f"Service: Execution failed, start agent '{start_agent_name}' not found in flock '{current_flock.name}'.")
         return f"Error: Start agent '{start_agent_name}' not found."
     try:
-        result = await CURRENT_FLOCK_INSTANCE.run_async(
+        logger.info(f"Service: Running flock '{current_flock.name}' starting with agent '{start_agent_name}'.")
+        result = await current_flock.run_async(
             start_agent=start_agent_name, input=inputs, box_result=False
         )
-        # Don't convert here - let the API route handle it to avoid double conversion
         return result
     except Exception as e:
-        print(f"Error during flock execution: {e}")
+        logger.error(f"Service: Error during flock execution for '{current_flock.name}': {e}", exc_info=True)
         return f"Error: {e!s}"
 
 
 def get_registered_items_service(item_type: str) -> list:
-    # ... (same as before) ...
+    """Retrieves items of a specific type from the global FlockRegistry."""
     registry = get_registry()
-    items, items_dict = [], None
-    if item_type == "type":
-        items_dict = registry._types
-    elif item_type == "tool":
-        items_dict = registry._callables
-    elif item_type == "component":
-        items_dict = registry._components
-    else:
-        return []
+    items_dict: dict | None = None
+    if item_type == "type":      items_dict = registry._types
+    elif item_type == "tool":    items_dict = registry._callables
+    elif item_type == "component": items_dict = registry._components
+    else: return []
+
+    if items_dict is None: return []
+
+    items = []
     for name, item_obj in items_dict.items():
         module_path = "N/A"
-        try:
-            module_path = item_obj.__module__
-        except AttributeError:
-            pass
+        try: module_path = item_obj.__module__
+        except AttributeError: pass
         items.append({"name": name, "module": module_path})
     return sorted(items, key=lambda x: x["name"])
 
 
 def get_flock_preview_service(filename: str) -> dict | None:
-    """Loads only basic properties of a flock file for preview without full deserialization."""
+    """Loads basic properties of a flock file for preview."""
     file_path = FLOCK_FILES_DIR / filename
     if not file_path.exists():
+        logger.warning(f"Service: Preview failed, file not found {file_path}")
         return None
     try:
         with file_path.open("r", encoding="utf-8") as f:
-            # Load YAML just to get top-level keys
             data = yaml.safe_load(f)
             if isinstance(data, dict):
                 return {
@@ -284,8 +311,10 @@ def get_flock_preview_service(filename: str) -> dict | None:
                     "model": data.get("model"),
                     "description": data.get("description"),
                     "agents_count": len(data.get("agents", {})),
+                    "enable_temporal": data.get("enable_temporal", False)
                 }
+        logger.warning(f"Service: Preview failed, '{filename}' is not a valid Flock YAML (not a dict).")
         return {"name": filename, "error": "Not a valid Flock YAML structure"}
     except Exception as e:
-        print(f"Error getting flock preview for {filename}: {e}")
+        logger.error(f"Service: Error getting flock preview for {filename}: {e}", exc_info=True)
         return {"name": filename, "error": str(e)}

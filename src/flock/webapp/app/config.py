@@ -1,8 +1,11 @@
 import os
 import random  # Added for random theme selection
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from flock.core import Flock  # Add type hint
+if TYPE_CHECKING:
+    from flock.core.flock import Flock
+
 from flock.core.logging.formatters.themes import OutputTheme
 
 FLOCK_FILES_DIR = Path(os.getenv("FLOCK_FILES_DIR", "./.flock_ui_projects"))
@@ -18,7 +21,7 @@ FLOCK_BASE_DIR = FLOCK_WEBAPP_DIR.parent # src/flock/
 THEMES_DIR = FLOCK_BASE_DIR / "themes"
 
 # Global state for MVP - NOT SUITABLE FOR PRODUCTION/MULTI-USER
-CURRENT_FLOCK_INSTANCE: Flock | None = None
+CURRENT_FLOCK_INSTANCE: "Flock | None" = None
 CURRENT_FLOCK_FILENAME: str | None = None
 
 DEFAULT_THEME_NAME = OutputTheme.ayu.value # Default if random fails or invalid theme specified
