@@ -186,7 +186,7 @@ def get_base_context_web(
         "active_theme_name": theme_name,
     }
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_dashboard(
     request: Request, error: str = None, success: str = None, ui_mode: str = Query(None)
 ):
@@ -211,7 +211,7 @@ async def page_dashboard(
         context["initial_content_url"] = "/ui/htmx/load-flock-view"
     return templates.TemplateResponse("base.html", context)
 
-@app.get("/ui/editor/{section:path}", response_class=HTMLResponse)
+@app.get("/ui/editor/{section:path}", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_editor_section(
     request: Request, section: str, success: str = None, error: str = None, ui_mode: str = Query("standalone")
 ):
@@ -232,49 +232,49 @@ async def page_editor_section(
     if section not in content_map: context["error_message"] = "Invalid editor section."
     return templates.TemplateResponse("base.html", context)
 
-@app.get("/ui/registry", response_class=HTMLResponse)
+@app.get("/ui/registry", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_registry(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
     context["initial_content_url"] = "/ui/htmx/registry-viewer"
     return templates.TemplateResponse("base.html", context)
 
-@app.get("/ui/create", response_class=HTMLResponse)
+@app.get("/ui/create", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_create(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     clear_current_flock_service(request.app.state) # Pass app.state
     context = get_base_context_web(request, error, success, "standalone")
     context["initial_content_url"] = "/ui/htmx/create-flock-form"
     return templates.TemplateResponse("base.html", context)
 
-@app.get("/ui/htmx/sidebar", response_class=HTMLResponse)
+@app.get("/ui/htmx/sidebar", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_sidebar(request: Request, ui_mode: str = Query("standalone")):
     return templates.TemplateResponse("partials/_sidebar.html", get_base_context_web(request, ui_mode=ui_mode))
 
-@app.get("/ui/htmx/header-flock-status", response_class=HTMLResponse)
+@app.get("/ui/htmx/header-flock-status", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_header_flock_status(request: Request, ui_mode: str = Query("standalone")):
     return templates.TemplateResponse("partials/_header_flock_status.html", get_base_context_web(request, ui_mode=ui_mode))
 
-@app.get("/ui/htmx/load-flock-view", response_class=HTMLResponse)
+@app.get("/ui/htmx/load-flock-view", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_load_flock_view(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     return templates.TemplateResponse("partials/_load_manager_view.html", get_base_context_web(request, error, success, ui_mode))
 
-@app.get("/ui/htmx/dashboard-flock-file-list", response_class=HTMLResponse)
+@app.get("/ui/htmx/dashboard-flock-file-list", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_dashboard_flock_file_list_partial(request: Request):
     return templates.TemplateResponse("partials/_dashboard_flock_file_list.html", {"request": request, "flock_files": get_available_flock_files()})
 
-@app.get("/ui/htmx/dashboard-default-action-pane", response_class=HTMLResponse)
+@app.get("/ui/htmx/dashboard-default-action-pane", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_dashboard_default_action_pane(request: Request):
     return HTMLResponse("""<article style="text-align:center; margin-top: 2rem; border: none; background: transparent;"><p>Select a Flock from the list to view its details and load it into the editor.</p><hr><p>Or, create a new Flock or upload an existing one using the "Create New Flock" option in the sidebar.</p></article>""")
 
-@app.get("/ui/htmx/dashboard-flock-properties-preview/{filename}", response_class=HTMLResponse)
+@app.get("/ui/htmx/dashboard-flock-properties-preview/{filename}", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_dashboard_flock_properties_preview(request: Request, filename: str):
     preview_flock_data = get_flock_preview_service(filename)
     return templates.TemplateResponse("partials/_dashboard_flock_properties_preview.html", {"request": request, "selected_filename": filename, "preview_flock": preview_flock_data})
 
-@app.get("/ui/htmx/create-flock-form", response_class=HTMLResponse)
+@app.get("/ui/htmx/create-flock-form", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_create_flock_form(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     return templates.TemplateResponse("partials/_create_flock_form.html", get_base_context_web(request, error, success, ui_mode))
 
-@app.get("/ui/htmx/agent-manager-view", response_class=HTMLResponse)
+@app.get("/ui/htmx/agent-manager-view", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_agent_manager_view(request: Request):
     context = get_base_context_web(request) # This gets flock from app.state
     if not context.get("current_flock"): # Check if flock exists in the context
@@ -285,22 +285,22 @@ async def htmx_get_agent_manager_view(request: Request):
         {"request": request, "flock": context.get("current_flock")}
     )
 
-@app.get("/ui/htmx/registry-viewer", response_class=HTMLResponse)
+@app.get("/ui/htmx/registry-viewer", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_registry_viewer(request: Request):
     return templates.TemplateResponse("partials/_registry_viewer_content.html", get_base_context_web(request))
 
-@app.get("/ui/htmx/execution-view-container", response_class=HTMLResponse)
+@app.get("/ui/htmx/execution-view-container", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_execution_view_container(request: Request):
     context = get_base_context_web(request)
     if not context.get("current_flock"): return HTMLResponse("<article class='error'><p>No Flock loaded. Cannot execute.</p></article>")
     return templates.TemplateResponse("partials/_execution_view_container.html", context)
 
-@app.get("/ui/htmx/scoped-no-flock-view", response_class=HTMLResponse)
+@app.get("/ui/htmx/scoped-no-flock-view", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_scoped_no_flock_view(request: Request):
     return HTMLResponse("""<article style="text-align:center; margin-top: 2rem; border: none; background: transparent;"><hgroup><h2>Scoped Flock Mode</h2><h3>No Flock Loaded</h3></hgroup><p>This UI is in a scoped mode, expecting a Flock to be pre-loaded.</p><p>Please ensure the calling application provides a Flock instance.</p></article>""")
 
 # --- Action Routes (POST requests for UI interactions) ---
-@app.post("/ui/load-flock-action/by-name", response_class=HTMLResponse)
+@app.post("/ui/load-flock-action/by-name", response_class=HTMLResponse, tags=["UI Actions"])
 async def ui_load_flock_by_name_action(request: Request, selected_flock_filename: str = Form(...)):
     loaded_flock = load_flock_from_file_service(selected_flock_filename, request.app.state)
     response_headers = {}
@@ -319,7 +319,7 @@ async def ui_load_flock_by_name_action(request: Request, selected_flock_filename
         context["error_message_inline"] = error_message_text # For direct display in partial
         return templates.TemplateResponse("partials/_load_manager_view.html", context, headers=response_headers)
 
-@app.post("/ui/load-flock-action/by-upload", response_class=HTMLResponse)
+@app.post("/ui/load-flock-action/by-upload", response_class=HTMLResponse, tags=["UI Actions"])
 async def ui_load_flock_by_upload_action(request: Request, flock_file_upload: UploadFile = File(...)):
     error_message_text, filename_to_load, response_headers = None, None, {}
     ui_mode_query = request.query_params.get("ui_mode", "standalone")
@@ -352,7 +352,7 @@ async def ui_load_flock_by_upload_action(request: Request, flock_file_upload: Up
     context = get_base_context_web(request, error=final_error_msg, ui_mode=ui_mode_query)
     return templates.TemplateResponse("partials/_create_flock_form.html", context, headers=response_headers)
 
-@app.post("/ui/create-flock", response_class=HTMLResponse)
+@app.post("/ui/create-flock", response_class=HTMLResponse, tags=["UI Actions"])
 async def ui_create_flock_action(request: Request, flock_name: str = Form(...), default_model: str = Form(None), description: str = Form(None)):
     ui_mode_query = request.query_params.get("ui_mode", "standalone")
     if not flock_name.strip():
@@ -368,7 +368,7 @@ async def ui_create_flock_action(request: Request, flock_name: str = Form(...), 
     return templates.TemplateResponse("partials/_flock_properties_form.html", context, headers=response_headers)
 
 # --- Settings Page & Endpoints ---
-@app.get("/ui/settings", response_class=HTMLResponse)
+@app.get("/ui/settings", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_settings(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
     context["initial_content_url"] = "/ui/htmx/settings-view"
@@ -383,28 +383,28 @@ def _prepare_env_vars_for_template_web():
         env_vars_list.append({"name": name, "value": display_value})
     return env_vars_list, show_secrets
 
-@app.get("/ui/htmx/settings-view", response_class=HTMLResponse)
+@app.get("/ui/htmx/settings-view", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_get_settings_view(request: Request):
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     theme_name = get_current_theme_name()
     themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")] if THEMES_DIR and THEMES_DIR.exists() else []
     return templates.TemplateResponse("partials/_settings_view.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets, "themes": themes_available, "current_theme": theme_name})
 
-@app.post("/ui/htmx/toggle-show-secrets", response_class=HTMLResponse)
+@app.post("/ui/htmx/toggle-show-secrets", response_class=HTMLResponse, tags=["UI Actions"])
 async def htmx_toggle_show_secrets(request: Request):
     env_vars_raw = load_env_file_web(); current = get_show_secrets_setting_web(env_vars_raw)
     set_show_secrets_setting_web(not current)
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-@app.post("/ui/htmx/env-delete", response_class=HTMLResponse)
+@app.post("/ui/htmx/env-delete", response_class=HTMLResponse, tags=["UI Actions"])
 async def htmx_env_delete(request: Request, var_name: str = Form(...)):
     env_vars_raw = load_env_file_web()
     if var_name in env_vars_raw: del env_vars_raw[var_name]; save_env_file_web(env_vars_raw)
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-@app.post("/ui/htmx/env-edit", response_class=HTMLResponse)
+@app.post("/ui/htmx/env-edit", response_class=HTMLResponse, tags=["UI Actions"])
 async def htmx_env_edit(request: Request, var_name: str = Form(...)):
     new_value = request.headers.get("HX-Prompt")
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
@@ -415,18 +415,18 @@ async def htmx_env_edit(request: Request, var_name: str = Form(...)):
         env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-@app.get("/ui/htmx/env-add-form", response_class=HTMLResponse)
+@app.get("/ui/htmx/env-add-form", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_env_add_form(request: Request):
     return HTMLResponse("""<form hx-post='/ui/htmx/env-add' hx-target='#env-vars-container' hx-swap='outerHTML' style='display:flex; gap:0.5rem; margin-bottom:0.5rem;'><input name='var_name' placeholder='NAME' required style='flex:2;'><input name='var_value' placeholder='VALUE' style='flex:3;'><button type='submit'>Add</button></form>""")
 
-@app.post("/ui/htmx/env-add", response_class=HTMLResponse)
+@app.post("/ui/htmx/env-add", response_class=HTMLResponse, tags=["UI Actions"])
 async def htmx_env_add(request: Request, var_name: str = Form(...), var_value: str = Form("")):
     env_vars_raw = load_env_file_web()
     env_vars_raw[var_name] = var_value; save_env_file_web(env_vars_raw)
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     return templates.TemplateResponse("partials/_env_vars_table.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-@app.get("/ui/htmx/theme-preview", response_class=HTMLResponse)
+@app.get("/ui/htmx/theme-preview", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_theme_preview(request: Request, theme: str = Query(None)):
     theme_name = theme or get_current_theme_name() or DEFAULT_THEME_NAME
     try:
@@ -439,7 +439,7 @@ async def htmx_theme_preview(request: Request, theme: str = Query(None)):
     main_colors = [("Background", css_vars.get("--pico-background-color")), ("Text", css_vars.get("--pico-color")), ("Primary", css_vars.get("--pico-primary")), ("Secondary", css_vars.get("--pico-secondary")), ("Muted", css_vars.get("--pico-muted-color"))]
     return templates.TemplateResponse("partials/_theme_preview.html", {"request": request, "theme_name": theme_name, "css_vars_str": css_vars_str, "main_colors": main_colors})
 
-@app.post("/ui/apply-theme")
+@app.post("/ui/apply-theme", tags=["UI Actions"])
 async def apply_theme(request: Request, theme: str = Form(...)):
     try:
         from flock.webapp.app.config import set_current_theme_name
@@ -448,12 +448,12 @@ async def apply_theme(request: Request, theme: str = Form(...)):
         return HTMLResponse("", headers=headers)
     except Exception as e: return HTMLResponse(f"Failed to apply theme: {e}", status_code=500)
 
-@app.get("/ui/htmx/settings/env-vars", response_class=HTMLResponse)
+@app.get("/ui/htmx/settings/env-vars", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_settings_env_vars(request: Request):
     env_vars_list, show_secrets = _prepare_env_vars_for_template_web()
     return templates.TemplateResponse("partials/_settings_env_content.html", {"request": request, "env_vars": env_vars_list, "show_secrets": show_secrets})
 
-@app.get("/ui/htmx/settings/theme", response_class=HTMLResponse)
+@app.get("/ui/htmx/settings/theme", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_settings_theme(request: Request):
     theme_name = get_current_theme_name()
     themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")] if THEMES_DIR and THEMES_DIR.exists() else []

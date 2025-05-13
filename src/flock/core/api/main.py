@@ -157,5 +157,6 @@ class FlockAPI:
                 summary=current_ep_def.summary,
                 description=current_ep_def.description,
                 dependencies=current_ep_def.dependencies,
+                tags=["Flock API Custom Endpoints"],
             )
             logger.debug(f"Added custom route to app: {current_ep_def.methods} {current_ep_def.path} (Handler: {selected_handler.__name__}, Summary: {current_ep_def.summary})")
