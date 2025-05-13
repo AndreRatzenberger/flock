@@ -1,5 +1,4 @@
 # src/flock/webapp/run.py
-import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -27,7 +26,8 @@ def start_unified_server(
     host: str,
     port: int,
     server_title: str,
-    enable_ui_routes: bool, # Currently, UI routes are always part of the app. This could be used later.
+    enable_ui_routes: bool,
+    enable_chat_routes: bool = False,
     ui_theme: str | None = None,
     custom_endpoints: Sequence["FlockEndpoint"] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
 ):
@@ -37,6 +37,7 @@ def start_unified_server(
       and makes them available via app.state.
     - Configures the UI theme.
     - Stores custom API endpoints for registration during app lifespan startup.
+    - Optionally registers chat routes.
     - Runs Uvicorn.
     """
     print(f"Attempting to start unified server for Flock '{flock_instance.name}' on http://{host}:{port}")
@@ -75,6 +76,7 @@ def start_unified_server(
         fastapi_app.state.flock_filename = getattr(flock_instance, source_file_attr, None) or \
                                            f"{flock_instance.name.replace(' ', '_').lower()}.flock.yaml"
         fastapi_app.state.run_store = run_store_instance
+        fastapi_app.state.chat_enabled = enable_chat_routes
 
         logger.info(f"Flock '{flock_instance.name}' (from '{fastapi_app.state.flock_filename}') made available via app.state.")
 
@@ -103,7 +105,7 @@ def start_unified_server(
         if not enable_ui_routes:
             from fastapi.routing import APIRoute
 
-            allowed_tags = {"Flock API Core", "Flock API Custom Endpoints"}
+            allowed_tags = {"Flock API Core", "Flock API Custom Endpoints", "Chat"}
 
             def _route_is_allowed(route: APIRoute) -> bool:  # type: ignore
                 # Keep documentation and non-API utility routes (no tags)
@@ -122,6 +124,17 @@ def start_unified_server(
             logger.info(
                 f"UI disabled: removed {original_count - len(fastapi_app.router.routes)} UI routes. Remaining routes: {len(fastapi_app.router.routes)}"
             )
+
+        # 5b. Include Chat routes if requested
+        if enable_chat_routes:
+            try:
+                from flock.webapp.app.chat import (
+                    router as chat_router,  # type: ignore
+                )
+                fastapi_app.include_router(chat_router, tags=["Chat"])
+                logger.info("Chat routes enabled and registered.")
+            except Exception as e:
+                logger.error(f"Failed to include chat routes: {e}")
 
         # 6. Run Uvicorn
         logger.info(f"Running Uvicorn with application: flock.webapp.app.main:app")
@@ -163,22 +176,30 @@ def main():
     )
     from flock.webapp.app.dependencies import set_global_flock_services
 
-    # In true standalone, there's no flock instance initially.
-    # The UI handles this "no flock loaded" state.
-    # We still need a RunStore for API calls if they are made.
-    # Pass None for flock_instance to set_global_flock_services.
+    # No pre-loaded Flock instance; create a RunStore so API calls can still function
     standalone_run_store = RunStore()
     set_global_flock_services(None, standalone_run_store)
-    print(f"Standalone mode: Initialized global services. Flock: None, RunStore: {type(standalone_run_store)}")
+
+    print(
+        f"Standalone mode: Initialized global services. Flock: None, RunStore: {type(standalone_run_store)}"
+    )
     print(f"Standalone webapp using theme: {get_current_theme_name()}")
 
+    host = "127.0.0.1"
+    port = 8344
+    try:
+        import os
 
-    host = os.environ.get("FLOCK_WEB_HOST", "127.0.0.1")
-    port = int(os.environ.get("FLOCK_WEB_PORT", "8344"))
-    webapp_reload = os.environ.get("FLOCK_WEB_RELOAD", "true").lower() == "true"
+        host = os.environ.get("FLOCK_WEB_HOST", host)
+        port = int(os.environ.get("FLOCK_WEB_PORT", port))
+        webapp_reload = os.environ.get("FLOCK_WEB_RELOAD", "true").lower() == "true"
+    except Exception:
+        webapp_reload = True
 
-    app_import_string = "flock.webapp.app.main:app" # Uvicorn will import this
-    print(f"Running Uvicorn: app='{app_import_string}', host='{host}', port={port}, reload={webapp_reload}")
+    app_import_string = "flock.webapp.app.main:app"
+    print(
+        f"Running Uvicorn: app='{app_import_string}', host='{host}', port={port}, reload={webapp_reload}"
+    )
 
     uvicorn.run(
         app_import_string,
@@ -187,6 +208,6 @@ def main():
         reload=webapp_reload,
     )
 
+
 if __name__ == "__main__":
-    # This allows running `python -m flock.webapp.run` for standalone UI testing
     main()

@@ -730,6 +730,11 @@ class Flock(BaseModel, Serializable):
         port: int = 8344,
         server_name: str = "Flock Server",
         ui: bool = True,
+        chat: bool = False,
+        chat_agent: str | None = None,  # Reserved for future real agent chat
+        chat_message_key: str = "message",
+        chat_history_key: str = "history",
+        chat_response_key: str = "response",
         ui_theme: str | None = None,
         custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
     ) -> None:
@@ -742,6 +747,11 @@ class Flock(BaseModel, Serializable):
             server_name: Title shown in the OpenAPI docs / logs.
             ui: If True (default) the Pico/HTMX web UI routes are included. If False
                  only the JSON API groups (core & custom) are served.
+            chat: If True, enable chat routes.
+            chat_agent: Name of the agent to use for chat.
+            chat_message_key: Key for chat message in input.
+            chat_history_key: Key for chat history in input.
+            chat_response_key: Key for chat response in output.
             ui_theme: Optional UI theme name or "random".
             custom_endpoints: Additional API routes to add, either as a list of
                  FlockEndpoint objects or the legacy dict format.
@@ -765,6 +775,7 @@ class Flock(BaseModel, Serializable):
             port=port,
             server_title=server_name,
             enable_ui_routes=ui,
+            enable_chat_routes=chat,
             ui_theme=ui_theme,
             custom_endpoints=custom_endpoints,
         )

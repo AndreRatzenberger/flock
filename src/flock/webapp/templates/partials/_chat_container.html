@@ -1,0 +1,9 @@
+<article id="chat-container" class="chat-container">
+    <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
+        <p><em>Loading chat…</em></p>
+    </div>
+    <form id="chat-form" class="chat-form" hx-post="/chat/send" hx-target="#chat-log" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+        <input type="text" name="message" placeholder="Type a message…" required>
+        <button type="submit">Send</button>
+    </form>
+</article> 

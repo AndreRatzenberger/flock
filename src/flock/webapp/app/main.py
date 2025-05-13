@@ -184,6 +184,7 @@ def get_base_context_web(
         "ui_mode": ui_mode,
         "theme_css": theme_css,
         "active_theme_name": theme_name,
+        "chat_enabled": getattr(request.app.state, "chat_enabled", False),
     }
 
 @app.get("/", response_class=HTMLResponse, tags=["UI Pages"])
@@ -459,6 +460,16 @@ async def htmx_settings_theme(request: Request):
     themes_available = [p.stem for p in THEMES_DIR.glob("*.toml")] if THEMES_DIR and THEMES_DIR.exists() else []
     return templates.TemplateResponse("partials/_settings_theme_content.html", {"request": request, "themes": themes_available, "current_theme": theme_name})
 
+@app.get("/ui/chat", response_class=HTMLResponse, tags=["UI Pages"])
+async def page_chat(request: Request, ui_mode: str = Query("standalone")):
+    context = get_base_context_web(request, ui_mode=ui_mode)
+    context["initial_content_url"] = "/ui/htmx/chat-view"
+    return templates.TemplateResponse("base.html", context)
+
+@app.get("/ui/htmx/chat-view", response_class=HTMLResponse, tags=["UI HTMX Partials"])
+async def htmx_get_chat_view(request: Request):
+    # Render container partial; session handled in chat router
+    return templates.TemplateResponse("partials/_chat_container.html", get_base_context_web(request))
 
 if __name__ == "__main__":
     import uvicorn

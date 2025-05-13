@@ -1,3 +1,60 @@
+/* Chat UI Enhancements */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 100%;
+    width: fit-content;
+    margin: auto;
+}
+#chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--pico-card-sectioning-background-color);
+}
+.bubble {
+    padding: .75rem 1rem;
+    border-radius: .75rem;
+    max-width: 70%;
+    margin-bottom: .5rem;
+    word-wrap: break-word;
+}
+.bubble.user {
+    align-self: flex-end;
+    background: var(--pico-primary);
+    color: var(--pico-invert);
+}
+.bubble.bot {
+    align-self: flex-start;
+    background: var(--pico-muted-color);
+    color: var(--pico-color);
+}
+.chat-form {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: .5rem;
+    padding: .75rem;
+    background: var(--pico-card-background-color);
+}
+@media (max-width: 600px) {
+    .chat-container {
+        max-width: 100%;
+        height: 100vh;
+    }
+    #chat-log {
+        padding: .5rem;
+    }
+    .bubble {
+        max-width: 90%;
+        padding: .5rem .75rem;
+    }
+    .chat-form {
+        padding: .5rem;
+        gap: .25rem;
+    }
+}
 /* Global styles */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
@@ -609,4 +666,45 @@ ul.item-list li.selected-item {
     border: unset;
     border-radius: unset;
     background-color: unset;
+}
+
+/* --- Enhanced Chat Styles --- */
+#chat-container { 
+    width:  80%; 
+    max-width: 100%; 
+    margin-inline: 0;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 10rem);
+    background-color: var(--pico-background-color);
+    border-radius: 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+main.container {
+    max-width: 100%;
+    width: 100%;
+    padding: 0;
+}
+
+
+/* -------------------------------------------------------------------------
+   Chat container tweaks when embedded in the main UI (non-standalone mode)
+   ------------------------------------------------------------------------- */
+body:not(.chat-page) #chat-container,
+body:not(.chat-page) .chat-container {
+    /* Let the container grow naturally with content but make sure it is
+       tall enough to be noticed even before any messages appear. */
+    height: auto;
+    min-height: 60vh;
+}
+
+body:not(.chat-page) #chat-container {
+    /* Re-use the same width logic we added for standalone chat but keep it
+       here to ensure the embedded view is centred as well. */
+    width: 100%;
+    max-width: 80%;
+    margin: 0 auto;
 }
