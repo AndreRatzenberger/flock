@@ -21,6 +21,7 @@ body.chat-page {
     height: 100vh;
     background-color: var(--pico-background-color);
     overflow: hidden;
+    padding-bottom: 10px; /* clear space for global footer */
 }
 
 #chat-log { 
@@ -29,7 +30,7 @@ body.chat-page {
     padding: 1rem 1.5rem; 
     display: flex;
     flex-direction: column;
-    min-height: 60vh;
+    min-height: 0;
     gap: 1rem;
     background-color: rgba(0, 0, 0, 0.05);
     background-image: 
@@ -100,6 +101,9 @@ body.chat-page {
     padding: 1rem;
     background-color: var(--pico-card-background-color);
     border-top: 1px solid var(--pico-muted-border-color);
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
 }
 
 #chat-container form input[type="text"] { 
@@ -185,12 +189,14 @@ body.chat-page {
    ------------------------------------------------------------------------- */
 body:not(.chat-page) #chat-container,
 body:not(.chat-page) .chat-container {
-    height: auto;
-    min-height: 60vh;
-    /* share same centering rules */
+    height: 100%;
+    min-height: 0;
+    /* allow full width inside the main content area */
     width: 100%;
-    max-width: 80%;
+    max-width: 100%;
     margin: 0 auto;
+    position: sticky;
+    overflow-y: hidden;
 }
 
 /* Settings form inside chat container should stack vertically */
@@ -224,4 +230,45 @@ body:not(.chat-page) .chat-container {
 body:not(.chat-page) .chat-settings-form .grid button:first-child {
     flex: 0 0 auto;
     width: auto;
+}
+
+/* -------------------------------------------------------------------------
+   Container flex area to ensure chat-log grows/shrinks as needed
+   ------------------------------------------------------------------------- */
+#chat-content-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+/* Prevent double scrollbars when chat is embedded and ensure container fits */
+main.main-content:has(#chat-container) {
+    /* Remove extra spacing applied to normal pages */
+    margin-top: 0;
+    padding: 0; /* remove default paddings so chat fits exactly */
+    /* but keep space so footer not overlay input via internal padding on container */
+    /* Turn into a flexbox so the chat container can grow */
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0; /* allow internal flex items to shrink */
+    overflow: hidden; /* single scroll area handled by chat-log */
+}
+
+/* Also ensure row can shrink in the CSS grid layout */
+main.main-content:has(#chat-container) {
+    min-height: 0;
+}
+
+/* Let the container consume the available height inside flex parent */
+main.main-content:has(#chat-container) #chat-container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    padding-bottom: 30px;
+    position: sticky;
+    overflow-y: hidden; /* clear space for global footer */
 }
