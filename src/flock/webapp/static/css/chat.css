@@ -178,3 +178,16 @@ body.chat-page {
     flex-shrink: 0;
 }
 /* --- End Enhanced Chat Styles --- */
+
+/* -------------------------------------------------------------------------
+   Chat container tweaks when embedded in the main UI (non-standalone mode)
+   ------------------------------------------------------------------------- */
+body:not(.chat-page) #chat-container,
+body:not(.chat-page) .chat-container {
+    height: auto;
+    min-height: 60vh;
+    /* share same centering rules */
+    width: 100%;
+    max-width: 80%;
+    margin: 0 auto;
+}
