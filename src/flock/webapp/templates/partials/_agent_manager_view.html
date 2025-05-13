@@ -25,14 +25,13 @@
               
           </header>
 
-       
             {# Content of the left pane now goes into this article #}
             <div style="padding: var(--pico-block-spacing-vertical) var(--pico-block-spacing-horizontal); flex-grow: 1; display: flex; flex-direction: column;">
                 <div hx-get="/ui/api/flock/htmx/agent-list" 
                      hx-trigger="load, agentListChanged from:body"
                      hx-swap="innerHTML"
                      id="agent-list-panel"
-                     class="item-list-container" style="flex-grow: 1; ">
+                     class="item-list-container" style="flex-grow: 1; overflow-y: auto;border: 1px solid var(--pico-border-color); border-radius: var(--pico-border-radius);">
                     <p style="padding:1rem;">Loading Agents...</p><progress indeterminate></progress>
                 </div>
             </div>

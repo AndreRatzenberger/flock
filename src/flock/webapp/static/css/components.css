@@ -82,7 +82,15 @@ main.main-content h3 { font-size: 1.5rem; margin-bottom: 1rem; }
 
 /* ---------- Item-list utility ---------- */
 .item-list-container { flex-grow: 1; }
-ul.item-list { list-style-type: none; padding: 0; margin: 0; }
+ul.item-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Guard against ::marker still appearing in some browsers */
+ul.item-list li::marker { content: none; }
+
 ul.item-list li { padding: 0.75rem 1rem; border-bottom: 1px solid var(--pico-muted-border-color); cursor: pointer; transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out; }
 ul.item-list li:last-child { border-bottom: none; }
 ul.item-list li:hover, ul.item-list li.selected-item { background-color: var(--pico-primary-focus); color: var(--pico-primary-inverse); }

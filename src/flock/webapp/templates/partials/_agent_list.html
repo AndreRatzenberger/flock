@@ -4,9 +4,9 @@
         <div class="form-message {{ 'success' if success else 'error' }}">{{ message }}</div>
     {% endif %}
     {% if flock.agents %}
-    <ul>
+    <ul class="item-list">
         {% for agent_name, agent in flock.agents.items() %}
-        <li hx-get="/ui/api/flock/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading">
+        <li hx-get="/ui/api/flock/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading" onclick="this.closest('ul').querySelectorAll('li').forEach(li => li.classList.remove('selected-item')); this.classList.add('selected-item');">
             <strong>{{ agent.name }}</strong><br>
             <small>{{ agent.description|truncate(80) if agent.description else 'No description' }}</small>
         </li>
