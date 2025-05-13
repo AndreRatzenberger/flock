@@ -99,6 +99,30 @@ def start_unified_server(
         # 5. Update FastAPI app title (FastAPI app instance is now imported from main)
         fastapi_app.title = server_title
 
+        # 5a. Optionally strip UI routes if UI is disabled
+        if not enable_ui_routes:
+            from fastapi.routing import APIRoute
+
+            allowed_tags = {"Flock API Core", "Flock API Custom Endpoints"}
+
+            def _route_is_allowed(route: APIRoute) -> bool:  # type: ignore
+                # Keep documentation and non-API utility routes (no tags)
+                if not hasattr(route, "tags") or not route.tags:
+                    return True
+                # Keep if any tag is in the allowed list
+                return any(tag in allowed_tags for tag in route.tags)  # type: ignore
+
+            original_count = len(fastapi_app.router.routes)
+            fastapi_app.router.routes = [r for r in fastapi_app.router.routes if _route_is_allowed(r)]
+
+            # Clear cached OpenAPI schema so FastAPI regenerates it with the reduced route set
+            if hasattr(fastapi_app, "openapi_schema"):
+                fastapi_app.openapi_schema = None  # type: ignore
+
+            logger.info(
+                f"UI disabled: removed {original_count - len(fastapi_app.router.routes)} UI routes. Remaining routes: {len(fastapi_app.router.routes)}"
+            )
+
         # 6. Run Uvicorn
         logger.info(f"Running Uvicorn with application: flock.webapp.app.main:app")
         uvicorn.run(

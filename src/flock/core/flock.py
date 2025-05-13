@@ -703,30 +703,71 @@ class Flock(BaseModel, Serializable):
         custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
     ) -> None:
         """Starts a unified REST API server and/or Web UI for this Flock instance."""
-        try:
-            # Import the unified server starter function
-            # This path assumes `flock.webapp.run` is where `start_unified_server` will live
-            from flock.webapp.run import start_unified_server
-        except ImportError:
-            logger.error(
-                "Web application components not found (flock.webapp.run). "
-                "Cannot start API/UI server. Ensure webapp dependencies are installed."
-            )
-            return
-
-        logger.info(
-            f"Attempting to start server for Flock '{self.name}' on {host}:{port}."
+        import warnings
+        warnings.warn(
+            "start_api() is deprecated and will be removed in a future release. "
+            "Use serve() instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        start_unified_server(
-            flock_instance=self,
+        # Delegate to the new serve() method (create_ui maps to ui)
+        return self.serve(
             host=host,
             port=port,
-            server_title=server_name, # Pass as server_title
-            enable_ui_routes=create_ui,
+            server_name=server_name,
+            ui=create_ui,
             ui_theme=ui_theme,
             custom_endpoints=custom_endpoints,
         )
 
+    # ------------------------------------------------------------------
+    # New preferred method name
+    # ------------------------------------------------------------------
+
+    def serve(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8344,
+        server_name: str = "Flock Server",
+        ui: bool = True,
+        ui_theme: str | None = None,
+        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
+    ) -> None:
+        """Launch an HTTP server that exposes the core REST API and, optionally, the
+        browser-based UI.
+
+        Args:
+            host: Bind address for the server (default "127.0.0.1").
+            port: TCP port to listen on (default 8344).
+            server_name: Title shown in the OpenAPI docs / logs.
+            ui: If True (default) the Pico/HTMX web UI routes are included. If False
+                 only the JSON API groups (core & custom) are served.
+            ui_theme: Optional UI theme name or "random".
+            custom_endpoints: Additional API routes to add, either as a list of
+                 FlockEndpoint objects or the legacy dict format.
+        """
+        try:
+            from flock.webapp.run import start_unified_server
+        except ImportError:
+            logger.error(
+                "Web application components not found (flock.webapp.run). "
+                "Cannot start HTTP server. Ensure webapp dependencies are installed."
+            )
+            return
+
+        logger.info(
+            f"Attempting to start server for Flock '{self.name}' on {host}:{port}. UI enabled: {ui}"
+        )
+
+        start_unified_server(
+            flock_instance=self,
+            host=host,
+            port=port,
+            server_title=server_name,
+            enable_ui_routes=ui,
+            ui_theme=ui_theme,
+            custom_endpoints=custom_endpoints,
+        )
 
     def start_cli(
         self,
