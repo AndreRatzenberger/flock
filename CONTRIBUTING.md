@@ -1,39 +1,49 @@
+<!-- TOC --><a name="contributing-to-flock"></a>
 # Contributing to Flock
 
-Thank you for considering 
-contributing to the Flock Framework! ❤️
+First off, thanks for taking the time to contribute!
+Flock is still in early development but we value outside input. ❤️
 
-We welcome contributions of all kinds, including
-code, documentation and ideas. 
+We follow the [Contributor Covenant](https://www.contributor-covenant.org/) code of conduct.
 
-Please, make sure to read this document carefully 
-before contributing to the Flock Framework.
+## Table of Contents:
+<!-- TOC start -->
 
-This guide outlines the process and expectations for
-making contributions to this project to help our
-community of developers deliver the best
-experience possible.
+- [Contributing to Flock](#contributing-to-flock)
+   * [🗒️ Getting Started:](#-getting-started)
+   * [❗ Reporting Issues:](#-reporting-issues)
+   * [🚋 Pull Requests: ](#-pull-requests)
+   * [💻 Coding Standards: ](#-coding-standards)
+      + [General Standards:](#general-standards)
+      + [A few best practices for writing good code:](#a-few-best-practices-for-writing-good-code)
+         - [Embrace Declarative Programming Principles:](#embrace-declarative-programming-principles)
+         - [Consistent Code Formatting:](#consistent-code-formatting)
+         - [Meaningful Naming Conventions:](#meaningful-naming-conventions)
+         - [Modular and Composable Code:](#modular-and-composable-code)
+   * [📖 Documentation Guidelines: ](#-documentation-guidelines)
+      + [A few best practices for writing good documentation:](#a-few-best-practices-for-writing-good-documentation)
+   * [🔭 Testing and Reliability:](#-testing-and-reliability)
+   * [Release Process:](#release-process)
 
-## Table of Content:
-1. [Getting Started](#getting-started)
-2. [Reporting Issues](#reporting-issues)
-3. [Pull Requests](#pull-requests)
-4. [Code Standards](#code-standards)
-5. [Documentation Guidelines](#documentation-guidelines)
-6. [Testing and Reliability](#testing-and-reliability)
-7. [Code of Conduct](#code-of-conduct)
-8. [License](#license)
+<!-- TOC end -->
 
+<!-- TOC --><a name="-getting-started"></a>
 ## 🗒️ Getting Started:
-1. **Fork the Repository**: Begin by forking the [main repository](https://github.com/whiteducksoftware/flock) to your own GitHub account.
-2. **Clone the Fork**: Clone your fork to your local machine for development.
-3. **Set Up Your Development Environment**: Follow the setup instructions in the [README](https://github.com/whiteducksoftware/flock/blob/master/README.md) to get the project up and running.
+1. Fork the repo & create your feature branch (`git checkout -b feat/my-awesome-thing`).
+2. Install dev dependencies: `uv pip install -r requirements.txt && uv pip install -r requirements-dev.txt.`
+3. Run tests: `pytest -q` (they should pass before and after your change).
+4. Make changes – keep them atomic and well-documented.
+5. Lint & type-check: `ruff .` and `mypy src/.`
+6. Commit following Conventional Commits (`feat:`, `fix:`, `docs:` etc.).
+7. Open a PR against main. Include a description, screenshots, and linked issues.
 
 
+<!-- TOC --><a name="-reporting-issues"></a>
 ## ❗ Reporting Issues:
 - Before submitting a new issue, pleas check [existing issues](https://github.com/whiteducksoftware/flock/issues) if it has already been reported.
 - To submit a new issue, please use the provided **Issue Templates** and provide a clear and descriptive title along with a detailed description of the problem or feature request, including steps to reproduce if it's a bug.
 
+<!-- TOC --><a name="-pull-requests"></a>
 ## 🚋 Pull Requests: 
 - Ensure your code is well-tested and adheres to the [Coding Standards](#code-standards) outlined below.
 - Write clear commit messages that explain the changes made.
@@ -41,14 +51,24 @@ experience possible.
 - Before submitting a pull request, make sure your branch is up to date with the base branch (`main`) of the [main repository](https://github.com/whiteducksoftware/flock).
 - Open a pull request with a summary of your changes and any relevant issue numbers.
 
-## 💻 Code Standards: 
+<!-- TOC --><a name="-coding-standards"></a>
+## 💻 Coding Standards: 
 - Flock follows a **declarative** approach and design philosophy. Make sure that your code follows this principle.
 - Follow the coding conventions used within the existing codebase.
 - Keep code modular and readable. Prefer clarity over brevity.
 - Include comments where necessary and explain complex logic.
 
+<!-- TOC --><a name="general-standards"></a>
+### General Standards:
+- Python `3.10.+`. Use type hints everywhere.
+- Follow [`ruff`](https://docs.astral.sh/ruff/) default rules + [`black`](https://black.readthedocs.io/en/stable/index.html) formatting.
+- Keep imports sorted (`ruff format`)
+- Write **async-friendly** code. (non-blocking I/O)
+
+<!-- TOC --><a name="a-few-best-practices-for-writing-good-code"></a>
 ### A few best practices for writing good code:
 
+<!-- TOC --><a name="embrace-declarative-programming-principles"></a>
 #### Embrace Declarative Programming Principles:
 - **Favor Declarative Styles**:
    - Exposed API-Code should express the desired results rather than detailing the control flow of the program.
@@ -57,23 +77,31 @@ experience possible.
 - **Use High-Level Abstractions**:
    - Leverage Flock's existing abstractions to minimize boilerplate code and simplify the implementation.
    - This makes the code easier to read and understand.
+<!-- TOC --><a name="consistent-code-formatting"></a>
 #### Consistent Code Formatting:
 - **Adhere to Existing Code Style**: Consistency in formatting enhances readability and helps developers navigate the codebase.
+<!-- TOC --><a name="meaningful-naming-conventions"></a>
 #### Meaningful Naming Conventions:
 - **Use Descriptive Names**:
   - Choose variable, function, and class names that clearly describe their purpose.
   - Be consistent. Stick to the naming conventions in Flock's existing code-base.
+<!-- TOC --><a name="modular-and-composable-code"></a>
 #### Modular and Composable Code:
 - **Write Modular Code**: Break down complex logic into smaller, reusable components.
 - **Avoid Side Effects**: Aim to minimize side effects where possible.
 
 
+<!-- TOC --><a name="-documentation-guidelines"></a>
 ## 📖 Documentation Guidelines: 
-- Non-Source code documentation is to be provided in the [`docs`](https://github.com/whiteducksoftware/flock/tree/master/docs).
+- Documentation lives under [`docs/`](https://github.com/whiteducksoftware/flock/tree/master/docs), and is built with [MkDocs Material](https://github.com/squidfunk/mkdocs-material).
 - Good documentation is crucial for the usability of Flock. When adding or updating code, please also update the relevant documentation.
 - Use clear, concise language and include examples where applicable. (On that note: If you want to, you may also provide an example for the [example showcase](https://github.com/whiteducksoftware/flock-showcase)
 - Maintain consistency in formatting and style throughout the documentation.
+- Use American English
+- Keep sentences short; favour lists & tables.
+- Add code blocks with triple-backticks and language.
 
+<!-- TOC --><a name="a-few-best-practices-for-writing-good-documentation"></a>
 ### A few best practices for writing good documentation:
 1. Document the **Why**, not just the how:
     - Documentation should explain the rational behind your decisions, rather than just describing the "how".
@@ -97,32 +125,26 @@ experience possible.
    - There is no need for you to excessively comment every line of code you provide.
    - Add documentation where necessary and focus on keeping documentation on a high level.
 
+<!-- TOC --><a name="-testing-and-reliability"></a>
 ## 🔭 Testing and Reliability:
 Flock aims to provide a easy and reliable way to implement agentic applications. Therefore, well tested code is crucial.
 
 - Test your changes thoroughly! Ensure that existing tests pass and add **new tests** for any new functionality.
 - Follow Flock's testing conventions and use the provided testing framework.
 - Run the tests before submitting your pull request to confirm that nothing is broken.
+- Test can be run locally with `pytest -q`
+- Place new tests in `tests/` mirroring the package path.
+- Use [`pytest`](https://docs.pytest.org/en/stable/) fixtures instead of duplicating setup code.
+- For Temporal code, rely on the *Temporal Test Server* fixture.
 
-## Code of Conduct:
 
-We are committed to creating a welcoming and inclusive environment for all contributors to Flock.
-This Code of Conduct outlines our expectations for participants.
-
-### Our Expectations:
-
-1. **Be Respectful**: Treat all community members with kindness and respect, regardless of their background, identity, or experience level. We appreciate diverse perspectives and believe that collaboration is most effective in an inclusive atmosphere.
-2. **Communicate Openly**: Promote open and constructive dialogue when discussing ideas, concerns, or feedback. Be supportive and considerate of others' opinions. Disagreements are natural and should be approached professionally and with empathy.
-3. **Encourage Growth**: Offer constructive feedback that helps others grow, wether they are providing code contributions or engaging in discussions. Be supportive of newcomers and make an effort to help them understand the community norms.
-4. **Civility Matters**: Maintain professionalism in all interactions. Harassment, bullying, or discrimination of any form will not be tolerated. Abuse of any kind-verbal or written-is unacceptable and may lead to removal from the community.
-5. **Report Issues**: If you witness or experience behavior that violates our Code of Conduct, please report it to the project maintainers. We take all reports seriously and will address them promptly and fairly.
-
-#### Consequences of Unacceptable Behavior:
-Consequences for violating this Code of Conduct may include temporary or permanent expulsion from the community, depending on the severity of the behavior. We believe in the importance of accountability and will handle all reports with confidentiality and fairness.
-
-#### Commitment to Improvement:
-We encourage everyone to assist in creating an environment here where all contributors can thrive. Contious improvement is essential; therefore, we welcome feedback on our Code of Conduct (as well as our Code 😉) and our practices.
-
+<!-- TOC --><a name="release-process"></a>
+## Release Process:
+1. Maintainer bumps versiion in `pyproject.toml` following **SemVer**.
+2. Changelog entry added in `docs/about/changelog.md`.
+3. `uv pip install -e .[all] && pytest`
+4. `git tag v.X.Y.Z && git push --tags`
+5. GitHub Action publishes to PyPI.
 
 Thank you for contributing to Flock, the declarative Agent-Framework. 🦆💓
 
