@@ -6,7 +6,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontext
 from datetime import timedelta
 from typing import Annotated, Any, Callable, Generator, List, Literal, Tuple, Type, TypeVar, Union
 from cachetools import TTLCache, cached
-from mcp import ClientSession, InitializeResult, ListToolsResult, ServerCapabilities
+from mcp import ClientSession, InitializeResult, ListToolsResult, McpError, ServerCapabilities
 from mcp import StdioServerParameters as _MCPStdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
@@ -279,12 +279,6 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Cache for Resource Lists. Excluded from Serialization."
     )
 
-    client_context_manager: Any | None = Field(
-        default=None,
-        exclude=True,
-        description="Context Manager for handling Client Connection. Excluded from Serialization."
-    )
-
     client_session: ClientSession | None = Field(
         default=None,
         exclude=True,
@@ -303,6 +297,12 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Global lock for the client."
     )
 
+    session_stack: AsyncExitStack = Field(
+        default_factory=AsyncExitStack,
+        exclude=True,
+        description="Internal AsyncExitStack for session."
+    )
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         extra="allow",
@@ -316,10 +316,10 @@ class FlockMCPClientBase(BaseModel, ABC):
         tool_result_cache: TTLCache | None = None,
         resource_contents_cache: TTLCache | None = None,
         resource_list_cache: TTLCache | None = None,
-        client_context_manager: Any | None = None,
         client_session: ClientSession | None = None,
         connected_server_capabilities: ServerCapabilities | None = None,
-        **kwargs,
+        session_stack: AsyncExitStack = AsyncExitStack(),
+        ** kwargs,
     ):
         lock = lock or Lock()
         super().__init__(
@@ -329,32 +329,11 @@ class FlockMCPClientBase(BaseModel, ABC):
             tool_result_cache=tool_result_cache,
             resource_contents_cache=resource_contents_cache,
             resource_list_cache=resource_list_cache,
-            client_context_manager=client_context_manager,
             client_session=client_session,
             connected_server_capabilities=connected_server_capabilities,
+            session_stack=session_stack,
             **kwargs,
         )
-
-        if not self.client_context_manager:
-            # Will be set during the connect cycle.
-            self.client_context_manager = None
-
-        # After initialization, assign the default_callbacks if they have not been specified.
-        if not self.config.logging_callback:
-            self.config.logging_callback = default_flock_mcp_logging_callback_factory(
-                self.config.server_name, logger)
-
-        if not self.config.message_handler:
-            self.config.message_handler = default_flock_mcp_message_handler_callback_factory(
-                associated_client=self, logger=logger)
-
-        if not self.config.sampling_callback:
-            self.config.sampling_callback = default_flock_mcp_sampling_callback_factory(
-                associated_client=self, logger=logger)
-
-        if not self.config.list_roots_callback:
-            self.config.list_roots_callback = default_flock_mcp_list_roots_callback_factory(
-                asscociated_client=self, logger=logger)
 
         if not self.tool_cache:
             self.tool_cache = TTLCache(
@@ -380,6 +359,35 @@ class FlockMCPClientBase(BaseModel, ABC):
                 ttl=self.config.resource_list_cache_max_ttl,
             )
 
+    async def _create_session(self) -> None:
+        """Create and hold onto a single ClientSession + ExitStack"""
+        stack = AsyncExitStack()
+        await stack.__aenter__()
+
+        server_params = self.config.connection_paramters
+        gen_fn = self.get_init_function() or {
+            "stdio": stdio_client,
+            "sse": sse_client,
+            "websockets": websocket_client,
+        }[self.config.transport_type]
+
+        read, write = await stack.enter_async_context(gen_fn(server_params))
+
+        session = await stack.enter_async_context(
+            ClientSession(
+                read_stream=read,
+                write_stream=write,
+                read_timeout_seconds=self.config.read_timeout_seconds,
+                list_roots_callback=self.config.list_roots_callback,
+                logging_callback=self.config.logging_callback,
+                message_handler=self.config.message_handler,
+                sampling_callback=self.config.sampling_callback,
+            )
+        )
+        # store for reuse
+        self.session_stack = stack
+        self.client_session = session
+
     async def get_server_name(self) -> str:
         async with self.lock:
             return self.config.server_name
@@ -388,7 +396,6 @@ class FlockMCPClientBase(BaseModel, ABC):
         async with self.lock:
             return self.config.mount_points
 
-    @mcp_error_handler(default_return=None, logger=logger)
     async def set_roots(self, new_roots: list[Root]) -> None:
         async with self.lock:
             self.config.mount_points = new_roots
@@ -449,6 +456,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         in the case of sse clients this is the function `sse_client` (in mcp.client.sse)
         in the case of websocket clients this is the function `websocket_client` in (mcp.client.ws)
         """
+        pass
 
     async def connect(self, retries: int | None = None) -> ClientSession:
         """
@@ -462,22 +470,12 @@ class FlockMCPClientBase(BaseModel, ABC):
             if self.client_session:
                 return self.client_session
 
-        # Release the lock before establishing a client session.
-        # establish the generator_function
-        generator_manager = self.get_init_function()
+            else:
+                await self._create_session()
 
-        # grab the context manager
-        self.client_context_manager = self.get_client_session
-
-        # manually __aenter__ the context manager
-        self.client_session = await self.client_context_manager.__aenter__(generator_manager=generator_manager)
-
-        # Tell the server about our state.
         await self.perform_initial_handshake()
-
         return self.client_session
 
-    @mcp_error_handler(default_return=None, logger=logger)
     async def perform_initial_handshake(self) -> None:
         """
         tell the server who we are, what capabilities we have,
@@ -494,9 +492,9 @@ class FlockMCPClientBase(BaseModel, ABC):
             self.connected_server_capabilities = init
 
             init_report = f"""
-            Server Init Handshake completed Server '{self.config.server_name}' 
+            Server Init Handshake completed Server '{self.config.server_name}'
             Lists the following Capabilities:
-        
+
             - Protocol Version: {init.protocolVersion}
             - Instructions: {init.instructions or "No specific Instructions"}
             - MCP Implementation:
@@ -510,11 +508,15 @@ class FlockMCPClientBase(BaseModel, ABC):
 
             # 2) if we already know our current roots, notify the server
             #    so that it will follow up with a ListRootsRequest
-            if self.mount_points:
+            if self.config.mount_points:
                 await self.client_session.send_roots_list_changed()
 
             # 3) Tell the server, what logging level we would like to use
-            await self.client_session.set_logging_level(level=self.config.server_logging_level)
+            try:
+                await self.client_session.set_logging_level(level=self.config.server_logging_level)
+            except McpError as e:
+                logger.warning(
+                    f"Trying to set logging level for server '{self.config.server_name}' resulted in Exception: {e}")
 
     async def ensure_connected(self) -> None:
         # if we've never connected, then connect.
@@ -536,89 +538,19 @@ class FlockMCPClientBase(BaseModel, ABC):
         If previously connected via `self.connect()`, tear it down.
         """
         async with self.lock:
-            if not self.client_context_manager:
-                return
+            if self.session_stack:
+                # manually __aexit__
+                await self.session_stack.aclose()
+                self.session_stack = None
+                self.client_session = None
 
-            # manually __aexit__
-            await self.client_context_manager.__aexit__(None, None, None)
-            self.client_context_manager = None
-            self.client_session = None
+    async def get_client_session(self) -> ClientSession:
+        """Lazily start one session and reuse it forever (until closed)"""
+        async with self.lock:
+            if self.client_session is None:
+                await self._create_session()
 
-    @asynccontextmanager
-    async def get_client_session(
-        self,
-        generator_manager: Union[
-            Type[stdio_client],
-            Type[sse_client],
-            Type[websocket_client],
-            MCPClientInitFunction
-        ] | None,
-    ):
-        """generator_manager must be one of mcp.client... stdio_client, sse_client, or websocket_client"""
-
-        server_params = self.config.connection_paramters
-
-        if self.config.transport_type == "stdio" and not isinstance(server_params, StdioServerParameters):
-            raise TypeError(
-                f"Server Parameters for a stdio-client must be of type {type(StdioServerParameters)} got {type(server_params)}"
-            )
-        if self.config.transport_type == "sse" and not isinstance(server_params, SseServerParameters):
-            raise TypeError(
-                f"Server Parameters for a sse-client must be of type {type(SseServerParameters)} got {type(server_params)}"
-            )
-        if self.config.transport_type == "websockets" and not isinstance(server_params, WebSocketServerParameters):
-            raise TypeError(
-                f"Server Parameters for a websocket-client must be of type {type(WebSocketServerParameters)} got {type(server_params)}"
-            )
-
-        match self.config.transport_type:
-            case "stdio":
-                generator_manager = stdio_client if generator_manager is None else generator_manager
-                async with self.lock:
-                    stack = AsyncExitStack()
-                    read, write = await stack.enter_async_context(generator_manager(server_params))
-            case "sse":
-                generator_manager = sse_client if generator_manager is None else generator_manager
-                async with self.lock:
-                    stack = AsyncExitStack()
-                    read, write = await stack.enter_async_context(generator_manager(
-                        url=server_params.url,
-                        headers=server_params.headers,
-                        timeout=server_params.timeout,
-                        sse_read_timeout=server_params.sse_read_timeout,
-                    ))
-            case "websockets":
-                generator_manager = websocket_client if generator_manager is None else generator_manager
-                async with self.lock:
-                    stack = AsyncExitStack()
-                    read, write = await stack.enter_async_context(generator_manager(
-                        url=server_params.url
-                    ))
-            case "custom":
-                async with self.lock:
-                    stack = AsyncExitStack()
-                    read, write = await stack.enter_async_context(generator_manager(server_params))
-
-        if not read or not write:
-            raise Exception(
-                f"Could not establish underlying read and write stream for client session. Transport type matched neither 'stdio', 'sse', 'websockets', or 'custom'. Or passed generator_manager was unable to establish streams.")
-
-        client_session = await stack.enter_async_context(
-            ClientSession(
-                read_stream=read,
-                write_stream=write,
-                read_timeout_seconds=self.config.read_timeout_seconds,
-                list_roots_callback=self.config.list_roots_callback,
-                logging_callback=self.config.logging_callback,
-                message_handler=self.config.message_handler,
-                sampling_callback=self.config.sampling_callback,
-            )
-        )
-
-        try:
-            yield client_session
-        finally:
-            await stack.aclose()
+        return self.client_session
 
     async def get_tools(self, agent_id: str, run_id: str) -> List[FlockMCPToolBase]:
         """
@@ -653,7 +585,6 @@ class FlockMCPClientBase(BaseModel, ABC):
                     f"Underlying session for server '{self.config.server_name}' for agent {agent_id} in run {run_id} has been established.")
                 initialized = True
 
-            @mcp_error_handler(default_return=[], logger=logger)
             async def _get_tools_internal() -> List[FlockMCPToolBase]:
 
                 if not self.config.tools_enabled:
@@ -699,7 +630,6 @@ class FlockMCPClientBase(BaseModel, ABC):
                 )
                 initialized = True
 
-            @mcp_error_handler(default_return=_DEFAULT_EXCEPTION_TOOL_RESULT, logger=logger)
             async def _call_tool_internal(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 async with self.lock:
                     logger.debug(

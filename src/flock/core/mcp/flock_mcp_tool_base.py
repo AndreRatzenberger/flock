@@ -186,7 +186,7 @@ class FlockMCPToolBase(BaseModel):
                 logger.debug(
                     f"Tool: {self.name}: calling server '{server_name}'"
                 )
-                result = await client.call_tool(self.name, kwargs)
+                result = await client.call_tool(agent_id=self.agent_id, run_id=self.run_id, name=self.name, arguments=kwargs)
                 logger.debug(
                     f"Tool: Called Tool: {self.name} on server '{server_name}'. Returning result to LLM."
                 )

@@ -16,6 +16,7 @@ from dspy import Tool as DSPyTool
 
 from flock.core.mcp.flock_mcp_client_base import FlockMCPClientBase, ServerParameters
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.mcp.types.mcp_callbacks import FlockListRootsMCPCallback, FlockLoggingMCPCallback, FlockMessageHandlerMCPCallback, FlockSamplingMCPCallback
 from flock.core.mcp.types.mcp_types import Root
 
@@ -221,7 +222,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                 else:
                     # This means there is at least one entry for the agent_id available
                     # Now, all we need to do is check if the run_id matches the entrie's run_id
-                    client = await run_clients.get(run_id, None)
+                    client = run_clients.get(run_id, None)
                     if client is None:
                         # Means no client here with the respective run_id
                         client = await self.make_client()
@@ -241,7 +242,9 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
         """
         try:
             client = await self.get_client(agent_id=agent_id, run_id=run_id)
-            return await client.get_tools(agent_id=agent_id, run_id=run_id)
+            tools: list[FlockMCPToolBase] = await client.get_tools(agent_id=agent_id, run_id=run_id)
+            dspy_tools = [t.as_dspy_tool(mgr=self) for t in tools]
+            return dspy_tools
         except Exception as e:
             logger.error(
                 f"Exception occurred while trying to retrieve Tools for server '{self.config.server_name}' with agent_id: {agent_id} and run_id: {run_id}: {e}"
