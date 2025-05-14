@@ -162,6 +162,11 @@ class FlockMCPServerConfig(BaseModel):
         description="Max TTL for items in the tool result cache in seconds."
     )
 
+    max_restart_attempts: int = Field(
+        default=3,
+        description="How many times to attempt to restart the server before giving up."
+    )
+
     @classmethod
     def with_fields(cls: type[M], **field_definitions) -> type[M]:
         """Create a new config class with additional fields"""
@@ -266,7 +271,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
     # --- Lifecycle Hooks ---
     @abstractmethod
-    async def initialize(self) -> None:
+    async def initialize(self) -> FlockMCPClientManager:
         """
         Called when initializing the server.
         """
@@ -276,8 +281,10 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         """
         Retrieves a list of available tools from this server.
         """
-        if not self.initialized:
-            await self.initialize()
+        if not self.initialized or not self.client_manager:
+            async with self.condition:
+                self.client_manager = await self.initialize()
+                self.initialized = True
 
         async with self.condition:
             try:

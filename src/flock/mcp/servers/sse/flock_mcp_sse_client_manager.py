@@ -1,47 +1,41 @@
-"""Manages a pool of connections for a Stdio Server."""
-
-from datetime import timedelta
 from typing import Literal
+
 from pydantic import Field
-from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
+from flock.core.mcp.flock_mcp_client_base import SseServerParameters
 from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager, FlockMCPClientManagerConfigBase
-from flock.core.logging.logging import get_logger
-from flock.mcp.servers.stdio.flock_stdio_client import FlockStdioClient, FlockStdioMCPClientConfig
-
-logger = get_logger("mcp.stdio.connection_manager")
+from flock.mcp.servers.sse.flock_sse_client import FlockSseClient, FlockSseMCPClientConfig
 
 
-class FlockMCPStdioClientManagerConfig(FlockMCPClientManagerConfigBase):
+class FlockMCPSseClientManagerConfig(FlockMCPClientManagerConfigBase):
     """
-    Configuration for Stdio Client Managers.
+    Configuration for Sse Client Managers.
     """
 
-    transport_type: Literal["stdio"] = Field(
-        default="stdio",
-        description="What kind of transport to use."
+    transport_type: Literal["sse"] = Field(
+        default="sse",
+        description="What kind of transport to use"
     )
 
-    connection_parameters: StdioServerParameters = Field(
+    connection_parameters: SseServerParameters = Field(
         ...,
-        description="Connection Parameters"
+        description="Connection paramters."
     )
 
 
-class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
-    """Handles Clients that connect to a Stdio-Transport Type Server."""
+class FlockSseMCPClientManager(FlockMCPClientManager[FlockSseClient]):
 
-    config: FlockMCPStdioClientManagerConfig = Field(
+    config: FlockMCPSseClientManagerConfig = Field(
         ...,
         description="Config."
     )
 
     async def make_client(self):
         """
-        Instantiate a client for an stdio-server.
+        Instantiate a client for an sse-server.
         """
 
-        new_client = FlockStdioClient(
-            config=FlockStdioMCPClientConfig(
+        new_client = FlockSseClient(
+            config=FlockSseMCPClientConfig(
                 server_name=self.config.server_name,
                 transport_type=self.config.transport_type,
                 server_logging_level=self.config.server_logging_level,
@@ -57,8 +51,6 @@ class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
                 tool_cache_max_ttl=self.config.tool_cache_max_ttl,
                 resource_contents_cache_max_size=self.config.resource_contents_cache_max_size,
                 resource_contents_cache_max_ttl=self.config.resource_contents_cache_max_ttl,
-                resource_list_cache_max_size=self.config.resource_list_cache_max_size,
-                resource_list_cache_max_ttl=self.config.resource_list_cache_max_ttl,
                 tool_result_cache_max_size=self.config.tool_result_cache_max_size,
                 tool_result_cache_max_ttl=self.config.tool_result_cache_max_ttl,
                 roots_enabled=self.config.roots_enabled,
@@ -67,5 +59,3 @@ class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
                 sampling_enabled=self.config.sampling_enabled,
             )
         )
-
-        return new_client

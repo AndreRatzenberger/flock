@@ -70,11 +70,6 @@ class FlockMCPStdioServerConfig(FlockMCPServerConfig):
         description="The text encoding error handler.",
     )
 
-    max_restart_attempts: int = Field(
-        default=3,
-        description="How many times to attempt to restart the server before giving up."
-    )
-
 
 class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
     """
@@ -90,58 +85,41 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
         description="Config for the server."
     )
 
-    def add_module(self, module):
-        return super().add_module(module)
-
-    def remove_module(self, module_name):
-        return super().remove_module(module_name)
-
-    def get_module(self, module_name):
-        return super().get_module(module_name)
-
-    def get_enabled_modules(self):
-        return super().get_enabled_modules()
-
-    async def initialize(self):
+    async def initialize(self) -> FlockStdioMCPClientManager:
         """
         Called when initializing the server
         """
-        async with self.condition:
-            # Check if we already initialized
-            if not self.initialized:
-                # Initialize the underlying Connection Pool
-                if not self.client_manager:
-                    self.client_manager = FlockStdioMCPClientManager(
-                        config=FlockMCPStdioClientManagerConfig(
-                            server_name=self.server_config.server_name,
-                            server_logging_level=self.server_config.server_logging_level,
-                            transport_type=self.server_config.transport_type,
-                            read_timeout_seconds=self.server_config.read_timeout_seconds,
-                            max_retries=self.server_config.max_restart_attempts,
-                            logging_callback=self.server_config.logging_callback,
-                            message_handler=self.server_config.message_handler,
-                            sampling_callback=self.server_config.sampling_callback,
-                            list_roots_callback=self.server_config.list_roots_callback,
-                            mount_points=self.server_config.mount_points,
-                            tool_cache_max_size=self.server_config.tool_cache_max_size,
-                            resource_contents_cache_max_size=self.server_config.resource_contents_cache_max_size,
-                            resource_list_cache_max_size=self.server_config.resource_list_cache_max_size,
-                            tool_cache_max_ttl=self.server_config.tool_cache_max_ttl,
-                            resource_contents_cache_max_ttl=self.server_config.resource_contents_cache_max_ttl,
-                            resource_list_cache_max_ttl=self.server_config.resource_list_cache_max_ttl,
-                            roots_enabled=self.server_config.roots_enabled,
-                            tools_enabled=self.server_config.tools_enabled,
-                            prompts_enabled=self.server_config.prompts_enabled,
-                            sampling_enabled=self.server_config.sampling_enabled,
-                            connection_parameters=StdioServerParameters(
-                                command=self.server_config.command,
-                                args=self.server_config.args,
-                                cwd=self.server_config.cwd,
-                                encoding=self.server_config.encoding,
-                                encoding_error_handler=self.server_config.encoding_error_handler
-                            ),
-                            tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
-                            tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
-                        )
-                    )
-                    self.initialized = True
+        client_manager = FlockStdioMCPClientManager(
+            config=FlockMCPStdioClientManagerConfig(
+                server_name=self.server_config.server_name,
+                server_logging_level=self.server_config.server_logging_level,
+                transport_type=self.server_config.transport_type,
+                read_timeout_seconds=self.server_config.read_timeout_seconds,
+                max_retries=self.server_config.max_restart_attempts,
+                logging_callback=self.server_config.logging_callback,
+                message_handler=self.server_config.message_handler,
+                sampling_callback=self.server_config.sampling_callback,
+                list_roots_callback=self.server_config.list_roots_callback,
+                mount_points=self.server_config.mount_points,
+                tool_cache_max_size=self.server_config.tool_cache_max_size,
+                resource_contents_cache_max_size=self.server_config.resource_contents_cache_max_size,
+                resource_list_cache_max_size=self.server_config.resource_list_cache_max_size,
+                tool_cache_max_ttl=self.server_config.tool_cache_max_ttl,
+                resource_contents_cache_max_ttl=self.server_config.resource_contents_cache_max_ttl,
+                resource_list_cache_max_ttl=self.server_config.resource_list_cache_max_ttl,
+                roots_enabled=self.server_config.roots_enabled,
+                tools_enabled=self.server_config.tools_enabled,
+                prompts_enabled=self.server_config.prompts_enabled,
+                sampling_enabled=self.server_config.sampling_enabled,
+                connection_parameters=StdioServerParameters(
+                    command=self.server_config.command,
+                    args=self.server_config.args,
+                    cwd=self.server_config.cwd,
+                    encoding=self.server_config.encoding,
+                    encoding_error_handler=self.server_config.encoding_error_handler
+                ),
+                tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
+                tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
+            )
+        )
+        return client_manager
