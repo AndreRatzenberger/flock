@@ -1,8 +1,9 @@
 
-from typing import Literal
+from typing import Any, Literal
 from opentelemetry import trace
-from pydantic import Field
+from pydantic import AnyUrl, Field
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.flock_mcp_client_base import SseServerParameters
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.mcp.servers.sse.flock_mcp_sse_client_manager import FlockMCPSseClientManagerConfig, FlockSseMCPClientManager
 
@@ -20,6 +21,21 @@ class FlockMCPSseServerConfig(FlockMCPServerConfig):
     transport_type: Literal["sse"] = Field(
         default="sse",
         description="SSE Transport Type."
+    )
+
+    url: str | AnyUrl = Field(
+        ...,
+        description="The URL the server listens on."
+    )
+
+    headers: dict[str, Any] | None = Field(
+        default=None,
+        description="Headers for connection to server."
+    )
+
+    sse_read_timeout: int = Field(
+        default=60*5,
+        description="Timeout before connection closes."
     )
 
 
@@ -54,5 +70,19 @@ class FlockMCPSseServer(FlockMCPServerBase):
                 mount_points=self.server_config.mount_points,
                 tool_cache_max_size=self.server_config.tool_cache_max_size,
                 tool_cache_max_ttl=self.server_config.tool_cache_max_ttl,
+                resource_contents_cache_max_size=self.server_config.resource_contents_cache_max_size,
+                resource_contents_cache_max_ttl=self.server_config.resource_contents_cache_max_ttl,
+                tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
+                tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
+                resource_list_cache_max_size=self.server_config.resource_list_cache_max_size,
+                resource_list_cache_max_ttl=self.server_config.resource_list_cache_max_ttl,
+                connection_parameters=SseServerParameters(
+                    url=self.server_config.url,
+                    headers=self.server_config.headers,
+                    sse_read_timeout=self.server_config.sse_read_timeout,
+                )
+
             )
         )
+
+        return client_manager
