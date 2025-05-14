@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from asyncio import Lock
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from datetime import timedelta
-from typing import Annotated, Any, Callable, Generator, List, Literal, Tuple, Type, Union
+from typing import Annotated, Any, Callable, Generator, List, Literal, Tuple, Type, TypeVar, Union
 from cachetools import TTLCache, cached
 from mcp import ClientSession, InitializeResult, ListToolsResult, ServerCapabilities
 from mcp import StdioServerParameters as _MCPStdioServerParameters
@@ -12,7 +12,7 @@ from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 from mcp.client.websocket import websocket_client
 from mcp.types import CallToolResult, TextContent, JSONRPCMessage
-from pydantic import BaseModel, ConfigDict, Field, AnyUrl, UrlConstraints
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, UrlConstraints, create_model
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 from flock.core.logging.logging import get_logger
@@ -53,10 +53,14 @@ MCPClientInitFunction = Callable[
 ]
 
 
-class ServerParameters():
+class ServerParameters(BaseModel):
     """
     Base Type for server parameters.
     """
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
 
 
 class StdioServerParameters(_MCPStdioServerParameters, ServerParameters):
@@ -65,7 +69,7 @@ class StdioServerParameters(_MCPStdioServerParameters, ServerParameters):
     """
 
 
-class WebSocketServerParameters(BaseModel, ServerParameters):
+class WebSocketServerParameters(ServerParameters):
     """
     Base Type for Websocket Server params.
     """
@@ -76,7 +80,7 @@ class WebSocketServerParameters(BaseModel, ServerParameters):
     )
 
 
-class SseServerParameters(BaseModel, ServerParameters):
+class SseServerParameters(ServerParameters):
     """
     Base Type for SSE Server params
     """
@@ -102,13 +106,16 @@ class SseServerParameters(BaseModel, ServerParameters):
     )
 
 
-class FlockMCPClientBase(BaseModel, ABC):
-    """
-    Wrapper for mcp ClientSession.
-    Class will attempt to re-establish connection if possible.
-    If connection establishment fails after max_retries, then
-    `has_error` will be set to true and `error_message` will
-    contain the details of the exception.
+C = TypeVar("C", bound="FlockMCPClientBaseConfig")
+
+
+class FlockMCPClientBaseConfig(BaseModel):
+    """"
+    Base Configuration Class for MCP Clients.
+
+    Each Client should implement their own
+    config model by inheriting from this class.
+
     """
 
     server_name: str = Field(
@@ -121,32 +128,9 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Type of transport to use."
     )
 
-    connection_parameters: ServerParameters = Field(
+    connection_paramters: ServerParameters = Field(
         ...,
         description="Connection parameters for the server."
-    )
-
-    is_busy: bool = Field(
-        default=False,
-        description="Whether or not this client is currently handling a request",
-        exclude=True,
-    )
-
-    is_alive: bool = Field(
-        default=True,
-        description="Whether or not this ClientSession is still alive",
-        exclude=True
-    )
-
-    has_error: bool = Field(
-        default=False,
-        description="Whether or not the client has errored.",
-        exclude=True,
-    )
-
-    error_message: str | None = Field(
-        default=None,
-        description="The messsage of the exception that occurred within the client."
     )
 
     max_retries: int = Field(
@@ -154,119 +138,170 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="How many times to attempt to establish the connection before giving up."
     )
 
-    lock: Lock = Field(
-        default_factory=Lock,
-        description="Lock for the client. Enabling it to act as a mutex."
-    )
-
-    current_roots: list[Root] | None = Field(
+    mount_points: list[Root] | None = Field(
         default=None,
-        description="Roots to operate under."
+        description="Initial Mountpoints to operate under."
     )
 
     read_timeout_seconds: timedelta = Field(
-        ...,
-        description="How many seconds to wait until the request times out."
+        default_factory=lambda: timedelta(seconds=10),
+        description="How many seconds to wait until a request times out."
     )
 
     sampling_callback: FlockSamplingMCPCallback | None = Field(
         default=None,
-        description="Callback for sampling requests from external server. Take a look at mcp/client/session.py for how it is used."
+        description="Callback for handling sampling requests from an external server."
     )
 
     list_roots_callback: FlockListRootsMCPCallback | None = Field(
         default=None,
-        description="Callback for list_roots requests from external server."
+        description="Callback for list/roots requests from an external server."
     )
 
     logging_callback: FlockLoggingMCPCallback | None = Field(
         default=None,
-        description="Callback for logging purposes."
+        description="Callback for handling logging events sent by a server."
     )
 
     message_handler: FlockMessageHandlerMCPCallback | None = Field(
         default=None,
-        description="Message Handler Callback."
+        description="Callback for handling messages not covered by other callbacks."
     )
 
     tool_cache_max_size: float = Field(
         default=100,
-        description="Maximum number of items in the Tool Cache"
+        description="Maximum number of items in the Tool Cache."
     )
 
     tool_cache_max_ttl: float = Field(
         default=60,
-        description="Max TTL for the tools cache in Seconds."
+        description="Max TTL for items in the tool cache in seconds."
     )
 
     resource_contents_cache_max_size: float = Field(
         default=10,
-        description="Maximum number of items in the Resource Contents cache."
+        description="Maximum number of entries in the Resource Contents cache."
     )
 
     resource_contents_cache_max_ttl: float = Field(
         default=60*5,
-        description="Max TTL in seconds for the resource contents cache."
+        description="Maximum number of items in the Resource Contents cache."
     )
 
     resource_list_cache_max_size: float = Field(
-        default=1000,
-        description="Maximum number of items in the Resource List Cache."
+        default=10,
+        description="Maximum number of entries in the Resource List Cache."
     )
 
     resource_list_cache_max_ttl: float = Field(
-        default=10,
-        description="Max TTL in seconds for the Resource List Cache."
+        default=100,
+        description="Maximum TTL for entries in the Resource List Cache."
     )
 
     tool_result_cache_max_size: float = Field(
         default=1000,
-        description="Maximum number of items in the Tool Result Cache"
+        description="Maximum number of entries in the Tool Result Cache."
     )
 
     tool_result_cache_max_ttl: float = Field(
-        default=10,
-        description="Maximum TTL in seconds for the Tool Result Cache"
+        default=20,
+        description="Maximum TTL in seconds for entries in the Tool Result Cache."
     )
 
-    logging_level: LoggingLevel = Field(
+    server_logging_level: LoggingLevel = Field(
         default="error",
-        description="The logging level for the remote server of this client."
+        description="The logging level for the logging events of the remote server."
     )
 
-    list_roots_enabled: bool = Field(
+    roots_enabled: bool = Field(
         default=False,
-        description="Whether or not list roots requests from remote servers should be accepted."
+        description="Whether or not Roots feature is enabled for this client."
     )
 
     sampling_enabled: bool = Field(
         default=False,
-        description="Whether or not sampling requests from remote servers should be accepted."
+        description="Whether or not Sampling Feature is enabled for this client."
     )
 
     tools_enabled: bool = Field(
         default=False,
-        description="Whether or not tools are enabled for this client."
+        description="Whether or not the Tools feature is enabled for this client."
     )
 
     prompts_enabled: bool = Field(
         default=False,
-        description="Whether or not prompts are enabled for this client."
+        description="Whether or not the Prompts feature is enabled for this client."
     )
 
-    _tool_cache: TTLCache
+    @classmethod
+    def with_fields(cls: type[C], **field_definitions) -> type[C]:
+        """Create a new config class with additional fields."""
+        return create_model(
+            f"Dynamic{cls.__name__}", __base__=cls, **field_definitions
+        )
 
-    _tool_result_cache: TTLCache
 
-    _resource_contents_cache: TTLCache
+class FlockMCPClientBase(BaseModel, ABC):
+    """
+    Wrapper for mcp ClientSession.
+    Class will attempt to re-establish connection if possible.
+    If connection establishment fails after max_retries, then
+    `has_error` will be set to true and `error_message` will
+    contain the details of the exception.
+    """
 
-    _resource_list_cache: TTLCache
+    config: FlockMCPClientBaseConfig = Field(
+        ...,
+        description="The config for this client instance."
+    )
 
-    _client_context_manager: Any | None
+    tool_cache: TTLCache | None = Field(
+        default=None,
+        exclude=True,
+        description="Cache for tools. Excluded from Serialization."
+    )
 
-    _client_session: ClientSession
+    tool_result_cache: TTLCache | None = Field(
+        default=None,
+        exclude=True,
+        description="Cache for the result of tool call. Excluded from Serialization."
+    )
 
-    _connected_server_capabilites: ServerCapabilities
+    resource_contents_cache: TTLCache | None = Field(
+        default=None,
+        exclude=True,
+        description="Cache for resource contents. Excluded from Serialization."
+    )
+
+    resource_list_cache: TTLCache | None = Field(
+        default=None,
+        exclude=True,
+        description="Cache for Resource Lists. Excluded from Serialization."
+    )
+
+    client_context_manager: Any | None = Field(
+        default=None,
+        exclude=True,
+        description="Context Manager for handling Client Connection. Excluded from Serialization."
+    )
+
+    client_session: ClientSession | None = Field(
+        default=None,
+        exclude=True,
+        description="ClientSession Reference."
+    )
+
+    connected_server_capabilities: ServerCapabilities | None = Field(
+        default=None,
+        exclude=True,
+        description="Capabilities of the connected server."
+    )
+
+    lock: Lock = Field(
+        default_factory=Lock,
+        exclude=True,
+        description="Global lock for the client."
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -275,193 +310,130 @@ class FlockMCPClientBase(BaseModel, ABC):
 
     def __init__(
         self,
-        server_name: str,
-        logging_level: LoggingLevel,
-        transport_type: Literal["stdio", "websockets", "sse"],
-        tool_cache_max_size: float,
-        tool_cache_max_ttl: float,
-        tool_result_cache_max_ttl: float,
-        tool_result_cache_max_size: float,
-        resource_list_cache_max_size: float,
-        resource_list_cache_max_ttl: float,
-        resource_contents_cache_max_size: float,
-        resource_contents_cache_max_ttl: float,
-        read_timeout_seconds: timedelta,
-        connection_parameters: ServerParameters,
-        list_roots_enabled: bool = False,
-        sampling_enabled: bool = False,
-        tools_enabled: bool = False,
-        prompts_enabled: bool = False,
-        is_busy: bool = False,
-        is_alive: bool = True,
-        has_error: bool = False,
-        error_message: str | None = None,
-        sampling_callback: FlockSamplingMCPCallback | None = None,
-        list_roots_callback: FlockListRootsMCPCallback | None = None,
-        logging_callback: FlockLoggingMCPCallback | None = None,
-        message_handler: FlockMessageHandlerMCPCallback | None = None,
-        max_retries: int = 3,
-        lock: Lock = Lock(),
-        current_roots: list[Root] | None = None,
+        config: FlockMCPClientBaseConfig,
+        lock: Lock | None = None,
+        tool_cache: TTLCache | None = None,
+        tool_result_cache: TTLCache | None = None,
+        resource_contents_cache: TTLCache | None = None,
+        resource_list_cache: TTLCache | None = None,
+        client_context_manager: Any | None = None,
+        client_session: ClientSession | None = None,
+        connected_server_capabilities: ServerCapabilities | None = None,
         **kwargs,
     ):
+        lock = lock or Lock()
         super().__init__(
-            server_name=server_name,
-            logging_level=logging_level,
-            transport_type=transport_type,
-            tool_cache_max_size=tool_cache_max_size,
-            tool_cache_max_ttl=tool_cache_max_ttl,
-            tool_result_cache_max_size=tool_result_cache_max_size,
-            tool_result_cache_max_ttl=tool_result_cache_max_ttl,
-            resource_list_cache_max_size=resource_list_cache_max_size,
-            resource_list_cache_max_ttl=resource_list_cache_max_ttl,
-            resource_contents_cache_max_ttl=resource_contents_cache_max_ttl,
-            resource_contents_cache_max_size=resource_contents_cache_max_size,
-            read_timeout_seconds=read_timeout_seconds,
-            connection_parameters=connection_parameters,
-            sampling_enabled=sampling_enabled,
-            list_roots_enabled=list_roots_enabled,
-            tools_enabled=tools_enabled,
-            prompts_enabled=prompts_enabled,
-            is_busy=is_busy,
-            is_alive=is_alive,
-            has_error=has_error,
-            error_message=error_message,
-            max_retries=max_retries,
+            config=config,
             lock=lock,
-            current_roots=current_roots,
-            sampling_callback=sampling_callback,
-            list_roots_callback=list_roots_callback,
-            logging_callback=logging_callback,
-            message_handler=message_handler,
+            tool_cache=tool_cache,
+            tool_result_cache=tool_result_cache,
+            resource_contents_cache=resource_contents_cache,
+            resource_list_cache=resource_list_cache,
+            client_context_manager=client_context_manager,
+            client_session=client_session,
+            connected_server_capabilities=connected_server_capabilities,
             **kwargs,
         )
 
-        if not self._client_context_manager:
+        if not self.client_context_manager:
             # Will be set during the connect cycle.
-            self._client_context_manager = None
+            self.client_context_manager = None
 
         # After initialization, assign the default_callbacks if they have not been specified.
-        if not self.logging_callback:
-            self.logging_callback = default_flock_mcp_logging_callback_factory(
-                self.server_name, logger)
+        if not self.config.logging_callback:
+            self.config.logging_callback = default_flock_mcp_logging_callback_factory(
+                self.config.server_name, logger)
 
-        if not self.message_handler:
-            self.message_handler = default_flock_mcp_message_handler_callback_factory()
+        if not self.config.message_handler:
+            self.config.message_handler = default_flock_mcp_message_handler_callback_factory(
+                associated_client=self, logger=logger)
 
-        if not self.sampling_callback:
-            self.sampling_callback = default_flock_mcp_sampling_callback_factory()
+        if not self.config.sampling_callback:
+            self.config.sampling_callback = default_flock_mcp_sampling_callback_factory(
+                associated_client=self, logger=logger)
 
-        if not self.list_roots_callback:
-            self.list_roots_callback = default_flock_mcp_list_roots_callback_factory()
+        if not self.config.list_roots_callback:
+            self.config.list_roots_callback = default_flock_mcp_list_roots_callback_factory(
+                asscociated_client=self, logger=logger)
 
-        if not self._tool_cache:
-            self._tool_cache = TTLCache(
-                maxsize=self.tool_cache_max_size,
-                ttl=self.tool_cache_max_ttl,
+        if not self.tool_cache:
+            self.tool_cache = TTLCache(
+                maxsize=self.config.tool_cache_max_size,
+                ttl=self.config.tool_cache_max_ttl,
             )
 
         # set up the caches
-        if not self._tool_result_cache:
-            self._tool_cache = TTLCache(
-                maxsize=self.tool_result_cache_max_size,
-                ttl=self.tool_result_cache_max_ttl,
+        if not self.tool_result_cache:
+            self.tool_cache = TTLCache(
+                maxsize=self.config.tool_result_cache_max_size,
+                ttl=self.config.tool_result_cache_max_ttl,
             )
 
-        if not self._resource_contents_cache:
-            self._resource_contents_cache = TTLCache(
-                maxsize=self.resource_contents_cache_max_size,
-                ttl=self.resource_contents_cache_max_ttl,
+        if not self.resource_contents_cache:
+            self.resource_contents_cache = TTLCache(
+                maxsize=self.config.resource_contents_cache_max_size,
+                ttl=self.config.resource_contents_cache_max_ttl,
             )
-        if not self._resource_list_cache:
-            self._resource_list_cache = TTLCache(
-                maxsize=self.resource_list_cache_max_size,
-                ttl=self.resource_list_cache_max_ttl,
+        if not self.resource_list_cache:
+            self.resource_list_cache = TTLCache(
+                maxsize=self.config.resource_list_cache_max_size,
+                ttl=self.config.resource_list_cache_max_ttl,
             )
 
     async def get_server_name(self) -> str:
         async with self.lock:
-            return self.server_name
+            return self.config.server_name
 
-    async def get_current_roots(self) -> list[Root] | None:
+    async def get_roots(self) -> list[Root] | None:
         async with self.lock:
-            return self.current_roots
+            return self.config.mount_points
 
-    async def set_current_roots(self, new_roots: list[Root]) -> None:
+    @mcp_error_handler(default_return=None, logger=logger)
+    async def set_roots(self, new_roots: list[Root]) -> None:
         async with self.lock:
-            self.current_roots = new_roots
-
-    async def get_is_busy(self) -> bool:
-        async with self.lock:
-            return self.is_busy
-
-    async def set_is_busy(self, status: bool) -> None:
-        async with self.lock:
-            self.is_busy = status
-
-    async def get_is_alive(self) -> bool:
-        async with self.lock:
-            return self.is_alive
-
-    async def set_is_alive(self, status: bool) -> None:
-        async with self.lock:
-            self.is_alive = status
-
-    async def get_has_error(self) -> bool:
-        async with self.lock:
-            return self.has_error
-
-    async def set_has_error(self, status: bool) -> None:
-        async with self.lock:
-            self.has_error = status
-
-    async def get_error_message(self) -> str | None:
-        async with self.lock:
-            return self.error_message
-
-    async def set_error_message(self, message: str | None) -> None:
-        async with self.lock:
-            self.error_message = message
+            self.config.mount_points = new_roots
+            if self.client_session:
+                await self.client_session.send_roots_list_changed()
 
     async def invalidate_tool_cache(self) -> None:
         logger.debug(
-            f"Invalidating tool_cache for server '{self.server_name}'")
+            f"Invalidating tool_cache for server '{self.config.server_name}'")
         async with self.lock:
-            if self._tool_cache:
-                self._tool_cache.clear()
+            if self.tool_cache:
+                self.tool_cache.clear()
                 logger.debug(
-                    f"Invalidated tool_cache for server '{self.server_name}'")
+                    f"Invalidated tool_cache for server '{self.config.server_name}'")
 
     async def invalidate_resource_list_cache(self) -> None:
         logger.debug(
-            f"Invalidating resource_list_cache for server '{self.server_name}'")
+            f"Invalidating resource_list_cache for server '{self.config.server_name}'")
         async with self.lock:
-            if self._resource_list_cache:
-                self._resource_list_cache.clear()
+            if self.resource_list_cache:
+                self.resource_list_cache.clear()
                 logger.debug(
-                    f"Invalidated resource_list_cache for server '{self.server_name}'")
+                    f"Invalidated resource_list_cache for server '{self.config.server_name}'")
 
     async def invalidate_resource_contents_cache(self) -> None:
         logger.debug(
-            f"Invalidating resource_contents_cache for server '{self.server_name}'.")
+            f"Invalidating resource_contents_cache for server '{self.config.server_name}'.")
         async with self.lock:
-            if self._resource_contents_cache:
-                self._resource_contents_cache.clear()
+            if self.resource_contents_cache:
+                self.resource_contents_cache.clear()
                 logger.debug(
-                    f"Invalidated resource_contents_cache for server '{self.server_name}'")
+                    f"Invalidated resource_contents_cache for server '{self.config.server_name}'")
 
     async def invalidate_resource_contents_cache_entry(self, key: str) -> None:
         logger.debug(
-            f"Attempting to clear entry with key: {key} from resource_contents_cache for server '{self.server_name}'")
+            f"Attempting to clear entry with key: {key} from resource_contents_cache for server '{self.config.server_name}'")
         async with self.lock:
-            if self._resource_contents_cache:
+            if self.resource_contents_cache:
                 try:
-                    self._resource_contents_cache.pop(key, None)
+                    self.resource_contents_cache.pop(key, None)
                     logger.debug(
-                        f"Cleared entry with key {key} from resource_contents_cache for server '{self.server_name}'")
+                        f"Cleared entry with key {key} from resource_contents_cache for server '{self.config.server_name}'")
                 except:
                     logger.debug(
-                        f"No entry for key {key} found in resource_contents_cache for server '{self.server_name}'. Ignoring.")
+                        f"No entry for key {key} found in resource_contents_cache for server '{self.config.server_name}'. Ignoring.")
                     return  # do nothing
 
     @abstractmethod
@@ -477,7 +449,6 @@ class FlockMCPClientBase(BaseModel, ABC):
         in the case of sse clients this is the function `sse_client` (in mcp.client.sse)
         in the case of websocket clients this is the function `websocket_client` in (mcp.client.ws)
         """
-        pass
 
     async def connect(self, retries: int | None = None) -> ClientSession:
         """
@@ -487,25 +458,24 @@ class FlockMCPClientBase(BaseModel, ABC):
         """
 
         async with self.lock:
-
             # if already connected, return it
-            if self._client_session:
-                return self._client_session
+            if self.client_session:
+                return self.client_session
 
-            # establish the generator_function
-            generator_manager = self.get_init_function()
+        # Release the lock before establishing a client session.
+        # establish the generator_function
+        generator_manager = self.get_init_function()
 
-            # grab the context manager
-            self._client_context_manager = self.get_client_session(
-                generator_manager=generator_manager)
+        # grab the context manager
+        self.client_context_manager = self.get_client_session
 
-            # manually __aenter__ the context manager
-            self._client_session = await self._client_context_manager.__aenter__()
+        # manually __aenter__ the context manager
+        self.client_session = await self.client_context_manager.__aenter__(generator_manager=generator_manager)
 
         # Tell the server about our state.
         await self.perform_initial_handshake()
 
-        return self._client_session
+        return self.client_session
 
     @mcp_error_handler(default_return=None, logger=logger)
     async def perform_initial_handshake(self) -> None:
@@ -518,13 +488,13 @@ class FlockMCPClientBase(BaseModel, ABC):
 
             # 1) do the LSP-style initialize handshake
             logger.debug(
-                f"Performing intialize handshake with server '{self.server_name}'")
-            init: InitializeResult = await self._client_session.initialize()
+                f"Performing intialize handshake with server '{self.config.server_name}'")
+            init: InitializeResult = await self.client_session.initialize()
 
-            self._connected_server_capabilites = init
+            self.connected_server_capabilities = init
 
             init_report = f"""
-            Server Init Handshake completed Server '{self.server_name}' 
+            Server Init Handshake completed Server '{self.config.server_name}' 
             Lists the following Capabilities:
         
             - Protocol Version: {init.protocolVersion}
@@ -540,24 +510,24 @@ class FlockMCPClientBase(BaseModel, ABC):
 
             # 2) if we already know our current roots, notify the server
             #    so that it will follow up with a ListRootsRequest
-            if self.current_roots:
-                await self._client_session.send_roots_list_changed()
+            if self.mount_points:
+                await self.client_session.send_roots_list_changed()
 
             # 3) Tell the server, what logging level we would like to use
-            await self._client_session.set_logging_level(level=self.logging_level)
+            await self.client_session.set_logging_level(level=self.config.server_logging_level)
 
-    async def _ensure_connected(self) -> None:
+    async def ensure_connected(self) -> None:
         # if we've never connected, then connect.
-        if not self._client_session:
+        if not self.client_session:
             await self.connect()
             return
 
         # otherwise, ping and reconnect on error
         try:
-            await self._client_session.send_ping()
-        except Exception:
+            await self.client_session.send_ping()
+        except Exception as e:
             logger.warning(
-                f"Session to '{self.server_name}' died, reconnecting.")
+                f"Session to '{self.config.server_name}' died, reconnecting. Exception was: {e}")
             await self.disconnect()
             await self.connect()
 
@@ -566,13 +536,13 @@ class FlockMCPClientBase(BaseModel, ABC):
         If previously connected via `self.connect()`, tear it down.
         """
         async with self.lock:
-            if not self._client_context_manager:
+            if not self.client_context_manager:
                 return
 
             # manually __aexit__
-            await self._client_context_manager.__aexit__(None, None, None)
-            self._client_context_manager = None
-            self._client_session = None
+            await self.client_context_manager.__aexit__(None, None, None)
+            self.client_context_manager = None
+            self.client_session = None
 
     @asynccontextmanager
     async def get_client_session(
@@ -586,36 +556,31 @@ class FlockMCPClientBase(BaseModel, ABC):
     ):
         """generator_manager must be one of mcp.client... stdio_client, sse_client, or websocket_client"""
 
-        server_params = self.connection_parameters
+        server_params = self.config.connection_paramters
 
-        if self.transport_type == "stdio" and not isinstance(server_params, StdioServerParameters):
+        if self.config.transport_type == "stdio" and not isinstance(server_params, StdioServerParameters):
             raise TypeError(
                 f"Server Parameters for a stdio-client must be of type {type(StdioServerParameters)} got {type(server_params)}"
             )
-        if self.transport_type == "sse" and not isinstance(server_params, SseServerParameters):
+        if self.config.transport_type == "sse" and not isinstance(server_params, SseServerParameters):
             raise TypeError(
                 f"Server Parameters for a sse-client must be of type {type(SseServerParameters)} got {type(server_params)}"
             )
-        if self.transport_type == "websockets" and not isinstance(server_params, WebSocketServerParameters):
+        if self.config.transport_type == "websockets" and not isinstance(server_params, WebSocketServerParameters):
             raise TypeError(
                 f"Server Parameters for a websocket-client must be of type {type(WebSocketServerParameters)} got {type(server_params)}"
             )
 
-        read: MemoryObjectReceiveStream[JSONRPCMessage |
-                                        Exception] | None = None
-        write: MemoryObjectSendStream[JSONRPCMessage] | None = None
-        match self.transport_type:
+        match self.config.transport_type:
             case "stdio":
                 generator_manager = stdio_client if generator_manager is None else generator_manager
                 async with self.lock:
                     stack = AsyncExitStack()
-                    await stack.__aenter__()
                     read, write = await stack.enter_async_context(generator_manager(server_params))
             case "sse":
                 generator_manager = sse_client if generator_manager is None else generator_manager
                 async with self.lock:
                     stack = AsyncExitStack()
-                    await stack.__aenter__()
                     read, write = await stack.enter_async_context(generator_manager(
                         url=server_params.url,
                         headers=server_params.headers,
@@ -626,14 +591,12 @@ class FlockMCPClientBase(BaseModel, ABC):
                 generator_manager = websocket_client if generator_manager is None else generator_manager
                 async with self.lock:
                     stack = AsyncExitStack()
-                    await stack.__aenter__()
                     read, write = await stack.enter_async_context(generator_manager(
                         url=server_params.url
                     ))
             case "custom":
                 async with self.lock:
                     stack = AsyncExitStack()
-                    await stack.__aenter__()
                     read, write = await stack.enter_async_context(generator_manager(server_params))
 
         if not read or not write:
@@ -644,10 +607,11 @@ class FlockMCPClientBase(BaseModel, ABC):
             ClientSession(
                 read_stream=read,
                 write_stream=write,
-                read_timeout_seconds=self.read_timeout_seconds,
-                list_roots_callback=self.logging_callback,
-                logging_callback=self.logging_callback,
-                messsage_handler=self.message_handler,
+                read_timeout_seconds=self.config.read_timeout_seconds,
+                list_roots_callback=self.config.list_roots_callback,
+                logging_callback=self.config.logging_callback,
+                message_handler=self.config.message_handler,
+                sampling_callback=self.config.sampling_callback,
             )
         )
 
@@ -661,16 +625,16 @@ class FlockMCPClientBase(BaseModel, ABC):
         Gets a list of available tools from the server.
         """
 
-        @cached(cache=self._tool_cache)
+        @cached(cache=self.tool_cache)
         async def _get_tools_cached(agent_id: str, run_id: str) -> List[FlockMCPToolBase]:
 
             async with self.lock:
-                if not self.tools_enabled:
+                if not self.config.tools_enabled:
                     return []
 
             initialized = False
             async with self.lock:
-                if self._client_session:
+                if self.client_session:
                     initialized = True
 
             if not initialized:
@@ -679,21 +643,24 @@ class FlockMCPClientBase(BaseModel, ABC):
                 logger.warning(
                     f"Underlying session for connection to server has not been initialized"
                 )
-                result = await self.connect(retries=self.max_retries)
+                result = await self.connect(retries=self.config.max_retries)
                 if isinstance(result, Exception):
                     # This means that the connection failed.
                     raise Exception(
-                        f"Connection for client for server '{self.server_name}' under agent {agent_id} (run_id: {run_id}) failed with exception: {result}"
+                        f"Connection for client for server '{self.config.server_name}' under agent {agent_id} (run_id: {run_id}) failed with exception: {result}"
                     )
                 logger.debug(
-                    f"Underlying session for server '{self.server_name}' for agent {agent_id} in run {run_id} has been established.")
+                    f"Underlying session for server '{self.config.server_name}' for agent {agent_id} in run {run_id} has been established.")
                 initialized = True
 
             @mcp_error_handler(default_return=[], logger=logger)
             async def _get_tools_internal() -> List[FlockMCPToolBase]:
 
+                if not self.config.tools_enabled:
+                    return []
+
                 async with self.lock:
-                    response: ListToolsResult = await self._client_session.list_tools()
+                    response: ListToolsResult = await self.client_session.list_tools()
                     flock_tools = []
 
                     for tool in response.tools:
@@ -713,22 +680,22 @@ class FlockMCPClientBase(BaseModel, ABC):
         Calls a tool on the respective mcp server.
         """
 
-        @cached(cache=self._tool_result_cache)
+        @cached(cache=self.tool_result_cache)
         async def _call_tool_cached(agent_id: str, run_id: str, name: str, arguments: dict[str, Any]) -> CallToolResult:
             initialized = False
             async with self.lock:
-                if self._client_session:
+                if self.client_session:
                     initialized = True
 
             if not initialized:
                 # Underlying client session has not yet been initialized
                 # This should not happen in practice, but its good to be catious
                 logger.warning(
-                    f"Underlying session for connection to server '{self.server_name}' has not been initialized."
+                    f"Underlying session for connection to server '{self.config.server_name}' has not been initialized."
                 )
-                await self.connect(retries=self.max_retries)
+                await self.connect(retries=self.config.max_retries)
                 logger.debug(
-                    f"Underlying session for client for server '{self.server_name}' has been initialized."
+                    f"Underlying session for client for server '{self.config.server_name}' has been initialized."
                 )
                 initialized = True
 
@@ -738,7 +705,7 @@ class FlockMCPClientBase(BaseModel, ABC):
                     logger.debug(
                         f"Calling tool '{name}' with arguments {arguments}"
                     )
-                    return await self._client_session.call_tool(name=name, arguments=arguments)
+                    return await self.client_session.call_tool(name=name, arguments=arguments)
 
             return await _call_tool_internal(name=name, arguments=arguments)
 

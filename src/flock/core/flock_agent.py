@@ -4,6 +4,7 @@
 import asyncio
 import json
 import os
+import uuid
 from abc import ABC
 from collections.abc import Callable
 from datetime import datetime
@@ -59,6 +60,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     modularity, and integration with evaluation and routing components.
     Inherits from Pydantic BaseModel, ABC, DSPyIntegrationMixin, and Serializable.
     """
+
+    agent_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Internal, Unique UUID4 for this agent instance. No need to set it manually. Used for MCP features."
+    )
 
     name: str = Field(..., description="Unique identifier for the agent.")
 
@@ -320,7 +326,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 mcp_tools = []
                 if self.servers:
                     for server in self.servers:
-                        server_tools = await server.get_tools()
+                        server_tools = await server.get_tools(agent_id=self.agent_id, run_id=self.context.run_id)
                         mcp_tools = mcp_tools + server_tools
 
                 result = await self.evaluator.evaluate(

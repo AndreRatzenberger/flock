@@ -4,15 +4,17 @@ from datetime import timedelta
 from typing import Literal
 from pydantic import Field
 from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
-from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager, FlockMCPClientManagerConfigBase
 from flock.core.logging.logging import get_logger
-from flock.mcp.servers.stdio.flock_stdio_client import FlockStdioClient
+from flock.mcp.servers.stdio.flock_stdio_client import FlockStdioClient, FlockStdioMCPClientConfig
 
 logger = get_logger("mcp.stdio.connection_manager")
 
 
-class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
-    """Handles Clients that connect to a Stdio-Transport Type Server."""
+class FlockMCPStdioClientManagerConfig(FlockMCPClientManagerConfigBase):
+    """
+    Configuration for Stdio Client Managers.
+    """
 
     transport_type: Literal["stdio"] = Field(
         default="stdio",
@@ -24,43 +26,41 @@ class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
         description="Connection Parameters"
     )
 
-    async def get_client(self, agent_id, run_id):
-        """
-        Speciality for Stdio Clients:
-            Since the clients interact with a local script,
-            we override this method such that each agent gets the 
-            same client, irrespective of agent_id or run_id.
-        """
-        client = None
-        client_dict = self.clients.get("default_stdio", None)
-        if not client_dict:
-            client = await self.make_client(agent_id=agent_id, run_id=run_id)
-            self.clients["default_stdio"]["default_stdio"] = client
-        else:
-            client = client_dict.get("default_stdio", None)
-            if not client:
-                client = await self.make_client(agent_id=agent_id, run_id=run_id)
-                self.clients["default_stdio"]["default_stdio"] = client
 
-        # So now, we finally have a client
-        return client
+class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
+    """Handles Clients that connect to a Stdio-Transport Type Server."""
 
-    async def make_client(self, agent_id, run_id):
+    async def make_client(self):
+        """
+        Instantiate a client for an stdio-server.
+        """
 
         new_client = FlockStdioClient(
-            server_name=self.server_name,
-            agent_id=agent_id,
-            run_id=run_id,
-            transport_type="stdio",
-            connection_parameters=self.connection_parameters,
-            max_retries=self.max_retries,
-            current_roots=self.initial_roots,
-            is_busy=False,
-            is_alive=True,
-            has_error=False,
-            error_message=None,
-            tools_enabled=True,
-
+            config=FlockStdioMCPClientConfig(
+                server_name=self.config.server_name,
+                transport_type=self.config.transport_type,
+                server_logging_level=self.config.server_logging_level,
+                connection_paramters=self.config.connection_parameters,
+                max_retries=self.config.max_retries,
+                mount_points=self.config.mount_points,
+                read_timeout_seconds=self.config.read_timeout_seconds,
+                sampling_callback=self.config.sampling_callback,
+                list_roots_callback=self.config.list_roots_callback,
+                logging_callback=self.config.logging_callback,
+                message_handler=self.config.message_handler,
+                tool_cache_max_size=self.config.tool_cache_max_size,
+                tool_cache_max_ttl=self.config.tool_cache_max_ttl,
+                resource_contents_cache_max_size=self.config.resource_contents_cache_max_size,
+                resource_contents_cache_max_ttl=self.config.resource_contents_cache_max_ttl,
+                resource_list_cache_max_size=self.config.resource_list_cache_max_size,
+                resource_list_cache_max_ttl=self.config.resource_list_cache_max_ttl,
+                tool_result_cache_max_size=self.config.tool_result_cache_max_size,
+                tool_result_cache_max_ttl=self.config.tool_result_cache_max_ttl,
+                roots_enabled=self.config.roots_enabled,
+                tools_enabled=self.config.tools_enabled,
+                prompts_enabled=self.config.prompts_enabled,
+                sampling_enabled=self.config.sampling_enabled,
+            )
         )
 
         return new_client

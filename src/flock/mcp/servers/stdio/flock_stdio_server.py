@@ -12,7 +12,7 @@ from flock.core.serialization.serializable import Serializable
 
 from dspy import Tool as DSPyTool
 
-from flock.mcp.servers.stdio.flock_mcp_stdio_client_manager import FlockStdioMCPClientManager
+from flock.mcp.servers.stdio.flock_mcp_stdio_client_manager import FlockMCPStdioClientManagerConfig, FlockStdioMCPClientManager
 
 
 logger = get_logger("mcp.stdio.server")
@@ -34,6 +34,11 @@ class FlockMCPStdioServerConfig(FlockMCPServerConfig):
     for Flock MCP Servers using the stdio transport
     protocol.
     """
+
+    transport_type: Literal["stdio"] = Field(
+        default="stdio",
+        description="Stdio Transport Type."
+    )
 
     command: str = Field(
         ...,
@@ -105,40 +110,38 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
             # Check if we already initialized
             if not self.initialized:
                 # Initialize the underlying Connection Pool
-                if not self.connection_manager:
-                    self.connection_manager = FlockStdioMCPClientManager(
-                        connection_parameters=StdioServerParameters(
-                            command=self.server_config.command,
-                            args=self.server_config.args,
-                            env=self.server_config.env,
-                            cwd=self.server_config.cwd,
-                            encoding=self.server_config.encoding,
-                            encoding_error_handler=self.server_config.encoding_error_handler,
-                        ),
-                        max_retries=self.server_config.max_restart_attempts,
-                        sampling_callback=self.server_config.sampling_callback,
-                        logging_callback=self.server_config.logging_callback,
-                        list_roots_callback=self.server_config.list_roots_callback,
-                        initial_roots=self.server_config.mount_points,
-                        server_name=self.server_config.server_name,
+                if not self.client_manager:
+                    self.client_manager = FlockStdioMCPClientManager(
+                        config=FlockMCPStdioClientManagerConfig(
+                            server_name=self.server_config.server_name,
+                            server_logging_level=self.server_config.server_logging_level,
+                            transport_type=self.server_config.transport_type,
+                            read_timeout_seconds=self.server_config.read_timeout_seconds,
+                            max_retries=self.server_config.max_restart_attempts,
+                            logging_callback=self.server_config.logging_callback,
+                            message_handler=self.server_config.message_handler,
+                            sampling_callback=self.server_config.sampling_callback,
+                            list_roots_callback=self.server_config.list_roots_callback,
+                            mount_points=self.server_config.mount_points,
+                            tool_cache_max_size=self.server_config.tool_cache_max_size,
+                            resource_contents_cache_max_size=self.server_config.resource_contents_cache_max_size,
+                            resource_list_cache_max_size=self.server_config.resource_list_cache_max_size,
+                            tool_cache_max_ttl=self.server_config.tool_cache_max_ttl,
+                            resource_contents_cache_max_ttl=self.server_config.resource_contents_cache_max_ttl,
+                            resource_list_cache_max_ttl=self.server_config.resource_list_cache_max_ttl,
+                            roots_enabled=self.server_config.roots_enabled,
+                            tools_enabled=self.server_config.tools_enabled,
+                            prompts_enabled=self.server_config.prompts_enabled,
+                            sampling_enabled=self.server_config.sampling_enabled,
+                            connection_parameters=StdioServerParameters(
+                                command=self.server_config.command,
+                                args=self.server_config.args,
+                                cwd=self.server_config.cwd,
+                                encoding=self.server_config.encoding,
+                                encoding_error_handler=self.server_config.encoding_error_handler
+                            ),
+                            tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
+                            tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
+                        )
                     )
                     self.initialized = True
-
-    async def get_tools(self) -> list[DSPyTool]:
-        """
-        Retrieve a list of tools from the server.
-        """
-        if not self.initialized:
-            # Make sure a connection is up and running.
-            await self.initialize()
-
-        async with self.condition:
-            try:
-                result: list[DSPyTool] = await self.connection_manager.get_tools()
-                return result
-            except Exception as e:
-                logger.error(
-                    f"Unexpected Exception ocurred while trying go get tools from server '{self.server_config.server_name}'")
-                return []
-            finally:
-                self.condition.notify()

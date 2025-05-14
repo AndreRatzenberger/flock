@@ -4,8 +4,8 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Coroutine, TypeVar
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Annotated, Any, Coroutine, Literal, TypeVar
 
 from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager
 
@@ -28,6 +28,10 @@ tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 M = TypeVar("M", bound="FlockMCPServerConfig")
 
+LoggingLevel = Literal[
+    "debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"
+]
+
 
 class FlockMCPServerConfig(BaseModel):
     """"
@@ -46,6 +50,21 @@ class FlockMCPServerConfig(BaseModel):
     description: str | Callable[..., str] | None = Field(
         "",
         description="A human-readable description or a callable returning one."
+    )
+
+    server_logging_level: LoggingLevel = Field(
+        default="error",
+        description="The logging level to request from the mcp-server's logger."
+    )
+
+    transport_type: Literal["stdio", "sse", "websockets", "custom"] = Field(
+        ...,
+        description="What kind of transport this server uses."
+    )
+
+    read_timeout_seconds: timedelta = Field(
+        default_factory=lambda: timedelta(seconds=10),
+        description="How many seconds until timeout."
     )
 
     mount_points: list[Root] | None = Field(
@@ -68,7 +87,7 @@ class FlockMCPServerConfig(BaseModel):
         description="Whether or not this Server should provide agents with prompts."
     )
 
-    change_mountpoints_enabled: bool = Field(
+    roots_enabled: bool = Field(
         default=False,
         description="Wheter or not this Server should allow agents to dynamically change their mountpoints."
     )
@@ -78,7 +97,7 @@ class FlockMCPServerConfig(BaseModel):
         description="Whether or not this Server is capable of using FLock's LLMs to accept Sampling requests from remote servers."
     )
 
-    mount_points: list[str] | list[Annotated[AnyUrl, UrlConstraints(host_required=False)]] = Field(
+    mount_points: list[Root] = Field(
         default_factory=list,
         description="The original set of mount points",
     )
@@ -103,14 +122,45 @@ class FlockMCPServerConfig(BaseModel):
         description="Message Handler Callback."
     )
 
-    @field_validator("logging_callback", "sampling_callback", "list_roots_callback", "message_handler", mode="after")
-    @classmethod
-    def ensure_async(cls, fn):
-        if fn is None:
-            return fn
-        elif not asyncio.iscoroutinefunction(fn):
-            raise ValueError(f"{fn} must be an async function")
-        return fn
+    tool_cache_max_size: float = Field(
+        default=100,
+        description="How many items to hold in the tool cache."
+    )
+
+    tool_cache_max_ttl: float = Field(
+        default=60*5,
+        description="Max TTL for each item in the tool cache in seconds."
+    )
+
+    resource_contents_cache_max_size: float = Field(
+        default=100,
+        description="How many items to store in the resource contents cache."
+    )
+
+    resource_contents_cache_max_ttl: float = Field(
+        default=60*5,
+        description="Max TTL for each item in the resource contents cache in seconds."
+    )
+
+    resource_list_cache_max_size: float = Field(
+        default=100,
+        description="How many items to to store in the resource list cache."
+    )
+
+    resource_list_cache_max_ttl: float = Field(
+        default=60*5,
+        description="Max TTL for each item in the resource list cache in seconds."
+    )
+
+    tool_result_cache_max_size: float = Field(
+        default=100,
+        description="Max number of items in the tool result cache."
+    )
+
+    tool_result_cache_max_ttl: float = Field(
+        default=60*5,
+        description="Max TTL for items in the tool result cache in seconds."
+    )
 
     @classmethod
     def with_fields(cls: type[M], **field_definitions) -> type[M]:
@@ -159,17 +209,10 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         description="Dictionary of FlockModules attached to this Server."
     )
 
-    # --- Runtime State (Excluded from Serialization) ---
-    context: FlockContext | None = Field(
-        default=None,
-        exclude=True,  # Exclude context from model_dump and serialization
-        description="Runtime context associated with the flock execution."
-    )
-
     # --- Underlying ConnectionManager ---
     # (Manages a pool of ClientConnections and does the actual talking to the MCP Server)
     # (Excluded from Serialization)
-    connection_manager: FlockMCPClientManager | None = Field(
+    client_manager: FlockMCPClientManager | None = Field(
         default=None,
         exclude=True,
         description="Underlying Connection Manager. Handles the actual underlying connections to the server."
@@ -229,12 +272,24 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         """
         pass
 
-    @abstractmethod
-    async def get_tools(self) -> list[DSPyTool]:
+    async def get_tools(self, agent_id: str, run_id: str) -> list[DSPyTool]:
         """
         Retrieves a list of available tools from this server.
         """
-        pass
+        if not self.initialized:
+            await self.initialize()
+
+        async with self.condition:
+            try:
+                result: list[DSPyTool] = await self.client_manager.get_tools(agent_id=agent_id, run_id=run_id)
+                return result
+            except Exception as e:
+                logger.error(
+                    f"Unexpected Exception ocurred while trying to get tools from server '{self.server_config.server_name}': {e}"
+                )
+                return []
+            finally:
+                self.condition.notify()
 
     @classmethod
     def from_dict(cls: type[T], data: dict[str, Any]) -> T:
@@ -440,12 +495,12 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         return data
 
     async def __aenter__(self):
-        if not self.connection_manager or not self.initialized:
+        if not self.client_manager or not self.initialized:
             # Connection has not yet been established.
             await self.initialize()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         # Check if the connection_manager is there:
-        if self.connection_manager:
-            await self.connection_manager.close_all()
+        if self.client_manager:
+            await self.client_manager.close_all()

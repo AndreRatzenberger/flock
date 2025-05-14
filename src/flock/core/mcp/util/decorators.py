@@ -2,12 +2,10 @@ import functools
 import asyncio
 import random
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
-import anyio
 import httpx
-from anyio import BrokenResourceError, ClosedResourceError
+from anyio import ClosedResourceError
 
 from mcp import McpError
-from mcp.types import CallToolResult, TextContent
 
 from flock.core.logging.logging import FlockLogger, get_logger
 
@@ -25,7 +23,7 @@ def mcp_error_handler(default_return: R, logger: FlockLogger = _DEFAULT_LOGGER) 
     Wrap an async fn so that on any *transport*-level failure we:
     - disconnect + reconnect
     - retry with exponential backoff + jitter
-    - give up after self.max_retries
+    - give up after self.config.max_retries
     - finally return `default_return`
     """
     def decorator(fn):
@@ -33,12 +31,15 @@ def mcp_error_handler(default_return: R, logger: FlockLogger = _DEFAULT_LOGGER) 
         async def wrapper(*args, **kwargs):
             self = args[0]
             # how many times to retry on transport error
-            max_tries = getattr(self, "max_retries", 1)
+            config = getattr(self, "config", None)
+            max_tries = 1
+            if config:
+                max_tries = getattr(config, "max_retries", 1)
             base_delay = 0.1
 
             for attempt in range(1, max_tries + 2):
                 # ensure that we've at least connected once
-                await self._ensure_connected()
+                await self.ensure_connected()
                 try:
                     return await fn(*args, **kwargs)
                 except McpError as e:

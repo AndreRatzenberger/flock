@@ -113,7 +113,7 @@ FlockMessageHandlerMCPCallback = Callable[
 ]
 
 FlockListRootsMCPCallback = Callable[
-    [RequestContext["ClientSession", Any]],
+    [RequestContext[ClientSession, Any]],
     Awaitable[ListRootsResult | ErrorData],
 ]
 
@@ -130,7 +130,7 @@ def default_flock_mcp_sampling_callback_factory(associated_client: Any, logger: 
     Creates a fallback for handling incoming sampling requests.
     """
     logger_to_use = logger or default_sampling_callback_logger
-    server_name = associated_client.server_name
+    server_name = associated_client.config.server_name
 
     # TODO: enabling content-moderation
     async def default_sampling_callback(
@@ -159,7 +159,7 @@ def default_flock_mcp_message_handler_callback_factory(associated_client: Any, l
       sent by the server.
     """
     logger_to_use = logger if logger else default_message_handler_logger
-    server_name = associated_client.server_name
+    server_name = associated_client.config.server_name
 
     async def handle_incoming_server_notification(n: ServerNotification) -> None:
         """
@@ -204,7 +204,7 @@ def default_flock_mcp_list_roots_callback_factory(asscociated_client: Any, logge
     Creates a fallback for a list roots callback for a client.
     """
     logger_to_use = logger or default_list_roots_callback_logger
-    server_name = asscociated_client.server_name
+    server_name = asscociated_client.config.server_name
 
     async def default_list_roots_callback(context: RequestContext["ClientSession", Any]) -> ListRootsResult | ErrorData:
         if asscociated_client.list_roots_enabled:
@@ -217,6 +217,7 @@ def default_flock_mcp_list_roots_callback_factory(asscociated_client: Any, logge
                 code=INVALID_REQUEST,
                 message="List roots not supported",
             )
+    return default_list_roots_callback
 
 
 def default_flock_mcp_logging_callback_factory(server_name: str, logger: FlockLogger | None = None) -> FlockLoggingMCPCallback:
@@ -272,7 +273,7 @@ async def handle_incoming_exception(e: Exception, logger_to_use: FlockLogger, as
     Process an incoming exception Message.
     """
 
-    server_name = await associated_client.server_name
+    server_name = await associated_client.config.server_name
 
     # For now, simply log it.
     logger_to_use.error(
@@ -311,7 +312,7 @@ async def handle_resource_update_notification(n: ResourceUpdatedNotification, lo
     metadata = params.meta or {}
     uri = params.uri
 
-    message = f"RESOURCE_UPDATE: Server '{associated_client.server_name}' reports change on resoure at: {uri}. (Meta Data: {metadata})"
+    message = f"RESOURCE_UPDATE: Server '{associated_client.config.server_name}' reports change on resoure at: {uri}. (Meta Data: {metadata})"
 
     logger_to_use.info(message)
 
@@ -324,7 +325,7 @@ async def handle_resource_list_changed_notification(n: ResourceListChangedNotifi
     params = n.params or {}
     metadata = params.meta or {}
 
-    message = f"RESOURCE_LIST_CHANGED: Server '{associated_client.server_name}' reports a change in their resource list: {metadata}"
+    message = f"RESOURCE_LIST_CHANGED: Server '{associated_client.config.server_name}' reports a change in their resource list: {metadata}"
 
     logger_to_use.info(message)
     await associated_client.invalidate_resource_list_cache()
@@ -336,7 +337,7 @@ async def handle_tool_list_changed_notification(n: ToolListChangedNotification, 
     params = n.params or {}
     metadata = params.meta or {}
 
-    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.server_name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
+    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.config.server_name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
 
     logger_to_use.info(message)
     await associated_client.invalidate_tool_cache()
