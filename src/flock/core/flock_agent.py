@@ -195,6 +195,37 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Get a list of currently enabled modules attached to this agent."""
         return [m for m in self.modules.values() if m.config.enabled]
 
+    @property
+    def resolved_description(self) -> str | None:
+        """Returns the resolved agent description.
+        If the description is a callable, it attempts to call it.
+        Returns None if the description is None or a callable that fails.
+        """
+        if callable(self.description):
+            try:
+                # Attempt to call without context first.
+                # If callables consistently need context, this might need adjustment
+                # or the template-facing property might need to be simpler,
+                # relying on prior resolution via resolve_callables.
+                return self.description()
+            except TypeError:
+                # Log a warning that context might be needed?
+                # For now, treat as unresolvable in this simple property.
+                logger.warning(
+                    f"Callable description for agent '{self.name}' could not be resolved "
+                    f"without context via the simple 'resolved_description' property. "
+                    f"Consider calling 'agent.resolve_callables(context)' beforehand if context is required."
+                )
+                return None # Or a placeholder like "[Callable Description]"
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable description for agent '{self.name}': {e}"
+                )
+                return None
+        elif isinstance(self.description, str):
+            return self.description
+        return None
+
     # --- Lifecycle Hooks (Keep as they were) ---
     async def initialize(self, inputs: dict[str, Any]) -> None:
         """Initialize agent and run module initializers."""

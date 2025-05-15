@@ -5,6 +5,7 @@ including listing, adding, editing, and removing agents.
 """
 
 import questionary
+from rich.box import Box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -104,9 +105,11 @@ def _list_agents(flock: Flock):
         model = agent.model or flock.model or "Default"
 
         # Format description (truncate if too long)
-        description = str(agent.description)
-        if len(description) > 30:
+        description = agent.resolved_description
+        if description and len(description) > 30:
             description = description[:27] + "..."
+        elif not description:
+            description = "N/A"
 
         # Format input/output (truncate if too long)
         input_str = str(agent.input)
@@ -156,13 +159,13 @@ def _view_agent_details(agent: FlockAgent):
     )
 
     # Create a panel for each section
-    basic_info = Table(show_header=False, box=None)
+    basic_info = Table(show_header=False, box=Box.ROUNDED, padding=(0, 2))
     basic_info.add_column("Property", style="cyan")
     basic_info.add_column("Value", style="green")
 
     basic_info.add_row("Name", agent.name)
     basic_info.add_row("Model", str(agent.model or "Default"))
-    basic_info.add_row("Description", str(agent.description))
+    basic_info.add_row("Description", agent.resolved_description if agent.resolved_description else "N/A")
     basic_info.add_row("Input", str(agent.input))
     basic_info.add_row("Output", str(agent.output))
     basic_info.add_row("Write to File", str(agent.write_to_file))
@@ -328,6 +331,18 @@ def _edit_agent(flock: Flock):
         return
 
     agent = flock._agents[agent_name]
+
+    if not agent:
+        console.print(f"[bold red]Agent '{agent_name}' not found.[/]")
+        return
+
+    console.print(f"\n[bold underline]Details for Agent: {agent.name}[/]")
+    basic_info = Table(show_header=False, box=Box.ROUNDED, padding=(0, 2))
+    basic_info.add_row("Name", agent.name)
+    description = agent.resolved_description
+    basic_info.add_row("Description", description if description else "N/A")
+    basic_info.add_row("Model", agent.model or "Flock Default")
+    basic_info.add_row("Input Signature", str(agent.input))
 
     # Choose edit method
     edit_choice = questionary.select(
