@@ -29,7 +29,7 @@ body.chat-page {
     padding: 1rem 1.5rem; 
     display: flex;
     flex-direction: column;
-    min-height: 60vh;
+    min-height: 0;
     gap: 1rem;
     background-color: rgba(0, 0, 0, 0.05);
     background-image: 
@@ -118,7 +118,7 @@ body.chat-page {
     box-shadow: 0 0 0 2px rgba(var(--pico-primary-rgb, 0, 123, 255), 0.25);
 }
 
-#chat-form button { 
+#chat-container form button[type="submit"] { 
     flex: 0 0 auto; 
     min-width: auto;
     width: 150px; /* Wider send button */
@@ -132,7 +132,7 @@ body.chat-page {
     height: 3rem;
 }
 
-#chat-form button:hover {
+#chat-container form button[type="submit"]:hover {
     background: var(--pico-primary-hover, var(--pico-primary));
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -185,11 +185,11 @@ body.chat-page {
    ------------------------------------------------------------------------- */
 body:not(.chat-page) #chat-container,
 body:not(.chat-page) .chat-container {
-    height: auto;
-    min-height: 60vh;
-    /* share same centering rules */
+    height: 100%;
+    min-height: 100%;
+    /* allow full width inside the main content area */
     width: 100%;
-    max-width: 80%;
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -224,4 +224,19 @@ body:not(.chat-page) .chat-container {
 body:not(.chat-page) .chat-settings-form .grid button:first-child {
     flex: 0 0 auto;
     width: auto;
+}
+
+/* -------------------------------------------------------------------------
+   Container flex area to ensure chat-log grows/shrinks as needed
+   ------------------------------------------------------------------------- */
+#chat-content-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+/* Prevent double scrollbars when chat is embedded */
+main.main-content:has(#chat-container) {
+    overflow: hidden;
 }
