@@ -23,12 +23,13 @@
           hx-indicator="#agent-detail-loading-indicator">
 
         <fieldset>
-            <label for="agent_name_field">Name *</label>
-            <input type="text" id="agent_name_field" name="agent_name" value="{{ agent.name if agent and not form_errors else (form_data.agent_name if form_data else '') }}" required placeholder="my_processing_agent">
+            <legend>Core Agent Configuration</legend>
+            <label for="agent_name_field">Agent Name *</label>
+            <input type="text" id="agent_name_field" name="agent_name" value="{{ agent.name if agent and not form_errors else (form_data.agent_name if form_data else '') }}" required placeholder="Unique name for the agent">
             {% if form_errors and form_errors.agent_name %}<small class="field-error">{{ form_errors.agent_name }}</small>{% endif %}
 
             <label for="agent_description_field">Description</label>
-            <textarea id="agent_description_field" name="agent_description" placeholder="Briefly describe what this agent does.">{{ agent.description if agent and not form_errors else (form_data.agent_description if form_data else '') }}</textarea>
+            <textarea id="agent_description_field" name="agent_description" placeholder="Briefly describe what this agent does.">{{ agent.resolved_description if agent and not form_errors else (form_data.agent_description if form_data else '') }}</textarea>
 
             <label for="agent_model_field">Model Override (Optional)</label>
             <input type="text" id="agent_model_field" name="agent_model" value="{{ agent.model if agent and agent.model and not form_errors else (form_data.agent_model if form_data else '') }}" placeholder="e.g., openai/gpt-3.5-turbo (uses Flock default if blank)">
