@@ -246,7 +246,7 @@ def create_api_router() -> APIRouter:
         """List all available agents in the currently loaded Flock."""
         logger.debug("API request: list agents")
         agents_list = [
-            {"name": agent.name, "description": agent.description or agent.name}
+            {"name": agent.name, "description": agent.resolved_description or agent.name}
             for agent in flock_instance.agents.values()
         ]
         return {"agents": agents_list}
