@@ -152,6 +152,10 @@ def generate_theme_css_web(theme_name: str | None) -> str:
     active_theme_name = theme_name or get_current_theme_name() or DEFAULT_THEME_NAME
     theme_filename = f"{active_theme_name}.toml"
     theme_path = THEMES_DIR / theme_filename
+    theme_path = theme_path.resolve()  # Normalize the path
+    if not str(theme_path).startswith(str(THEMES_DIR)):  # Ensure it's within THEMES_DIR
+        logger.warning(f"Invalid theme path: {theme_path}. Using default: {DEFAULT_THEME_NAME}.toml")
+        theme_path = THEMES_DIR / f"{DEFAULT_THEME_NAME}.toml"
     if not theme_path.exists():
         logger.warning(f"Theme file not found: {theme_path}. Using default: {DEFAULT_THEME_NAME}.toml")
         theme_path = THEMES_DIR / f"{DEFAULT_THEME_NAME}.toml"

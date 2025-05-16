@@ -70,7 +70,7 @@ def set_current_theme_name(theme_name: str | None):
             else:
                 print(f"Warning: Theme 'random' specified, but no themes found in {THEMES_DIR}. Using default: {DEFAULT_THEME_NAME}")
                 # resolved_theme remains DEFAULT_THEME_NAME
-        elif theme_name in [t.value for t in OutputTheme] or theme_name in list_available_themes():
+        elif theme_name in list_available_themes():
             resolved_theme = theme_name
         else:
             print(f"Warning: Invalid theme name provided ('{theme_name}'). Using default: {DEFAULT_THEME_NAME}")
