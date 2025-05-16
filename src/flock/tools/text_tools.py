@@ -21,12 +21,12 @@ except LookupError:
 
 
 @traced_and_logged
-def split_by_sentences(text: str) -> list[str]:
+def text_split_by_sentences(text: str) -> list[str]:
     return nltk.sent_tokenize(text)
 
 
 @traced_and_logged
-def split_by_characters(
+def text_split_by_characters(
     text: str, chunk_size: int = 4000, overlap: int = 200
 ) -> list[str]:
     if chunk_size <= 0:
@@ -71,7 +71,7 @@ def split_by_characters(
 
 
 @traced_and_logged
-def split_by_tokens(
+def text_split_by_tokens(
     text: str,
     tokenizer: Callable[[str], list[str]],
     max_tokens: int = 1024,
@@ -90,7 +90,7 @@ def split_by_tokens(
 
 
 @traced_and_logged
-def split_by_separator(text: str, separator: str = "\n\n") -> list[str]:
+def text_split_by_separator(text: str, separator: str = "\n\n") -> list[str]:
     if not text:
         return []
 
@@ -99,7 +99,7 @@ def split_by_separator(text: str, separator: str = "\n\n") -> list[str]:
 
 
 @traced_and_logged
-def recursive_text_splitter(
+def text_recursive_splitter(
     text: str,
     chunk_size: int = 4000,
     separators: list[str] = ["\n\n", "\n", ". ", ", ", " ", ""],
@@ -114,7 +114,7 @@ def recursive_text_splitter(
     if not separators:
         return [
             text[:chunk_size],
-            *recursive_text_splitter(text[chunk_size:], chunk_size, separators),
+            *text_recursive_splitter(text[chunk_size:], chunk_size, separators),
         ]
 
     separator = separators[0]
@@ -122,7 +122,7 @@ def recursive_text_splitter(
 
     if separator == "":
         # If we're at the character level, just split by characters
-        return split_by_characters(text, chunk_size=chunk_size, overlap=0)
+        return text_split_by_characters(text, chunk_size=chunk_size, overlap=0)
 
     splits = text.split(separator)
     separator_len = len(separator) if keep_separator else 0
@@ -147,7 +147,7 @@ def recursive_text_splitter(
                 current_length = 0
 
             # Recursively split this large piece
-            smaller_chunks = recursive_text_splitter(
+            smaller_chunks = text_recursive_splitter(
                 split, chunk_size, new_separators, keep_separator
             )
             result.extend(smaller_chunks)
@@ -169,10 +169,10 @@ def recursive_text_splitter(
 
 
 @traced_and_logged
-def chunk_text_for_embedding(
+def text_chunking_for_embedding(
     text: str, file_name: str, chunk_size: int = 1000, overlap: int = 100
 ) -> list[dict[str, Any]]:
-    chunks = split_by_characters(text, chunk_size=chunk_size, overlap=overlap)
+    chunks = text_split_by_characters(text, chunk_size=chunk_size, overlap=overlap)
 
     # Create metadata for each chunk
     result = []
@@ -190,7 +190,7 @@ def chunk_text_for_embedding(
 
 
 @traced_and_logged
-def split_code_by_functions(code: str) -> list[dict[str, Any]]:
+def text_split_code_by_functions(code: str) -> list[dict[str, Any]]:
     if not code:
         return []
 
@@ -238,7 +238,7 @@ def split_code_by_functions(code: str) -> list[dict[str, Any]]:
 
 
 @traced_and_logged
-def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
+def text_count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
     """Count tokens using tiktoken."""
     if not text:
         return 0
@@ -272,11 +272,11 @@ def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
 
     except ImportError:
         # Fallback to character-based estimation if tiktoken is not installed
-        return count_tokens_estimate(text, model)
+        return text_count_tokens_estimate(text, model)
 
 
 @traced_and_logged
-def count_tokens_estimate(text: str, model: str = "gpt-3.5-turbo") -> int:
+def text_count_tokens_estimate(text: str, model: str = "gpt-3.5-turbo") -> int:
     """Estimate token count for different models."""
     if not text:
         return 0
@@ -297,7 +297,7 @@ def count_tokens_estimate(text: str, model: str = "gpt-3.5-turbo") -> int:
 
 
 @traced_and_logged
-def truncate_to_token_limit(
+def text_truncate_to_token_limit(
     text: str, max_tokens: int = 4000, model: str = "gpt-3.5-turbo"
 ) -> str:
     if not text:
@@ -327,7 +327,7 @@ def truncate_to_token_limit(
 
     except ImportError:
         # Fallback to the character-based method if tiktoken is not available
-        estimated_tokens = count_tokens_estimate(text, model)
+        estimated_tokens = text_count_tokens_estimate(text, model)
 
         if estimated_tokens <= max_tokens:
             return text
@@ -353,7 +353,7 @@ def truncate_to_token_limit(
 
 
 @traced_and_logged
-def extract_keywords(text: str, top_n: int = 10) -> list[str]:
+def text_extract_keywords(text: str, top_n: int = 10) -> list[str]:
     if not text:
         return []
 
@@ -489,7 +489,7 @@ def extract_keywords(text: str, top_n: int = 10) -> list[str]:
 
 
 @traced_and_logged
-def clean_text(
+def text_clean_text(
     text: str,
     remove_urls: bool = True,
     remove_html: bool = True,
@@ -518,7 +518,7 @@ def clean_text(
 
 
 @traced_and_logged
-def format_chat_history(
+def text_format_chat_history(
     messages: list[dict[str, str]],
     format_type: str = "text",
     system_prefix: str = "System: ",
@@ -567,7 +567,7 @@ def format_chat_history(
 
 
 @traced_and_logged
-def extract_json_from_text(text: str) -> dict[str, Any] | None:
+def text_extract_json_from_text(text: str) -> dict[str, Any] | None:
     if not text:
         return None
 
@@ -599,7 +599,7 @@ def extract_json_from_text(text: str) -> dict[str, Any] | None:
 
 
 @traced_and_logged
-def calculate_text_hash(text: str, algorithm: str = "sha256") -> str:
+def text_calculate_hash(text: str, algorithm: str = "sha256") -> str:
     if not text:
         return ""
 
@@ -614,7 +614,7 @@ def calculate_text_hash(text: str, algorithm: str = "sha256") -> str:
 
 
 @traced_and_logged
-def format_table_from_dicts(data: list[dict[str, Any]]) -> str:
+def text_format_table_from_dicts(data: list[dict[str, Any]]) -> str:
     if not data:
         return ""
 
@@ -649,7 +649,7 @@ def format_table_from_dicts(data: list[dict[str, Any]]) -> str:
 
 
 @traced_and_logged
-def detect_language(text: str) -> str:
+def text_detect_language(text: str) -> str:
     """Simple language detection"""
     if not text or len(text.strip()) < 10:
         return "unknown"
@@ -734,7 +734,7 @@ def detect_language(text: str) -> str:
 
 
 @traced_and_logged
-def tiktoken_split(
+def text_tiktoken_split(
     text: str,
     model: str = "gpt-3.5-turbo",
     chunk_size: int = 1000,
@@ -783,6 +783,28 @@ def tiktoken_split(
         return chunks
     except ImportError:
         # Fallback to character-based chunking if tiktoken is not available
-        return split_by_characters(
+        return text_split_by_characters(
             text, chunk_size=chunk_size * 4, overlap=overlap * 4
         )
+
+
+@traced_and_logged
+def text_count_words(text: str) -> int:
+    if not text:
+        return 0
+    return len(text.split())
+
+
+@traced_and_logged
+def text_extract_urls(text: str) -> list[str]:
+    if not text:
+        return []
+    # A more robust regex might be needed for complex cases
+    return re.findall(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", text)
+
+
+@traced_and_logged
+def text_extract_numbers(text: str) -> list[float]:
+    if not text:
+        return []
+    return [float(num) for num in re.findall(r"[-+]?\d*\.?\d+", text)]

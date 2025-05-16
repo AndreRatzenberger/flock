@@ -12,7 +12,7 @@ HEADERS = {
 }
 
 
-def get_tickets(number_of_tickets: int = 10) -> list[dict]:
+def zendesk_get_tickets(number_of_tickets: int = 10) -> list[dict]:
     """Get all tickets."""
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_TICKET")
     BASE_URL = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com"
@@ -31,7 +31,7 @@ def get_tickets(number_of_tickets: int = 10) -> list[dict]:
     return all_tickets
 
 
-def get_ticket_by_id(ticket_id: str) -> dict:
+def zendesk_get_ticket_by_id(ticket_id: str) -> dict:
     """Get a ticket by ID."""
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_TICKET")
     BASE_URL = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com"
@@ -42,7 +42,7 @@ def get_ticket_by_id(ticket_id: str) -> dict:
         return response.json()["ticket"]
 
 
-def get_comments_by_ticket_id(ticket_id: str) -> list[dict]:
+def zendesk_get_comments_by_ticket_id(ticket_id: str) -> list[dict]:
     """Get all comments for a ticket."""
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_TICKET")
     BASE_URL = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com"
@@ -53,7 +53,7 @@ def get_comments_by_ticket_id(ticket_id: str) -> list[dict]:
         return response.json()["comments"]
 
 
-def get_article_by_id(article_id: str) -> dict:
+def zendesk_get_article_by_id(article_id: str) -> dict:
     """Get an article by ID."""
     ZENDESK_LOCALE = os.getenv("ZENDESK_ARTICLE_LOCALE")
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_ARTICLE")
@@ -67,7 +67,7 @@ def get_article_by_id(article_id: str) -> dict:
         return response.json()["article"]
 
 
-def get_articles() -> list[dict]:
+def zendesk_get_articles() -> list[dict]:
     """Get all articles."""
     ZENDESK_LOCALE = os.getenv("ZENDESK_ARTICLE_LOCALE")
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_ARTICLE")
@@ -79,7 +79,7 @@ def get_articles() -> list[dict]:
         return response.json()["articles"]
 
 
-def search_articles(query: str) -> list[dict]:
+def zendesk_search_articles(query: str) -> list[dict]:
     """Search Zendesk Help Center articles using a query string."""
     ZENDESK_LOCALE = os.getenv("ZENDESK_ARTICLE_LOCALE")  # e.g., "en-us"
     ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN_ARTICLE")

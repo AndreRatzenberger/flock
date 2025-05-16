@@ -9,7 +9,7 @@ from flock.core.logging.trace_and_logged import traced_and_logged
 
 
 @traced_and_logged
-def create_user_stories_as_github_issue(title: str, body: str) -> str:
+def github_create_user_stories_as_github_issue(title: str, body: str) -> str:
     github_pat = os.getenv("GITHUB_PAT")
     github_repo = os.getenv("GITHUB_REPO")
 
@@ -31,7 +31,7 @@ def create_user_stories_as_github_issue(title: str, body: str) -> str:
 
 
 @traced_and_logged
-def upload_readme(content: str):
+def github_upload_readme(content: str):
     GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
     REPO_NAME = os.getenv("GITHUB_REPO")
     GITHUB_TOKEN = os.getenv("GITHUB_PAT")
@@ -82,7 +82,7 @@ def upload_readme(content: str):
 
 
 @traced_and_logged
-def create_files(file_paths) -> str:
+def github_create_files(file_paths) -> str:
     """Create multiple files in a GitHub repository with a predefined content.
 
     This function iterates over a list of file paths (relative to the repository root) and creates

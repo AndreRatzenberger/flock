@@ -639,11 +639,12 @@ def _auto_register_by_path():
 
     # Auto-register standard tools by scanning modules
     tool_modules = [
-        "flock.core.tools.basic_tools",
-        "flock.core.tools.azure_tools",
-        "flock.core.tools.dev_tools.github",
-        "flock.core.tools.llm_tools",
-        "flock.core.tools.markdown_tools",
+        "flock.tools.basic_tools",
+        "flock.tools.azure_tools",
+        "flock.tools.github_tools",
+        "flock.tools.llm_tools",
+        "flock.tools.markdown_tools",
+        "flock.tools.zendesk_tools",
     ]
     for module_path in tool_modules:
         try:
