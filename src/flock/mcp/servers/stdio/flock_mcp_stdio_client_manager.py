@@ -1,45 +1,42 @@
 """Manages a pool of connections for a Stdio Server."""
 
-from datetime import timedelta
 from typing import Literal
+
 from pydantic import Field
-from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
-from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager, FlockMCPClientManagerConfigBase
+
 from flock.core.logging.logging import get_logger
-from flock.mcp.servers.stdio.flock_stdio_client import FlockStdioClient, FlockStdioMCPClientConfig
+from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
+from flock.core.mcp.flock_mcp_client_manager import (
+    FlockMCPClientManager,
+    FlockMCPClientManagerConfigBase,
+)
+from flock.mcp.servers.stdio.flock_stdio_client import (
+    FlockStdioClient,
+    FlockStdioMCPClientConfig,
+)
 
 logger = get_logger("mcp.stdio.connection_manager")
 
 
 class FlockMCPStdioClientManagerConfig(FlockMCPClientManagerConfigBase):
-    """
-    Configuration for Stdio Client Managers.
-    """
+    """Configuration for Stdio Client Managers."""
 
     transport_type: Literal["stdio"] = Field(
-        default="stdio",
-        description="What kind of transport to use."
+        default="stdio", description="What kind of transport to use."
     )
 
     connection_parameters: StdioServerParameters = Field(
-        ...,
-        description="Connection Parameters"
+        ..., description="Connection Parameters"
     )
 
 
 class FlockStdioMCPClientManager(FlockMCPClientManager[FlockStdioClient]):
     """Handles Clients that connect to a Stdio-Transport Type Server."""
 
-    config: FlockMCPStdioClientManagerConfig = Field(
-        ...,
-        description="Config."
-    )
+    config: FlockMCPStdioClientManagerConfig = Field(..., description="Config.")
 
     async def make_client(self):
-        """
-        Instantiate a client for an stdio-server.
-        """
-
+        """Instantiate a client for an stdio-server."""
         new_client = FlockStdioClient(
             config=FlockStdioMCPClientConfig(
                 server_name=self.config.server_name,

@@ -1,68 +1,56 @@
-from abc import ABC
+"""This module provides the Flock MCP Stdio server functionality."""
+
 from pathlib import Path
 from typing import Literal
+
 from opentelemetry import trace
-from mcp.client.stdio import get_default_environment
 from pydantic import Field
 
-from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase, FlockMCPServerConfig
 from flock.core.logging.logging import get_logger
+from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
+from flock.core.mcp.flock_mcp_server import (
+    FlockMCPServerBase,
+    FlockMCPServerConfig,
+)
+from flock.core.mcp.util.helpers import get_default_env
 from flock.core.serialization.serializable import Serializable
-
-from dspy import Tool as DSPyTool
-
-from flock.mcp.servers.stdio.flock_mcp_stdio_client_manager import FlockMCPStdioClientManagerConfig, FlockStdioMCPClientManager
-
+from flock.mcp.servers.stdio.flock_mcp_stdio_client_manager import (
+    FlockMCPStdioClientManagerConfig,
+    FlockStdioMCPClientManager,
+)
 
 logger = get_logger("mcp.stdio.server")
 tracer = trace.get_tracer(__name__)
 
 
-def get_default_env() -> dict[str, str]:
-    """
-    Returns a default environment object
-    including only environment-variables
-    deemed safe to inherit.
-    """
-    return get_default_environment()
-
-
 class FlockMCPStdioServerConfig(FlockMCPServerConfig):
-    """
-    Configuration Class
-    for Flock MCP Servers using the stdio transport
-    protocol.
-    """
+    """Configuration Class for Flock MCP Servers using the stdio transport protocol."""
 
     transport_type: Literal["stdio"] = Field(
-        default="stdio",
-        description="Stdio Transport Type."
+        default="stdio", description="Stdio Transport Type."
     )
 
     command: str = Field(
-        ...,
-        description="The executable to run to start the server."
+        ..., description="The executable to run to start the server."
     )
 
     args: list[str] = Field(
-        ...,
-        description="Command line arguments to pass to the executable."
+        ..., description="Command line arguments to pass to the executable."
     )
 
     env: dict[str, str] | None = Field(
         default_factory=get_default_env,
-        description="The environment to use when spawning the process. If not specified, the result of get_default_environment() will be used."
+        description="The environment to use when spawning the process. If not specified, the result of get_default_environment() will be used.",
     )
 
     cwd: str | Path | None = Field(
         default=None,
-        description="The working directory to use when spawning the process."
+        description="The working directory to use when spawning the process.",
     )
 
     encoding: Literal["ascii", "utf-8", "utf-16", "utf-32"] = Field(
         default="utf-8",
-        description="The text encoding used when sending/receiving a message between client and server."
+        description="The text encoding used when sending/receiving a message between client and server.",
     )
 
     encoding_error_handler: Literal["strict", "ignore", "replace"] = Field(
@@ -72,23 +60,18 @@ class FlockMCPStdioServerConfig(FlockMCPServerConfig):
 
 
 class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
-    """
-    Class which represents a MCP Server using the Stdio
-    Transport type.
+    """Class which represents a MCP Server using the Stdio sTransport type.
 
     This means (most likely) that the server is a locally
     executed script.
     """
 
     server_config: FlockMCPStdioServerConfig = Field(
-        ...,
-        description="Config for the server."
+        ..., description="Config for the server."
     )
 
     async def initialize(self) -> FlockStdioMCPClientManager:
-        """
-        Called when initializing the server
-        """
+        """Called when initializing the server."""
         client_manager = FlockStdioMCPClientManager(
             config=FlockMCPStdioClientManagerConfig(
                 server_name=self.server_config.server_name,
@@ -116,7 +99,7 @@ class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
                     args=self.server_config.args,
                     cwd=self.server_config.cwd,
                     encoding=self.server_config.encoding,
-                    encoding_error_handler=self.server_config.encoding_error_handler
+                    encoding_error_handler=self.server_config.encoding_error_handler,
                 ),
                 tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
                 tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
