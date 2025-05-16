@@ -13,13 +13,11 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "azure-search-documents>=11.5.2",
     "chromadb>=0.6.3",
     "cloudpickle>=3.1.1",
     "datasets>=3.2.0",
     "devtools>=0.12.2",
     "dspy==2.6.16",
-    "duckduckgo-search>=7.3.2",
     "fastapi>=0.115.8",
     "httpx>=0.28.1",
     "inspect-ai>=0.3.88",
@@ -27,7 +25,6 @@ dependencies = [
     "loguru>=0.7.3",
     "matplotlib>=3.10.0",
     "msgpack>=1.1.0",
-    "nltk>=3.9.1",
     "notion-client>=2.3.0",
     "opentelemetry-api>=1.30.0",
     "opentelemetry-exporter-jaeger>=1.21.0",
@@ -58,9 +55,30 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-all = ["docling>=2.18.0", "tavily-python>=0.5.0", "markdownify>=0.14.1"]
-tools = ["tavily-python>=0.5.0", "markdownify>=0.14.1"]
-
+basic-tools = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+]
+azure-tools = [
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+]
+llm-tools = [
+    "nltk>=3.9.1",
+]
+all-tools = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+    "nltk>=3.9.1",
+]
 
 [dependency-groups]
 dev = [

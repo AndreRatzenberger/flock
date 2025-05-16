@@ -32,14 +32,19 @@ def web_search_duckduckgo(
     keywords: str, search_type: Literal["news", "web"] = "web"
 ):
     try:
-        from duckduckgo_search import DDGS
+        if importlib.util.find_spec("duckduckgo_search") is not None:
+            from duckduckgo_search import DDGS
 
-        if search_type == "news":
-            response = DDGS().news(keywords)
+            if search_type == "news":
+                response = DDGS().news(keywords)
+            else:
+                response = DDGS().text(keywords)
+
+                return response
         else:
-            response = DDGS().text(keywords)
-
-        return response
+            raise ImportError(
+                "Optional tool dependencies not installed. Install with 'pip install flock-core[tools]'."
+            )
     except Exception:
         raise
 
@@ -111,7 +116,7 @@ def get_anything_as_markdown(url_or_file_path: str):
             raise
     else:
         raise ImportError(
-            "Optional tool dependencies not installed. Install with 'pip install flock-core[all-tools]'."
+            "Optional tool dependencies not installed. Install with 'pip install flock-core[basic-tools]'."
         )
 
 

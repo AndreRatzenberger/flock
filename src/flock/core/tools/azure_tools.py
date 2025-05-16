@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from azure.core.credentials import AzureKeyCredential
+from azure.identity import DefaultAzureCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
@@ -16,6 +17,10 @@ from azure.search.documents.indexes.models import (
     VectorSearchProfile,
 )
 from azure.search.documents.models import VectorizedQuery
+from azure.storage.blob import (
+    BlobServiceClient,
+    ContentSettings,
+)
 
 from flock.core.logging.trace_and_logged import traced_and_logged
 
@@ -495,3 +500,301 @@ def azure_search_create_vector_index(
         }
     except Exception as e:
         return {"error": str(e), "created": False}
+
+
+# --- Azure Blob Storage Tools ---
+
+def _get_blob_service_client(account_url: str | None = None, connection_string: str | None = None) -> BlobServiceClient:
+    """Helper function to get BlobServiceClient."""
+    if connection_string:
+        return BlobServiceClient.from_connection_string(connection_string)
+
+    effective_account_url = account_url or os.environ.get("AZURE_STORAGE_ACCOUNT_URL")
+    if not effective_account_url:
+        raise ValueError("Azure Storage account URL not provided and AZURE_STORAGE_ACCOUNT_URL environment variable is not set.")
+
+    credential = DefaultAzureCredential()
+    return BlobServiceClient(account_url=effective_account_url, credential=credential)
+
+
+@traced_and_logged
+def azure_storage_list_containers(account_url: str | None = None, connection_string: str | None = None) -> list[str]:
+    """Lists all containers in the Azure Storage account.
+
+    Args:
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A list of container names.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    containers = blob_service_client.list_containers()
+    return [container.name for container in containers]
+
+
+@traced_and_logged
+def azure_storage_create_container(container_name: str, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Creates a new container in the Azure Storage account.
+
+    Args:
+        container_name: The name of the container to create.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with creation status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    try:
+        container_client = blob_service_client.create_container(container_name)
+        return {"container_name": container_name, "created": True, "message": f"Container '{container_name}' created successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "created": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_delete_container(container_name: str, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Deletes an existing container from the Azure Storage account.
+
+    Args:
+        container_name: The name of the container to delete.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with deletion status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    try:
+        blob_service_client.delete_container(container_name)
+        return {"container_name": container_name, "deleted": True, "message": f"Container '{container_name}' deleted successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "deleted": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_list_blobs(container_name: str, account_url: str | None = None, connection_string: str | None = None) -> list[str]:
+    """Lists all blobs in a specified container.
+
+    Args:
+        container_name: The name of the container.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A list of blob names.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    blob_list = container_client.list_blobs()
+    return [blob.name for blob in blob_list]
+
+
+@traced_and_logged
+def azure_storage_upload_blob_text(container_name: str, blob_name: str, text_content: str, overwrite: bool = True, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Uploads text content as a blob to the specified container.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to create.
+        text_content: The string content to upload.
+        overwrite: Whether to overwrite the blob if it already exists. Defaults to True.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with upload status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        content_settings = ContentSettings(content_type='text/plain')
+        blob_client.upload_blob(text_content.encode('utf-8'), overwrite=overwrite, content_settings=content_settings)
+        return {"container_name": container_name, "blob_name": blob_name, "uploaded": True, "message": "Text content uploaded successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "uploaded": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_upload_blob_bytes(container_name: str, blob_name: str, bytes_content: bytes, overwrite: bool = True, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Uploads bytes content as a blob to the specified container.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to create.
+        bytes_content: The bytes content to upload.
+        overwrite: Whether to overwrite the blob if it already exists. Defaults to True.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with upload status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        # You might want to determine content_type more dynamically or pass it as an arg
+        content_settings = ContentSettings(content_type='application/octet-stream')
+        blob_client.upload_blob(bytes_content, overwrite=overwrite, content_settings=content_settings)
+        return {"container_name": container_name, "blob_name": blob_name, "uploaded": True, "message": "Bytes content uploaded successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "uploaded": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_upload_blob_from_file(container_name: str, blob_name: str, file_path: str, overwrite: bool = True, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Uploads a local file to a blob in the specified container.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to create.
+        file_path: The local path to the file to upload.
+        overwrite: Whether to overwrite the blob if it already exists. Defaults to True.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with upload status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        with open(file_path, "rb") as data:
+            blob_client.upload_blob(data, overwrite=overwrite)
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "uploaded": True, "message": "File uploaded successfully."}
+    except FileNotFoundError:
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "uploaded": False, "error": "File not found."}
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "uploaded": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_download_blob_to_text(container_name: str, blob_name: str, account_url: str | None = None, connection_string: str | None = None) -> str:
+    """Downloads a blob's content as text.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to download.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        The blob content as a string.
+
+    Raises:
+        Exception: If download fails or blob is not text.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        download_stream = blob_client.download_blob()
+        return download_stream.readall().decode('utf-8')
+    except Exception as e:
+        raise Exception(f"Failed to download or decode blob '{blob_name}' from container '{container_name}': {e!s}")
+
+
+@traced_and_logged
+def azure_storage_download_blob_to_bytes(container_name: str, blob_name: str, account_url: str | None = None, connection_string: str | None = None) -> bytes:
+    """Downloads a blob's content as bytes.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to download.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        The blob content as bytes.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    download_stream = blob_client.download_blob()
+    return download_stream.readall()
+
+
+@traced_and_logged
+def azure_storage_download_blob_to_file(container_name: str, blob_name: str, file_path: str, overwrite: bool = True, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Downloads a blob to a local file.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to download.
+        file_path: The local path to save the downloaded file.
+        overwrite: Whether to overwrite the local file if it exists. Defaults to True.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with download status.
+    """
+    if not overwrite and os.path.exists(file_path):
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "downloaded": False, "error": "File exists and overwrite is False."}
+
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        with open(file_path, "wb") as download_file:
+            download_stream = blob_client.download_blob()
+            download_file.write(download_stream.readall())
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "downloaded": True, "message": "File downloaded successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "file_path": file_path, "downloaded": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_delete_blob(container_name: str, blob_name: str, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Deletes a specified blob from a container.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob to delete.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary with deletion status.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        blob_client.delete_blob()
+        return {"container_name": container_name, "blob_name": blob_name, "deleted": True, "message": "Blob deleted successfully."}
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "deleted": False, "error": str(e)}
+
+
+@traced_and_logged
+def azure_storage_get_blob_properties(container_name: str, blob_name: str, account_url: str | None = None, connection_string: str | None = None) -> dict[str, Any]:
+    """Retrieves properties of a specified blob.
+
+    Args:
+        container_name: The name of the container.
+        blob_name: The name of the blob.
+        account_url: The URL of the Azure Storage account. Defaults to AZURE_STORAGE_ACCOUNT_URL env var.
+        connection_string: Azure Storage connection string. Overrides account_url if provided.
+
+    Returns:
+        A dictionary containing blob properties.
+    """
+    blob_service_client = _get_blob_service_client(account_url, connection_string)
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+    try:
+        properties = blob_client.get_blob_properties()
+        return {
+            "name": properties.name,
+            "container": properties.container,
+            "size": properties.size,
+            "content_type": properties.content_settings.content_type,
+            "last_modified": properties.last_modified.isoformat() if properties.last_modified else None,
+            "etag": properties.etag,
+            # Add more properties as needed
+        }
+    except Exception as e:
+        return {"container_name": container_name, "blob_name": blob_name, "error": str(e)}
+
+# Potential future tools:
+# - azure_storage_set_blob_metadata
+# - azure_storage_get_blob_metadata
+# - azure_storage_generate_sas_token_blob
+# - azure_storage_copy_blob
