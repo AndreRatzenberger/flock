@@ -481,9 +481,9 @@ class FlockMCPClientBase(BaseModel, ABC):
                         flock_tools.append(converted_tool)
                 return flock_tools
 
-            return _get_tools_internal()
+            return await _get_tools_internal()
 
-        return _get_tools_cached(agent_id=agent_id, run_id=run_id)
+        return await _get_tools_cached(agent_id=agent_id, run_id=run_id)
 
     async def call_tool(
         self, agent_id: str, run_id: str, name: str, arguments: dict[str, Any]
