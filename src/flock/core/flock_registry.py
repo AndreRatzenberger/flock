@@ -167,24 +167,29 @@ class FlockRegistry:
                 )
             return f"{module}.{name}"
         except AttributeError:
-            logger.warning(
-                f"Could not determine module/name for object: {obj}")
+            logger.warning(f"Could not determine module/name for object: {obj}")
             return None
 
     # --- Server Registration ---
     def register_server(self, server: FlockMCPServerBase) -> None:
         """Registers a flock mcp server by its name."""
-        if not hasattr(server.server_config, "name") or not server.server_config.server_name:
+        if (
+            not hasattr(server.config, "server_name")
+            or not server.config.server_name
+        ):
             logger.error(
-                "Attempted to register a server without a valid 'name' attribute."
+                "Attempted to register a server without a valid 'server_name' attribute."
             )
             return
-        if server.server_config.server_name in self._servers and self._servers[server.server_config.server_name] != server:
+        if (
+            server.config.server_name in self._servers
+            and self._servers[server.config.server_name] != server
+        ):
             logger.warning(
-                f"Server '{server.server_config.server_name}' already registered. Overwriting."
+                f"Server '{server.config.server_name}' already registered. Overwriting."
             )
-        self._servers[server.server_config.server_name] = server
-        logger.debug(f"Registered server: {server.server_config.server_name}")
+        self._servers[server.config.server_name] = server
+        logger.debug(f"Registered server: {server.config.server_name}")
 
     def get_server(self, name: str) -> FlockMCPServerBase | None:
         """Retrieves a registered FlockMCPServer instance by name."""
@@ -238,8 +243,7 @@ class FlockRegistry:
                     f"Callable '{path_str}' already registered with a different function. Overwriting."
                 )
             self._callables[path_str] = func
-            logger.debug(
-                f"Registered callable: '{path_str}' ({func.__name__})")
+            logger.debug(f"Registered callable: '{path_str}' ({func.__name__})")
             return path_str
         logger.warning(
             f"Could not register callable {func.__name__}: Unable to determine path string"
@@ -657,8 +661,7 @@ def _auto_register_by_path():
             component_class = getattr(module, class_name)
             _registry_instance.register_component(component_class)
         except (ImportError, AttributeError) as e:
-            logger.warning(
-                f"{class_name} not found for auto-registration: {e}")
+            logger.warning(f"{class_name} not found for auto-registration: {e}")
 
     # Auto-register standard tools by scanning modules
     tool_modules = [

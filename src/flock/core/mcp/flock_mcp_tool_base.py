@@ -5,12 +5,13 @@ from typing import Any, TypeVar
 from dspy import Tool as DSPyTool
 from mcp import Tool
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 from flock.core.logging.logging import get_logger
 
 logger = get_logger("core.mcp.tool_base")
-
+tracer = trace.get_tracer(__name__)
 
 T = TypeVar("T", bound="FlockMCPToolBase")
 
@@ -155,39 +156,40 @@ class FlockMCPToolBase(BaseModel):
         logger.error(f"Tool: '{self.name}' on_error: Tool returned error.")
         return res
 
-    def as_dspy_tool(self, mgr: Any) -> DSPyTool:
+    def as_dspy_tool(self, server: Any) -> DSPyTool:
         """Wrap this tool as a DSPyTool for downstream."""
         args, arg_type, args_desc = self._convert_input_schema_to_tool_args(
             self.input_schema
         )
 
         async def func(*args, **kwargs):
-            try:
-                logger.debug(f"Tool: {self.name}: getting client.")
-                client = await mgr.get_client(
-                    agent_id=self.agent_id, run_id=self.run_id
-                )
-                server_name = await client.get_server_name()
-                logger.debug(
-                    f"Tool: {self.name}: got client for server '{server_name}' for agent {self.agent_id} on run {self.run_id}"
-                )
-                logger.debug(
-                    f"Tool: {self.name}: calling server '{server_name}'"
-                )
-                result = await client.call_tool(
-                    agent_id=self.agent_id,
-                    run_id=self.run_id,
-                    name=self.name,
-                    arguments=kwargs,
-                )
-                logger.debug(
-                    f"Tool: Called Tool: {self.name} on server '{server_name}'. Returning result to LLM."
-                )
-                return self._convert_mcp_tool_result(result)
-            except Exception as e:
-                logger.error(
-                    f"Tool: Exception ocurred when calling tool '{self.name}': {e}"
-                )
+            with tracer.start_as_current_span(f"tool.{self.name}.call") as span:
+                span.set_attribute("tool.name", self.name)
+                try:
+                    logger.debug(f"Tool: {self.name}: getting client.")
+
+                    server_name = server.config.server_name
+                    logger.debug(
+                        f"Tool: {self.name}: got client for server '{server_name}' for agent {self.agent_id} on run {self.run_id}"
+                    )
+                    logger.debug(
+                        f"Tool: {self.name}: calling server '{server_name}'"
+                    )
+                    result = await server.call_tool(
+                        agent_id=self.agent_id,
+                        run_id=self.run_id,
+                        name=self.name,
+                        arguments=kwargs,
+                    )
+                    logger.debug(
+                        f"Tool: Called Tool: {self.name} on server '{server_name}'. Returning result to LLM."
+                    )
+                    return self._convert_mcp_tool_result(result)
+                except Exception as e:
+                    logger.error(
+                        f"Tool: Exception ocurred when calling tool '{self.name}': {e}"
+                    )
+                    span.record_exception(e)
 
         return DSPyTool(
             func=func,

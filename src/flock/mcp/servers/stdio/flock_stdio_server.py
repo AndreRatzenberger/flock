@@ -1,108 +1,102 @@
 """This module provides the Flock MCP Stdio server functionality."""
 
-from pathlib import Path
+from contextlib import AbstractAsyncContextManager
 from typing import Literal
 
+from anyio.streams.memory import (
+    MemoryObjectReceiveStream,
+    MemoryObjectSendStream,
+)
+from mcp import stdio_client
+from mcp.types import JSONRPCMessage
 from opentelemetry import trace
 from pydantic import Field
 
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_client_base import StdioServerParameters
-from flock.core.mcp.flock_mcp_server import (
-    FlockMCPServerBase,
-    FlockMCPServerConfig,
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.mcp_client import FlockMCPClientBase
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_config import (
+    FlockMCPConfigurationBase,
+    FlockMCPConnectionConfiguration,
 )
-from flock.core.mcp.util.helpers import get_default_env
-from flock.core.serialization.serializable import Serializable
-from flock.mcp.servers.stdio.flock_mcp_stdio_client_manager import (
-    FlockMCPStdioClientManagerConfig,
-    FlockStdioMCPClientManager,
-)
+from flock.core.mcp.types.types import StdioServerParameters
 
 logger = get_logger("mcp.stdio.server")
 tracer = trace.get_tracer(__name__)
 
 
-class FlockMCPStdioServerConfig(FlockMCPServerConfig):
-    """Configuration Class for Flock MCP Servers using the stdio transport protocol."""
+class FlockStdioClientConnectionConfig(FlockMCPConnectionConfiguration):
+    """Concrete ConnectionConfig for an StdioClient."""
 
+    # Only thing we need to override here is the concrete transport_type
+    # and connection_parameters fields.
     transport_type: Literal["stdio"] = Field(
-        default="stdio", description="Stdio Transport Type."
+        default="stdio", description="Use the stdio transport type."
     )
 
-    command: str = Field(
-        ..., description="The executable to run to start the server."
-    )
-
-    args: list[str] = Field(
-        ..., description="Command line arguments to pass to the executable."
-    )
-
-    env: dict[str, str] | None = Field(
-        default_factory=get_default_env,
-        description="The environment to use when spawning the process. If not specified, the result of get_default_environment() will be used.",
-    )
-
-    cwd: str | Path | None = Field(
-        default=None,
-        description="The working directory to use when spawning the process.",
-    )
-
-    encoding: Literal["ascii", "utf-8", "utf-16", "utf-32"] = Field(
-        default="utf-8",
-        description="The text encoding used when sending/receiving a message between client and server.",
-    )
-
-    encoding_error_handler: Literal["strict", "ignore", "replace"] = Field(
-        default="strict",
-        description="The text encoding error handler.",
+    connection_parameters: StdioServerParameters = Field(
+        ...,
+        description="StdioServerParameters to be used for the stdio transport.",
     )
 
 
-class FlockMCPStdioServer(FlockMCPServerBase, Serializable):
-    """Class which represents a MCP Server using the Stdio sTransport type.
+class FlockStdioConfig(FlockMCPConfigurationBase):
+    """Configuration for Stdio Clients."""
+
+    # The only thing we need to override here is the
+    # concrete connection config. The rest is generic
+    # enough to handle everything else.
+    connection_config: FlockStdioClientConnectionConfig = Field(
+        ..., description="Concrete Stdio Connection Configuration."
+    )
+
+
+class FlockStdioClient(FlockMCPClientBase):
+    """Client for Stdio Servers."""
+
+    config: FlockStdioConfig = Field(..., description="Client Configuration.")
+
+    async def create_transport(
+        self, params: StdioServerParameters
+    ) -> AbstractAsyncContextManager[
+        tuple[
+            MemoryObjectReceiveStream[JSONRPCMessage | Exception],
+            MemoryObjectSendStream[JSONRPCMessage],
+        ]
+    ]:
+        """Return an async context manager whose __aenter__ method yields (read_stream, send_stream)."""
+        # stdio_client already is an AsyncContextManager
+        return stdio_client(server=params)
+
+
+class FlockStdioClientManager(FlockMCPClientManager):
+    """Manager for handling Stdio Clients."""
+
+    client_config: FlockStdioConfig = Field(
+        ..., description="Configuration for clients."
+    )
+
+    async def make_client(self) -> FlockStdioClient:
+        """Create a new client instance."""
+        new_client = FlockStdioClient(
+            config=self.client_config,
+        )
+
+        return new_client
+
+
+class FlockMCPStdioServer(FlockMCPServerBase):
+    """Class which represents a MCP Server using the Stdio Transport type.
 
     This means (most likely) that the server is a locally
     executed script.
     """
 
-    server_config: FlockMCPStdioServerConfig = Field(
-        ..., description="Config for the server."
-    )
+    config: FlockStdioConfig = Field(..., description="Config for the server.")
 
-    async def initialize(self) -> FlockStdioMCPClientManager:
+    async def initialize(self) -> FlockStdioClientManager:
         """Called when initializing the server."""
-        client_manager = FlockStdioMCPClientManager(
-            config=FlockMCPStdioClientManagerConfig(
-                server_name=self.server_config.server_name,
-                server_logging_level=self.server_config.server_logging_level,
-                transport_type=self.server_config.transport_type,
-                read_timeout_seconds=self.server_config.read_timeout_seconds,
-                max_retries=self.server_config.max_restart_attempts,
-                logging_callback=self.server_config.logging_callback,
-                message_handler=self.server_config.message_handler,
-                sampling_callback=self.server_config.sampling_callback,
-                list_roots_callback=self.server_config.list_roots_callback,
-                mount_points=self.server_config.mount_points,
-                tool_cache_max_size=self.server_config.tool_cache_max_size,
-                resource_contents_cache_max_size=self.server_config.resource_contents_cache_max_size,
-                resource_list_cache_max_size=self.server_config.resource_list_cache_max_size,
-                tool_cache_max_ttl=self.server_config.tool_cache_max_ttl,
-                resource_contents_cache_max_ttl=self.server_config.resource_contents_cache_max_ttl,
-                resource_list_cache_max_ttl=self.server_config.resource_list_cache_max_ttl,
-                roots_enabled=self.server_config.roots_enabled,
-                tools_enabled=self.server_config.tools_enabled,
-                prompts_enabled=self.server_config.prompts_enabled,
-                sampling_enabled=self.server_config.sampling_enabled,
-                connection_parameters=StdioServerParameters(
-                    command=self.server_config.command,
-                    args=self.server_config.args,
-                    cwd=self.server_config.cwd,
-                    encoding=self.server_config.encoding,
-                    encoding_error_handler=self.server_config.encoding_error_handler,
-                ),
-                tool_result_cache_max_size=self.server_config.tool_result_cache_max_size,
-                tool_result_cache_max_ttl=self.server_config.tool_result_cache_max_ttl,
-            )
-        )
+        client_manager = FlockStdioClientManager(client_config=self.config)
+
         return client_manager

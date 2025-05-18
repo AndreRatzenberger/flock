@@ -1,11 +1,11 @@
-"""Represents a prompt that can be retrieved from a MCP-Server"""
-
+"""Represents a prompt that can be retrieved from a MCP-Server."""
 
 from pydantic import BaseModel
 
 
 class FlockMCPPromptBase(BaseModel):
-    """
+    """Represents a prompt retrieved from a remote MCP-Server.
+
     Documentation:
         https://modelcontextprotocol.io/docs/concepts/prompts
 
@@ -22,4 +22,5 @@ class FlockMCPPromptBase(BaseModel):
         - Guid specific workflows
         - Surface as UI elements (like slash commands)
     """
+
     pass

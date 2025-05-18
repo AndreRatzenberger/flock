@@ -1,9 +1,7 @@
-"""FlockMCPServer is the core, declarative base class for all types of MCP-Servers in the Flock framework"""
+"""FlockMCPServer is the core, declarative base class for all types of MCP-Servers in the Flock framework."""
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from datetime import timedelta
 from typing import Any, Literal, TypeVar
 
 from dspy import Tool as DSPyTool
@@ -12,29 +10,18 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    create_model,
 )
 
 from flock.core.flock_module import FlockModule
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_client_manager import FlockMCPClientManager
-from flock.core.mcp.types.mcp_callbacks import (
-    FlockListRootsMCPCallback,
-    FlockLoggingMCPCallback,
-    FlockMessageHandlerMCPCallback,
-    FlockSamplingMCPCallback,
-)
-from flock.core.mcp.types.mcp_types import Root
-from flock.core.serialization.serializable import Serializable
-from flock.core.serialization.serialization_utils import (
-    deserialize_component,
-    serialize_item,
-)
+from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
+from flock.core.mcp.mcp_client import FlockMCPClientBase
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_config import FlockMCPConfigurationBase
 
 logger = get_logger("core.mcp.server_base")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
-M = TypeVar("M", bound="FlockMCPServerConfig")
 
 LoggingLevel = Literal[
     "debug",
@@ -48,139 +35,7 @@ LoggingLevel = Literal[
 ]
 
 
-class FlockMCPServerConfig(BaseModel):
-    """ "
-    Base configuration class for Flock MCP Servers
-
-    This class serves as the base for all server-specific configurations.
-    Each Type of Server (Stdio, Websocket, HTTP, GRPC) should
-    define its own config class inheriting from this one.
-    """
-
-    server_name: str = Field(..., description="Unique server name")
-
-    description: str | Callable[..., str] | None = Field(
-        "",
-        description="A human-readable description or a callable returning one.",
-    )
-
-    server_logging_level: LoggingLevel = Field(
-        default="error",
-        description="The logging level to request from the mcp-server's logger.",
-    )
-
-    transport_type: Literal["stdio", "sse", "websockets", "custom"] = Field(
-        ..., description="What kind of transport this server uses."
-    )
-
-    read_timeout_seconds: timedelta = Field(
-        default_factory=lambda: timedelta(seconds=10),
-        description="How many seconds until timeout.",
-    )
-
-    mount_points: list[Root] | None = Field(
-        default=None, description="The initial mounting points of the server."
-    )
-
-    resources_enabled: bool = Field(
-        default=False,
-        description="Whether or not this Server should make resources available to the agents",
-    )
-
-    tools_enabled: bool = Field(
-        default=False,
-        description="Whether or not this Server should provide agents with tools.",
-    )
-
-    prompts_enabled: bool = Field(
-        default=False,
-        description="Whether or not this Server should provide agents with prompts.",
-    )
-
-    roots_enabled: bool = Field(
-        default=False,
-        description="Wheter or not this Server should allow agents to dynamically change their mountpoints.",
-    )
-
-    sampling_enabled: bool = Field(
-        default=False,
-        description="Whether or not this Server is capable of using FLock's LLMs to accept Sampling requests from remote servers.",
-    )
-
-    mount_points: list[Root] = Field(
-        default_factory=list,
-        description="The original set of mount points",
-    )
-
-    sampling_callback: FlockSamplingMCPCallback | None = Field(
-        default=None, description="Callback for handling sampling requests."
-    )
-
-    list_roots_callback: FlockListRootsMCPCallback | None = Field(
-        default=None, description="Callback for handling list_roots request."
-    )
-
-    logging_callback: FlockLoggingMCPCallback | None = Field(
-        default=None,
-        description="Callback for logging. MCP Servers send the output they are generating directly to the client.",
-    )
-
-    message_handler: FlockMessageHandlerMCPCallback | None = Field(
-        default=None, description="Message Handler Callback."
-    )
-
-    tool_cache_max_size: float = Field(
-        default=100, description="How many items to hold in the tool cache."
-    )
-
-    tool_cache_max_ttl: float = Field(
-        default=60 * 5,
-        description="Max TTL for each item in the tool cache in seconds.",
-    )
-
-    resource_contents_cache_max_size: float = Field(
-        default=100,
-        description="How many items to store in the resource contents cache.",
-    )
-
-    resource_contents_cache_max_ttl: float = Field(
-        default=60 * 5,
-        description="Max TTL for each item in the resource contents cache in seconds.",
-    )
-
-    resource_list_cache_max_size: float = Field(
-        default=100,
-        description="How many items to to store in the resource list cache.",
-    )
-
-    resource_list_cache_max_ttl: float = Field(
-        default=60 * 5,
-        description="Max TTL for each item in the resource list cache in seconds.",
-    )
-
-    tool_result_cache_max_size: float = Field(
-        default=100, description="Max number of items in the tool result cache."
-    )
-
-    tool_result_cache_max_ttl: float = Field(
-        default=60 * 5,
-        description="Max TTL for items in the tool result cache in seconds.",
-    )
-
-    max_restart_attempts: int = Field(
-        default=3,
-        description="How many times to attempt to restart the server before giving up.",
-    )
-
-    @classmethod
-    def with_fields(cls: type[M], **field_definitions) -> type[M]:
-        """Create a new config class with additional fields."""
-        return create_model(
-            f"Dynamic{cls.__name__}", __base__=cls, **field_definitions
-        )
-
-
-class FlockMCPServerBase(BaseModel, Serializable, ABC):
+class FlockMCPServerBase(BaseModel, ABC):
     """Base class for all Flock MCP Server Types.
 
     Servers serve as an abstraction-layer between the underlying MCPClientSession
@@ -202,8 +57,8 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
 
-    server_config: FlockMCPServerConfig = Field(
-        ..., description="Config for the server."
+    config: FlockMCPConfigurationBase = Field(
+        ..., description="Config for clients connecting to the server."
     )
 
     initialized: bool = Field(
@@ -246,7 +101,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
         self.modules[module.name] = module
         logger.debug(
-            f"Added module '{module.name}' to server {self.server_config.server_name}"
+            f"Added module '{module.name}' to server {self.config.server_name}"
         )
         return
 
@@ -255,11 +110,11 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         if module_name in self.modules:
             del self.modules[module_name]
             logger.debug(
-                f"Removed module '{module_name}' from server '{self.server_config.server_name}'"
+                f"Removed module '{module_name}' from server '{self.config.server_name}'"
             )
         else:
             logger.warning(
-                f"Module '{module_name}' not found on server '{self.server_config.server_name}'"
+                f"Module '{module_name}' not found on server '{self.config.server_name}'"
             )
         return
 
@@ -277,248 +132,249 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         """Called when initializing the server."""
         pass
 
+    async def call_tool(
+        self, agent_id: str, run_id: str, name: str, arguments: dict[str, Any]
+    ) -> Any:
+        """Call a tool via the MCP Protocol on the client's server."""
+        with tracer.start_as_current_span("server.call_tool") as span:
+            span.set_attribute("agent_id", agent_id)
+            span.set_attribute("run_id", run_id)
+            span.set_attribute("tool.name", name)
+            span.set_attribute("arguments", str(arguments))
+            if not self.initialized or not self.client_manager:
+                async with self.condition:
+                    await self.pre_init()
+                    self.client_manager = await self.initialize()
+                    self.initialized = True
+                    await self.post_init()
+            async with self.condition:
+                try:
+                    await self.pre_mcp_call()
+                    client: FlockMCPClientBase = (
+                        await self.client_manager.get_client(
+                            agent_id=agent_id, run_id=run_id
+                        )
+                    )  # TODO: injection of hook result here.
+                    result = await client.call_tool(
+                        agent_id=agent_id,
+                        run_id=run_id,
+                        name=name,
+                        arguments=arguments,
+                    )
+                    await self.post_mcp_call(result=result)
+                    return result
+                except Exception as mcp_error:
+                    logger.error(
+                        "Error during server.call_tool",
+                        server=self.config.server_name,
+                        error=str(mcp_error),
+                    )
+                    span.record_exception(mcp_error)
+                    return None
+
     async def get_tools(self, agent_id: str, run_id: str) -> list[DSPyTool]:
         """Retrieves a list of available tools from this server."""
-        if not self.initialized or not self.client_manager:
+        with tracer.start_as_current_span("server.get_tools") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            span.set_attribute("agent_id", agent_id)
+            span.set_attribute("run_id", run_id)
+            if not self.initialized or not self.client_manager:
+                async with self.condition:
+                    await self.pre_init()
+                    self.client_manager = await self.initialize()
+                    self.initialized = True
+                    await self.post_init()
+
             async with self.condition:
-                self.client_manager = await self.initialize()
-                self.initialized = True
-
-        async with self.condition:
-            try:
-                result: list[DSPyTool] = await self.client_manager.get_tools(
-                    agent_id=agent_id, run_id=run_id
-                )
-                return result
-            except Exception as e:
-                logger.error(
-                    f"Unexpected Exception ocurred while trying to get tools from server '{self.server_config.server_name}': {e}"
-                )
-                return []
-            finally:
-                self.condition.notify()
-
-    @classmethod
-    def from_dict(cls: type[T], data: dict[str, Any]) -> T:
-        """Deserialize the server from a dictionary."""
-        from flock.core.flock_registry import get_registry
-
-        registry = get_registry()
-        logger.debug(
-            f"Deserializing server from dict. Keys: {list(data.keys())}"
-        )
-
-        # --- Separate Data ---
-        component_configs = {}
-        server_data = {}
-
-        component_keys = [
-            "modules",
-        ]
-
-        for key, value in data.items():
-            if key in component_keys and value is not None:
-                component_configs[key] = value
-            elif key not in component_keys:
-                server_data[key] = value
-
-        # --- Deserialize Base Server ---
-        # Ensure required fields like 'name' are present if needed by __init__
-        if "name" not in server_data:
-            raise ValueError(
-                "Server data must include a 'name' field for deserialization."
-            )
-
-        server_name_log = server_data["name"]  # For logging
-        logger.info(f"Deserializing base server data for '{server_name_log}'")
-
-        # Pydantic should handle base fields based on type hints in __init__
-        server = cls(**server_data)
-        logger.debug(
-            f"Base server '{server.server_config.server_name}' instantiated"
-        )
-
-        # --- Deserialize components ---
-        logger.debug(
-            f"Deserializing components for '{server.server_config.server_name}'"
-        )
-
-        # Modules
-        if "modules" in component_configs:
-            server.modules = {}  # Intialize modules dict
-            for module_name, module_data in component_configs[
-                "modules"
-            ].items():
                 try:
-                    module_instance = deserialize_component(
-                        module_data, FlockModule
+                    await self.pre_mcp_call()
+                    result: list[
+                        FlockMCPToolBase
+                    ] = await self.client_manager.get_tools(
+                        agent_id=agent_id, run_id=run_id
                     )
-                    if module_instance:
-                        # Use add_module for potential logic within it
-                        server.add_module(module_instance)
-                        logger.debug(
-                            f"Deserialized and added module '{module_name}' for '{server.server_config.server_name}'"
-                        )
-                except Exception:
+                    converted_tools = [
+                        t.as_dspy_tool(server=self) for t in result
+                    ]
+                    await self.post_mcp_call(result=converted_tools)
+                    return converted_tools
+                except Exception as e:
                     logger.error(
-                        f"Failed to deserialize module '{module_name}' for '{server.server_config.server_name}'",
-                        exc_info=True,
+                        f"Unexpected Exception ocurred while trying to get tools from server '{self.config.server_name}': {e}"
                     )
-        logger.info(
-            f"Successfully deserialized server '{server.server_config.server_name}'."
-        )
-        return server
+                    await self.on_error(error=e)
+                    span.record_exception(e)
+                    return []
+                finally:
+                    self.condition.notify()
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert instance to dictionary representation suitable for serialization."""
-        from flock.core.flock_registry import get_registry
-
-        FlockRegistry = get_registry()
-
-        exclude = ["context", "modules"]
-
-        is_description_callable = False
-        is_input_callable = False
-        is_output_callable = False
-
-        # if self.config.description is a callable, exclude it
-        if callable(self.server_config.description):
-            is_description_callable = True
-            exclude.append("description")
-
-        # if self.input is a callable, exclude it
-        if callable(self.input):
-            is_input_callable = True
-            exclude.append("input")
-
-        # if self.output is a callable, exclude it
-        if callable(self.output):
-            is_output_callable = True
-            exclude.append("output")
-
+    async def pre_init(self) -> None:
+        """Run pre-init hooks on modules."""
         logger.debug(
-            f"Serializing server '{self.server_config.server_name}' to dict."
+            f"Running pre-init hooks for modules in server '{self.config.server_name}'"
         )
+        with tracer.start_as_current_span("server.pre_init") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.pre_server_init(self)
+            except Exception as module_error:
+                logger.error(
+                    "Error during pre_init",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
 
-        # Use Pydantic's dump, exclude manually handled fields and runtime context.
-        data = self.model_dump(
-            exclude=exclude,
-            # Use json mode for better handling of standard types by Pydantic.
-            mode="json",
-            # Exclude None values for cleaner output
-            exclude_none=True,
-        )
+    async def post_init(self) -> None:
+        """Run post-init hooks on modules."""
         logger.debug(
-            f"Base server data for '{self.server_config.server_name}': {list(data.keys())}"
+            f"Running post_init hooks for modules in server '{self.config.server_name}'"
         )
-        serialized_modules = {}
-
-        def add_serialized_component(component: Any, field_name: str):
-            if component:
-                comp_type = type(component)
-                type_name = FlockRegistry.get_component_type_name(comp_type)
-                if type_name:
-                    try:
-                        serialized_component_data = serialize_item(component)
-
-                        if not isinstance(serialized_component_data, dict):
-                            logger.error(
-                                f"Serialization of component {type_name} for field '{field_name} did not result in a dictionary. Got: {type(serialized_component_data)}"
-                            )
-                            serialized_modules[field_name] = {
-                                "type": type_name,
-                                "name": getattr(component, "name", "unknown"),
-                                "error": "serialization_failed_non_dict",
-                            }
-                        else:
-                            serialized_component_data["type"] = type_name
-                            serialized_modules[field_name] = (
-                                serialized_component_data
-                            )
-                            logger.debug(
-                                f"Successfully serialized component for field '{field_name}' (type: {type_name})"
-                            )
-                    except Exception:
-                        logger.error(
-                            f"Failed to serialize component {type_name} for field '{field_name}'",
-                            exc_info=True,
-                        )
-                        serialized_modules[field_name] = {
-                            "type": type_name,
-                            "name": getattr(component, "name", "unknown"),
-                            "error": "serialization_failed",
-                        }
-                else:
-                    logger.warning(
-                        f"Cannot serialize unregistered component {comp_type.__name__} for field '{field_name}'"
-                    )
-
-        serialized_modules = {}
-        for module in self.modules.values():
-            add_serialized_component(module, module.name)
-
-        if serialized_modules:
-            data["modules"] = serialized_modules
-            logger.debug(
-                f"Added {len(serialized_modules)} modules to server '{self.server_config.server_name}'"
-            )
-
-        if is_description_callable:
-            path_str = FlockRegistry.get_callable_path_string(
-                self.server_config.description
-            )
-            if path_str:
-                func_name = path_str.split(".")[-1]
-                data["description_callable"] = func_name
-                logger.debug(
-                    f"Added description '{func_name}' (from path '{path_str}') to server."
+        with tracer.start_as_current_span("server.post_init") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.post_server_init(self)
+            except Exception as module_error:
+                logger.error(
+                    "Error during post_init",
+                    server=self.config.server_name,
+                    error=str(module_error),
                 )
-            else:
-                logger.warning(
-                    f"Could not get path string for description {self.server_config.description} in server '{self.server_config.server_name}'. Skipping..."
-                )
+                span.record_exception(module_error)
 
-        if is_input_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.input)
-            if path_str:
-                func_name = path_str.split(".")[-1]
-                data["input_callable"] = func_name
-                logger.debug(
-                    f"Added input '{func_name}' (from path '{path_str}') to server '{self.server_config.server_name}'"
-                )
-            else:
-                logger.warning(
-                    f"Could not get path string for input {self.input} in server '{self.server_config.server_name}'. Skipping..."
-                )
-
-        if is_output_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.output)
-            if path_str:
-                func_name = path_str.split(".")[-1]
-                data["output_callable"] = func_name
-                logger.debug(
-                    f"Added output '{func_name}' (from path '{path_str}') to server '{self.server_config.server_name}'"
-                )
-            else:
-                logger.warning(
-                    f"Could not get path string for output {self.output} in server '{self.server_config.server_name}'. Skipping..."
-                )
-
-        # No need to call _filter_none_values here as model_dump(exclude_none=True) handles it
-        logger.info(
-            f"Serialization of server '{self.server_config.server_name}' complete with {len(data)} fields"
+    async def pre_terminate(self) -> None:
+        """Run pre-terminate hooks on modules."""
+        logger.debug(
+            f"Running post_init hooks for modules in server: '{self.config.server_name}'"
         )
-        return data
+        with tracer.start_as_current_span("server.pre_terminate") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.pre_server_terminate(self)
+            except Exception as module_error:
+                logger.error(
+                    "Error during pre_terminate",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
 
-    async def __aenter__(self):
-        """Enter the asynchronous context manager."""
-        if not self.client_manager or not self.initialized:
-            # Connection has not yet been established.
-            await self.initialize()
-        return self
+    async def post_terminate(self) -> None:
+        """Run post-terminate hooks on modules."""
+        logger.debug(
+            f"Running post_terminat hooks for modules in server: '{self.config.server_name}'"
+        )
+        with tracer.start_as_current_span("server.post_terminate") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.post_server_teminate(server=self)
+            except Exception as module_error:
+                logger.error(
+                    "Error during post_terminate",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
 
-    async def __aexit__(self, exc_type, exc, tb):
-        """Exit the asynchronous context manager."""
-        # Check if the connection_manager is there:
-        if self.client_manager:
-            await self.client_manager.close_all()
+    async def on_error(self, error: Exception) -> None:
+        """Run on_error hooks on modules."""
+        logger.debug(
+            f"Running on_error hooks for modules in server '{self.config.server_name}'"
+        )
+        with tracer.start_as_current_span("server.on_error") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.on_server_error(server=self, error=error)
+            except Exception as module_error:
+                logger.error(
+                    "Error during on_error",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
+
+    async def pre_mcp_call(self) -> None:
+        """Run pre_mcp_call-hooks on modules."""
+        logger.debug(
+            f"Running pre_mcp_call hooks for modules in server '{self.config.server_name}'"
+        )
+        with tracer.start_as_current_span("server.pre_mcp_call") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.pre_mcp_call(server=self)
+            except Exception as module_error:
+                logger.error(
+                    "Error during pre_mcp_call",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
+
+    async def post_mcp_call(self, result: Any) -> None:
+        """Run Post MCP_call hooks on modules."""
+        logger.debug(
+            f"Running post_mcp_call hooks for modules in server '{self.config.server_name}'"
+        )
+        with tracer.start_as_current_span("server.post_mcp_call") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.post_mcp_call(server=self, result=result)
+            except Exception as module_error:
+                logger.error(
+                    "Error during post_mcp_call",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
+
+    # --- Async Methods ---
+    async def __aenter__(self) -> "FlockMCPServerBase":
+        """Enter the asynchronous context for the server."""
+        # Spin up the client-manager
+        with tracer.start_as_current_span("server.__aenter__") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            logger.info(f"server.__aenter__", server=self.config.server_name)
+            try:
+                await self.pre_init()
+                self.client_manager = await self.initialize()
+                await self.post_init()
+                self.initialized = True
+            except Exception as server_error:
+                logger.error(
+                    f"Error during __aenter__ for server '{self.config.server_name}'",
+                    server=self.config.server_name,
+                    error=server_error,
+                )
+                span.record_exception(server_error)
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        """Exit the asynchronous context for the server."""
+        # tell the underlying client-manager to terminate connections
+        # and unwind the clients.
+        with tracer.start_as_current_span("server.__aexit__") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                await self.pre_terminate()
+                if self.initialized and self.client_manager:
+                    # means we ran through the initialize()-method
+                    # and the client manager is present
+                    await self.client_manager.close_all()
+                    self.client_manager = None
+                    self.initialized = False
+                await self.post_terminate()
+                return
+            except Exception as server_error:
+                logger.error(
+                    f"Error during __aexit__ for server '{self.config.server_name}'",
+                    server=self.config.server_name,
+                    error=server_error,
+                )
+                await self.on_error(error=server_error)
+                span.record_exception(server_error)

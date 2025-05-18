@@ -19,8 +19,8 @@ from typing import (
 from box import Box
 from temporalio import workflow
 
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.flock_server_manager import FlockServerManager
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
 with workflow.unsafe.imports_passed_through():
     from datasets import Dataset
@@ -179,7 +179,10 @@ class Flock(BaseModel, Serializable):
         # (need to be registered first so that agents can retrieve them from the registry)
         # This will also add them to the managed list of self._mgr
         if servers:
-            from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockMCPServer
+            from flock.core.mcp.flock_mcp_server import (
+                FlockMCPServerBase as ConcreteFlockMCPServer,
+            )
+
             for server in servers:
                 if isinstance(server, ConcreteFlockMCPServer):
                     self.add_server(server)
@@ -267,18 +270,19 @@ class Flock(BaseModel, Serializable):
 
     def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
         """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by self._mgr."""
-        from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockMCPServer
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockMCPServer,
+        )
 
         if not isinstance(server, ConcreteFlockMCPServer):
-            raise TypeError(
-                "Provided object is not a FlockMCPServer instance.")
-        if not server.server_config.server_name:
+            raise TypeError("Provided object is not a FlockMCPServer instance.")
+        if not server.config.server_name:
             raise ValueError("Server must have a name.")
 
-        if server.server_config.server_name in self._servers:
+        if server.config.server_name in self._servers:
             raise ValueError("Server with this name already exists.")
 
-        self._servers[server.server_config.server_name] = server
+        self._servers[server.config.server_name] = server
         FlockRegistry.register_server(server)  # Register globally.
 
         # Make sure that the server is also added to
@@ -288,13 +292,16 @@ class Flock(BaseModel, Serializable):
 
         # Prepare server to be managed by the FlockServerManager
         logger.info(
-            f"Adding server '{server.server_config.server_name}' to managed list.")
+            f"Adding server '{server.config.server_name}' to managed list."
+        )
         self._mgr.add_server_sync(server=server)
         logger.info(
-            f"Server '{server.server_config.server_name}' is now on managed list.")
+            f"Server '{server.config.server_name}' is now on managed list."
+        )
 
         logger.info(
-            f"Server '{server.server_config.server_name}' added to Flock '{self.name}'")
+            f"Server '{server.config.server_name}' added to Flock '{self.name}'"
+        )
         return server
 
     def add_agent(self, agent: FlockAgent) -> FlockAgent:
@@ -339,6 +346,7 @@ class Flock(BaseModel, Serializable):
         run_id: str = "",
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
     ) -> Box | dict:
         """Entry point for running an agent system synchronously."""
         try:
@@ -360,6 +368,7 @@ class Flock(BaseModel, Serializable):
                     run_id=run_id,
                     box_result=box_result,
                     agents=agents,
+                    servers=servers,
                 )
             )
             return result
@@ -372,6 +381,7 @@ class Flock(BaseModel, Serializable):
                     run_id=run_id,
                     box_result=box_result,
                     agents=agents,
+                    servers=servers,
                 )
             )
             return loop.run_until_complete(future)
@@ -390,7 +400,9 @@ class Flock(BaseModel, Serializable):
         """Entry point for running an agent system asynchronously."""
         # Import here to allow forward reference resolution
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
-        from flock.core.mcp.flock_mcp_server import FlockMCPServerBase as ConcreteFlockServer
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockServer,
+        )
 
         with tracer.start_as_current_span("flock.run_async") as span:
             # Add passed servers first, so that agents have access to them
@@ -426,7 +438,7 @@ class Flock(BaseModel, Serializable):
 
             # Default to first agent if only one exists and none specified
             if not start_agent_name and len(self._agents) == 1:
-                start_agent_name = list(self._agents.keys())[0]
+                start_agent_name = next(iter(self._agents.keys()))
             elif not start_agent_name:
                 raise ValueError(
                     "No start_agent specified and multiple/no agents exist."
@@ -509,7 +521,8 @@ class Flock(BaseModel, Serializable):
                     # after this block ends, self._mgr's __aexit__ will be called
                     # all servers will be torn down.
                     logger.info(
-                        f"Entering managed server context. Servers starting up.")
+                        f"Entering managed server context. Servers starting up."
+                    )
 
                     logger.info(
                         "Starting agent execution",
@@ -520,7 +533,8 @@ class Flock(BaseModel, Serializable):
                     # Execute the agent workflow
                     if not self.enable_temporal:
                         result = await run_local_workflow(
-                            run_context, box_result=False,
+                            run_context,
+                            box_result=False,
                         )
                     else:
                         # Pass the Flock instance itself to the executor
@@ -541,7 +555,7 @@ class Flock(BaseModel, Serializable):
                     span.set_attribute(
                         "result.preview",
                         result_str[:1000]
-                        + ("..." if len(result_str) > 1000 else "")
+                        + ("..." if len(result_str) > 1000 else ""),
                     )
 
                     if box_result:
@@ -550,7 +564,8 @@ class Flock(BaseModel, Serializable):
                             return Box(result)
                         except ImportError:
                             logger.warning(
-                                "Box library not installed, returning raw dict.")
+                                "Box library not installed, returning raw dict."
+                            )
                             return result
                     else:
                         return result

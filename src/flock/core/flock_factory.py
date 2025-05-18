@@ -4,8 +4,8 @@ from collections.abc import Callable
 from typing import Any
 
 from flock.core.flock_agent import FlockAgent, SignatureType
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.logging.formatters.themes import OutputTheme
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.evaluators.declarative.declarative_evaluator import (
     DeclarativeEvaluator,
     DeclarativeEvaluatorConfig,
@@ -29,7 +29,7 @@ class FlockFactory:
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any] | Any] | None = None,
-        servers: list[FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServerBase] | None = None,
         use_cache: bool = True,
         enable_rich_tables: bool = False,
         output_theme: OutputTheme = OutputTheme.abernathy,
