@@ -8,6 +8,8 @@ from __future__ import annotations  # Add this at the very top
 import builtins
 import importlib
 import inspect
+import os
+import pkgutil
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import is_dataclass
@@ -614,46 +616,50 @@ def flock_type(cls: ClassType | None = None, *, name: str | None = None) -> Any:
 
 
 # --- Auto-register known core components and tools ---
-def _auto_register_by_path():
-    components_to_register = [
-        (
-            "flock.evaluators.declarative.declarative_evaluator",
-            "DeclarativeEvaluator",
-        ),
-        ("flock.evaluators.memory.memory_evaluator", "MemoryEvaluator"),
-        ("flock.modules.output.output_module", "OutputModule"),
-        ("flock.modules.performance.metrics_module", "MetricsModule"),
-        ("flock.modules.memory.memory_module", "MemoryModule"),
-        # ("flock.modules.hierarchical.module", "HierarchicalMemoryModule"), # Uncomment if exists
-        ("flock.routers.default.default_router", "DefaultRouter"),
-        ("flock.routers.llm.llm_router", "LLMRouter"),
-        ("flock.routers.agent.agent_router", "AgentRouter"),
+def _auto_register_by_path(self):
+    # List of base packages to scan for components and tools
+    packages_to_scan = [
+        "flock.tools",
+        "flock.evaluators",
+        "flock.modules",
+        "flock.routers",
     ]
-    for module_path, class_name in components_to_register:
-        try:
-            module = importlib.import_module(module_path)
-            component_class = getattr(module, class_name)
-            _registry_instance.register_component(component_class)
-        except (ImportError, AttributeError) as e:
-            logger.warning(f"{class_name} not found for auto-registration: {e}")
 
-    # Auto-register standard tools by scanning modules
-    tool_modules = [
-        "flock.tools.basic_tools",
-        "flock.tools.azure_tools",
-        "flock.tools.github_tools",
-        "flock.tools.llm_tools",
-        "flock.tools.markdown_tools",
-        "flock.tools.zendesk_tools",
-    ]
-    for module_path in tool_modules:
+    for package_name in packages_to_scan:
         try:
-            _registry_instance.register_module_components(module_path)
-        except ImportError as e:
-            logger.warning(
-                f"Could not auto-register tools from {module_path}: {e}"
-            )
+            package_spec = importlib.util.find_spec(package_name)
+            if package_spec and package_spec.origin:
+                package_path_list = [os.path.dirname(package_spec.origin)]
+                logger.info(f"Recursively scanning for modules in package: {package_name} (path: {package_path_list[0]})")
 
+                # Use walk_packages to recursively find all modules
+                for module_loader, module_name, is_pkg in pkgutil.walk_packages(
+                    path=package_path_list,
+                    prefix=package_name + ".", # Ensures module_name is fully qualified
+                    onerror=lambda name: logger.warning(f"Error importing module {name} during scan.")
+                ):
+                    if not is_pkg and not module_name.split('.')[-1].startswith("_"):
+                        # We are interested in actual modules, not sub-packages themselves for registration
+                        # And also skip modules starting with underscore (e.g. __main__.py)
+                        try:
+                            logger.debug(f"Attempting to auto-register components from module: {module_name}")
+                            _registry_instance.register_module_components(module_name)
+                        except ImportError as e:
+                            logger.warning(
+                                f"Could not auto-register from {module_name}: Module not found or import error: {e}"
+                            )
+                        except Exception as e: # Catch other potential errors during registration
+                            logger.error(
+                                f"Unexpected error during auto-registration of {module_name}: {e}",
+                                exc_info=True
+                            )
+            else:
+                logger.warning(f"Could not find package spec for '{package_name}' to auto-register components/tools.")
+        except Exception as e:
+            logger.error(f"Error while trying to dynamically register from '{package_name}': {e}", exc_info=True)
 
 # Bootstrapping the registry
-# _auto_register_by_path()
+# _auto_register_by_path() # Commented out or removed
+
+# Make the registration function public and rename it
+FlockRegistry.discover_and_register_components = _auto_register_by_path

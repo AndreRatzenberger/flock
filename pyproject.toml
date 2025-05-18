@@ -1,6 +1,6 @@
 [project]
 name = "flock-core"
-version = "0.4.0b-46"
+version = "0.4.0b-48"
 description = "Declarative LLM Orchestration at Scale"
 readme = "README.md"
 authors = [
@@ -17,11 +17,11 @@ dependencies = [
     "cloudpickle>=3.1.1",
     "datasets>=3.2.0",
     "devtools>=0.12.2",
-    "dspy==2.6.16",
+    "dspy==2.6.23",
     "fastapi>=0.115.8",
     "httpx>=0.28.1",
     "inspect-ai>=0.3.88",
-    "litellm==1.63.7",
+    "litellm==1.69.3",
     "loguru>=0.7.3",
     "matplotlib>=3.10.0",
     "msgpack>=1.1.0",
@@ -32,6 +32,7 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.30.0",
     "opentelemetry-instrumentation-logging>=0.51b0",
     "opentelemetry-sdk>=1.30.0",
+    "openai==1.75.0",
     "pandas>=2.2.3",
     "pillow>=10.4.0",
     "prometheus-client>=0.21.1",

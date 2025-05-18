@@ -1172,7 +1172,7 @@ wheels = [
 
 [[package]]
 name = "dspy"
-version = "2.6.16"
+version = "2.6.23"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1198,9 +1198,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "ujson" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/65/b9/c1eefbc93219c60aad307f6df686d7564af7e8e9ff39f3d3b1fcf3a7c72d/dspy-2.6.16.tar.gz", hash = "sha256:a50ba502cb8270238f6c138e9a2e0cda46527a12e51d3787a48761442e110652", size = 204165 }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/0b/dd45be96b892f87131bb7667ed149e168cf0d9b26b36f80fe437f792a382/dspy-2.6.23.tar.gz", hash = "sha256:a13b92cef07865787995fbad61a14b1af39690bbebcd97b1c6ca7fb926af8abd", size = 215033 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/17/f8716950852fd9de666a367474059c59f87718709fb2b52bf7cc47023e87/dspy-2.6.16-py3-none-any.whl", hash = "sha256:7deee8bb8fe9fd2ed32ffe202d2377b4dd94caa5bfddb7ac87e7351ede459b68", size = 259070 },
+    { url = "https://files.pythonhosted.org/packages/9a/a6/dd54895bf8aacac8837a05724f9df11795ec77350dae757babdcb8f40d3c/dspy-2.6.23-py3-none-any.whl", hash = "sha256:fe9150d1548486e3dbd260541354bbba8aa604bb4c76157d9b619a31295ea628", size = 272453 },
 ]
 
 [[package]]
@@ -1343,16 +1343,14 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.0b46"
+version = "0.4.0b47"
 source = { editable = "." }
 dependencies = [
-    { name = "azure-search-documents" },
     { name = "chromadb" },
     { name = "cloudpickle" },
     { name = "datasets" },
     { name = "devtools" },
     { name = "dspy" },
-    { name = "duckduckgo-search" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "inspect-ai" },
@@ -1360,8 +1358,8 @@ dependencies = [
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "msgpack" },
-    { name = "nltk" },
     { name = "notion-client" },
+    { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-jaeger" },
     { name = "opentelemetry-exporter-jaeger-proto-grpc" },
@@ -1391,18 +1389,29 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-all = [
+all-tools = [
+    { name = "azure-identity" },
+    { name = "azure-search-documents" },
+    { name = "azure-storage-blob" },
     { name = "docling" },
+    { name = "duckduckgo-search" },
     { name = "markdownify" },
+    { name = "nltk" },
     { name = "tavily-python" },
 ]
 azure-tools = [
     { name = "azure-identity" },
+    { name = "azure-search-documents" },
     { name = "azure-storage-blob" },
 ]
-tools = [
+basic-tools = [
+    { name = "docling" },
+    { name = "duckduckgo-search" },
     { name = "markdownify" },
     { name = "tavily-python" },
+]
+llm-tools = [
+    { name = "nltk" },
 ]
 
 [package.dev-dependencies]
@@ -1425,27 +1434,34 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-identity", marker = "extra == 'all-tools'", specifier = ">=1.23.0" },
     { name = "azure-identity", marker = "extra == 'azure-tools'", specifier = ">=1.23.0" },
-    { name = "azure-search-documents", specifier = ">=11.5.2" },
+    { name = "azure-search-documents", marker = "extra == 'all-tools'", specifier = ">=11.5.2" },
+    { name = "azure-search-documents", marker = "extra == 'azure-tools'", specifier = ">=11.5.2" },
+    { name = "azure-storage-blob", marker = "extra == 'all-tools'", specifier = ">=12.25.1" },
     { name = "azure-storage-blob", marker = "extra == 'azure-tools'", specifier = ">=12.25.1" },
     { name = "chromadb", specifier = ">=0.6.3" },
     { name = "cloudpickle", specifier = ">=3.1.1" },
     { name = "datasets", specifier = ">=3.2.0" },
     { name = "devtools", specifier = ">=0.12.2" },
-    { name = "docling", marker = "extra == 'all'", specifier = ">=2.18.0" },
-    { name = "dspy", specifier = "==2.6.16" },
-    { name = "duckduckgo-search", specifier = ">=7.3.2" },
+    { name = "docling", marker = "extra == 'all-tools'", specifier = ">=2.18.0" },
+    { name = "docling", marker = "extra == 'basic-tools'", specifier = ">=2.18.0" },
+    { name = "dspy", specifier = "==2.6.23" },
+    { name = "duckduckgo-search", marker = "extra == 'all-tools'", specifier = ">=7.3.2" },
+    { name = "duckduckgo-search", marker = "extra == 'basic-tools'", specifier = ">=7.3.2" },
     { name = "fastapi", specifier = ">=0.115.8" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "inspect-ai", specifier = ">=0.3.88" },
-    { name = "litellm", specifier = "==1.63.7" },
+    { name = "litellm", specifier = "==1.69.3" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "markdownify", marker = "extra == 'all'", specifier = ">=0.14.1" },
-    { name = "markdownify", marker = "extra == 'tools'", specifier = ">=0.14.1" },
+    { name = "markdownify", marker = "extra == 'all-tools'", specifier = ">=0.14.1" },
+    { name = "markdownify", marker = "extra == 'basic-tools'", specifier = ">=0.14.1" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "msgpack", specifier = ">=1.1.0" },
-    { name = "nltk", specifier = ">=3.9.1" },
+    { name = "nltk", marker = "extra == 'all-tools'", specifier = ">=3.9.1" },
+    { name = "nltk", marker = "extra == 'llm-tools'", specifier = ">=3.9.1" },
     { name = "notion-client", specifier = ">=2.3.0" },
+    { name = "openai", specifier = "==1.75.0" },
     { name = "opentelemetry-api", specifier = ">=1.30.0" },
     { name = "opentelemetry-exporter-jaeger", specifier = ">=1.21.0" },
     { name = "opentelemetry-exporter-jaeger-proto-grpc", specifier = ">=1.21.0" },
@@ -1466,8 +1482,8 @@ requires-dist = [
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "sentence-transformers", specifier = ">=3.4.1" },
-    { name = "tavily-python", marker = "extra == 'all'", specifier = ">=0.5.0" },
-    { name = "tavily-python", marker = "extra == 'tools'", specifier = ">=0.5.0" },
+    { name = "tavily-python", marker = "extra == 'all-tools'", specifier = ">=0.5.0" },
+    { name = "tavily-python", marker = "extra == 'basic-tools'", specifier = ">=0.5.0" },
     { name = "temporalio", specifier = ">=1.9.0" },
     { name = "tiktoken", specifier = ">=0.8.0" },
     { name = "toml", specifier = ">=0.10.2" },
@@ -1475,7 +1491,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "zep-python", specifier = ">=2.0.2" },
 ]
-provides-extras = ["all", "tools", "azure-tools"]
+provides-extras = ["basic-tools", "azure-tools", "llm-tools", "all-tools"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2335,7 +2351,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.63.7"
+version = "1.69.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2351,9 +2367,9 @@ dependencies = [
     { name = "tokenizers", version = "0.19.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
     { name = "tokenizers", version = "0.21.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/7a/6c1994a239abd1b335001a46ae47fa055a24c493b6de19a9fa1872187fe9/litellm-1.63.7.tar.gz", hash = "sha256:2fbd7236d5e5379eee18556857ed62a5ed49f4f09e03ff33cf15932306b984f1", size = 6598034 }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/25/2ce407b0ef7e3a2b05300336b7264ec781872c5e60e6ead7a10c9410adcd/litellm-1.69.3.tar.gz", hash = "sha256:748fe9dffea743bf683c9e28e4632c14894863e62c3fbf057560ea7324d89390", size = 7493451 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/44/255c7ecb8b6f3f730a37422736509c21cb1bf4da66cc060d872005bda9f5/litellm-1.63.7-py3-none-any.whl", hash = "sha256:fbdee39a894506c68f158c6b4e0079f9e9c023441fff7215e7b8e42162dba0a7", size = 6909807 },
+    { url = "https://files.pythonhosted.org/packages/aa/c0/d1538ca18a32adb2669312342e11066e3ddb7dffdf328c1fad3027f78b3e/litellm-1.69.3-py3-none-any.whl", hash = "sha256:31f17024d06824aa8c1798e2c6ac44b69d4f721cefbc3bcd0d53a4568831075e", size = 7761394 },
 ]
 
 [[package]]
@@ -3373,7 +3389,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "1.61.0"
+version = "1.75.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -3385,9 +3401,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/2a/b3fa8790be17d632f59d4f50257b909a3f669036e5195c1ae55737274620/openai-1.61.0.tar.gz", hash = "sha256:216f325a24ed8578e929b0f1b3fb2052165f3b04b0461818adaa51aa29c71f8a", size = 350174 }
+sdist = { url = "https://files.pythonhosted.org/packages/99/b1/318f5d4c482f19c5fcbcde190801bfaaaec23413cda0b88a29f6897448ff/openai-1.75.0.tar.gz", hash = "sha256:fb3ea907efbdb1bcfd0c44507ad9c961afd7dce3147292b54505ecfd17be8fd1", size = 429492 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/76/70c5ad6612b3e4c89fa520266bbf2430a89cae8bd87c1e2284698af5927e/openai-1.61.0-py3-none-any.whl", hash = "sha256:e8c512c0743accbdbe77f3429a1490d862f8352045de8dc81969301eb4a4f666", size = 460623 },
+    { url = "https://files.pythonhosted.org/packages/80/9a/f34f163294345f123673ed03e77c33dee2534f3ac1f9d18120384457304d/openai-1.75.0-py3-none-any.whl", hash = "sha256:fe6f932d2ded3b429ff67cc9ad118c71327db32eb9d32dd723de3acfca337125", size = 646972 },
 ]
 
 [[package]]
