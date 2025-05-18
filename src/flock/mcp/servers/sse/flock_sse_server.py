@@ -1,7 +1,8 @@
 """This module provides the Flock SSE Server functionality."""
 
+import copy
 from contextlib import AbstractAsyncContextManager
-from typing import Literal
+from typing import Any, Literal
 
 from anyio.streams.memory import (
     MemoryObjectReceiveStream,
@@ -57,7 +58,7 @@ class FlockSSEClient(FlockMCPClientBase):
     config: FlockSSEConfig = Field(..., description="Client configuration.")
 
     async def create_transport(
-        self, params
+        self, params: SseServerParameters
     ) -> AbstractAsyncContextManager[
         tuple[
             MemoryObjectReceiveStream[JSONRPCMessage | Exception],
@@ -65,11 +66,43 @@ class FlockSSEClient(FlockMCPClientBase):
         ]
     ]:
         """Return an async context manager whose __aenter__ method yields (read_stream, send_stream)."""
+        # avoid modifying the config of the client as a side-effect.
+        param_copy = copy.deepcopy(params)
+
+        if self.additional_params:
+            override_headers = bool(
+                self.additional_params.get("override_headers", False)
+            )
+            if "headers" in self.additional_params:
+                if override_headers:
+                    param_copy.headers = self.additional_params.get(
+                        "headers", params.headers
+                    )
+                else:
+                    param_copy.headers.update(
+                        self.additional_params.get("headers", {})
+                    )
+            if "read_timeout_seconds" in self.additional_params:
+                param_copy.timeout = self.additional_params.get(
+                    "read_timeout_seconds", params.timeout
+                )
+
+            if "sse_read_timeout" in self.additional_params:
+                param_copy.sse_read_timeout = self.additional_params.get(
+                    "sse_read_timeout",
+                    params.sse_read_timeout,
+                )
+            if "url" in self.additional_params:
+                param_copy.url = self.additional_params.get(
+                    "url",
+                    params.url,
+                )
+
         return sse_client(
-            url=self.config.connection_config.connection_parameters.url,
-            headers=self.config.connection_config.connection_parameters.headers,
-            timeout=self.config.connection_config.connection_parameters.timeout,
-            sse_read_timeout=self.config.connection_config.connection_parameters.sse_read_timeout,
+            url=param_copy.url,
+            headers=param_copy.headers,
+            timeout=param_copy.timeout,
+            sse_read_timeout=param_copy.sse_read_timeout,
         )
 
 
@@ -80,9 +113,13 @@ class FlockSSEClientManager(FlockMCPClientManager):
         ..., description="Configuration for clients."
     )
 
-    async def make_client(self) -> FlockSSEClient:
+    async def make_client(
+        self, additional_params: dict[str, Any]
+    ) -> FlockSSEClient:
         """Create a new client instance."""
-        new_client = FlockSSEClient(config=self.client_config)
+        new_client = FlockSSEClient(
+            config=self.client_config, additional_params=additional_params
+        )
         return new_client
 
 

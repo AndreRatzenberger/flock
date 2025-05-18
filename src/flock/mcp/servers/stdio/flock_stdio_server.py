@@ -1,5 +1,6 @@
 """This module provides the Flock MCP Stdio server functionality."""
 
+import copy
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Literal
 
@@ -66,8 +67,40 @@ class FlockStdioClient(FlockMCPClientBase):
         ]
     ]:
         """Return an async context manager whose __aenter__ method yields (read_stream, send_stream)."""
+        # additional_params take precedence over passed config, as modules can influence
+        # how to connect to a stdio server.
+
+        # avoid modifying the config of the client as a side-effect.
+        param_copy = copy.deepcopy(params)
+
+        if self.additional_params:
+            # If it is present, then modify server parameters based on certain keys.
+            if "command" in self.additional_params:
+                param_copy.command = self.additional_params.get(
+                    "command", params.command
+                )
+            if "args" in self.additional_params:
+                param_copy.args = self.additional_params.get(
+                    "args", params.command
+                )
+            if "env" in self.additional_params:
+                param_copy.env = self.additional_params.get("env", params.env)
+
+            if "cwd" in self.additional_params:
+                param_copy.cwd = self.additional_params.get("cwd", params.env)
+
+            if "encoding" in self.additional_params:
+                param_copy.encoding = self.additional_params.get(
+                    "encoding", params.encoding
+                )
+
+            if "encoding_error_handler" in self.additional_params:
+                param_copy.encoding_error_handler = self.additional_params.get(
+                    "encoding_error_handler", params.encoding_error_handler
+                )
+
         # stdio_client already is an AsyncContextManager
-        return stdio_client(server=params)
+        return stdio_client(server=param_copy)
 
 
 class FlockStdioClientManager(FlockMCPClientManager):
@@ -83,6 +116,7 @@ class FlockStdioClientManager(FlockMCPClientManager):
         """Create a new client instance."""
         new_client = FlockStdioClient(
             config=self.client_config,
+            additional_params=additional_params,  # Inject additional parameters to allow modules to control how to create a transport.
         )
 
         return new_client

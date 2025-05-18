@@ -127,14 +127,68 @@ class FlockModule(BaseModel, ABC):
     ) -> None:
         """Called before a connection is being established to a mcp server.
 
-        Mutate additional_params in order to pass additional parameters to
-        mcp clients. (Such as additional headers, changing timeouts etc.)
+        use `server` (type FlockMCPServer) to modify the core behavior of the server.
+        use `additional_params` to 'tack_on' additional configurations (for example additional headers for sse-clients.)
+
+        (For example: modify the server's config)
+        new_config = NewConfigObject(...)
+        server.config = new_config
+
+        Warning:
+            Be very careful when modifying a server's internal state.
+            If you just need to 'tack on' additional information (such as headers)
+            or want to temporarily override certain configurations (such as timeouts)
+            use `additional_params` instead if you can.
+
+        (Or pass additional values downstream:)
+        additional_params["headers"] = { "Authorization": "Bearer 123" }
+        additional_params["read_timeout_seconds"] = 100
+
+
+        Note:
+            `additional_params` resets between mcp_calls.
+            so there is not persistence between individual calls.
+            This choice has been made to allow developers to
+            dynamically switch configurations.
+            (This can be used, for example, to use a module to inject oauth headers for
+            individual users on a call-to-call basis. this also gives you direct control over
+            managing the headers yourself. For example, checking for lifetimes on JWT-Tokens.)
+
+        Note:
+            you can access `additional_params` when you are implementing your own subclasses of
+            FlockMCPClientManager and FlockMCPClient. (with self.additional_params.)
+
+        keys which are processed for `additional_params` in the flock core code are:
+        --- General ---
+
+        "refresh_client": bool -> defaults to False. Indicates whether or not to restart a connection on a call. (can be used when headers oder api-keys change to automatically switch to a new client.)
+        "read_timeout_seconds": float -> How long to wait for a connection to happen.
+
+        --- SSE ---
+
+        "override_headers": bool -> default False. If set to false, additional headers will be appended, if set to True, additional headers will override existing ones.
+        "headers": dict[str, Any] -> Additional Headers injected in sse-clients and ws-clients
+        "sse_read_timeout_seconds": float -> how long until a connection is being terminated for sse-clients.
+        "url": str -> which url the server listens on (allows switching between mcp-servers with modules.)
+
+        --- Stdio ---
+
+        "command": str -> Command to run for stdio-servers.
+        "args": list[str] -> additional paramters for stdio-servers.
+        "env": dict[str, Any] -> Environment-Variables for stdio-servers.
+        "encoding": str -> Encoding to use when talking to stdio-servers.
+        "encoding-error-handler": str -> Encoding error handler to use when talking to stdio-servers.
+
+        --- Websockets ---
+
+        "url": str -> Which url the server listens on (allows switching between mcp-servers with modules.)
         """
         pass
 
     async def pre_mcp_call(
         self,
         server: Any,
+        arguments: Any | None = None,
     ) -> None:
         """Called before any MCP Calls."""
         pass
@@ -142,7 +196,7 @@ class FlockModule(BaseModel, ABC):
     async def post_mcp_call(
         self,
         server: Any,
-        result: Any,
+        result: Any | None = None,
     ) -> None:
         """Called after any MCP Calls."""
         pass

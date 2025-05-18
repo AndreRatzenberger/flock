@@ -1,5 +1,6 @@
 """Manages a pool of connections for a particular server."""
 
+import copy
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from typing import Any, Generic, TypeVar
@@ -73,12 +74,19 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                     logger.debug(
                         f"Attempting to get client for server '{self.client_config.server_name}'"
                     )
+                    refresh = False
+                    if additional_params:
+                        refresh = bool(
+                            additional_params.get("refresh_client", False)
+                        )
                     client = None
                     run_clients = self.clients.get(agent_id, None)
-                    if run_clients is None:
+                    if run_clients is None or refresh:
                         # This means, that across all runs, no agent has ever needed a client.
                         # This also means that we need to create a client.
-                        client = await self.make_client(additional_params)
+                        client = await self.make_client(
+                            additional_params=copy.deepcopy(additional_params)
+                        )
                         # Insert the freshly created client
                         self.clients[agent_id] = {}
                         self.clients[agent_id][run_id] = client
@@ -87,9 +95,13 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                         # This means there is at least one entry for the agent_id available
                         # Now, all we need to do is check if the run_id matches the entrie's run_id
                         client = run_clients.get(run_id, None)
-                        if client is None:
+                        if client is None or refresh:
                             # Means no client here with the respective run_id
-                            client = await self.make_client()
+                            client = await self.make_client(
+                                additional_params=copy.deepcopy(
+                                    additional_params
+                                )
+                            )
                             # Insert the freshly created client.
                             self.clients[agent_id][run_id] = client
 

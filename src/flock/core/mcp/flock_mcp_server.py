@@ -149,13 +149,22 @@ class FlockMCPServerBase(BaseModel, ABC):
             async with self.condition:
                 try:
                     await self.pre_mcp_call()
-                    # TODO: inject additional params here.
+                    additional_params: dict[str, Any] = {
+                        "refresh_client": False,
+                        "override_headers": False,
+                    }  # initialize the additional params as an empty dict.
+
+                    await self.before_connect(
+                        additional_params=additional_params
+                    )
                     result = await self.client_manager.call_tool(
                         agent_id=agent_id,
                         run_id=run_id,
                         name=name,
                         arguments=arguments,
+                        additional_params=additional_params,
                     )
+                    # re-set addtional-params, just to be sure.
                     await self.post_mcp_call(result=result)
                     return result
                 except Exception as mcp_error:

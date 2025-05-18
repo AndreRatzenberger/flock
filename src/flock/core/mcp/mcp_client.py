@@ -138,6 +138,11 @@ class FlockMCPClientBase(BaseModel, ABC):
         default=None, description="MessageHandler Callback."
     )
 
+    additional_params: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional Parameters for connection. Can be modified using server modules.",
+    )
+
     # Auto-reconnect proxy
     class _SessionProxy:
         def __init__(self, client: Any):
@@ -356,7 +361,8 @@ class FlockMCPClientBase(BaseModel, ABC):
     # --- Abstract methods / class methods ---
     @abstractmethod
     async def create_transport(
-        self, params: ServerParameters
+        self,
+        params: ServerParameters,
     ) -> AbstractAsyncContextManager[
         tuple[
             MemoryObjectReceiveStream[JSONRPCMessage | Exception],
@@ -533,11 +539,21 @@ class FlockMCPClientBase(BaseModel, ABC):
         transport_ctx = await self.create_transport(server_params)
         read, write = await stack.enter_async_context(transport_ctx)
         read_timeout = self.config.connection_config.read_timeout_seconds
+
+        if (
+            self.additional_params
+            and "read_timeout_seconds" in self.additional_params
+        ):
+            read_timeout = self.additional_params.get(
+                "read_timeout_seconds", read_timeout
+            )
+
         timeout_seconds = (
             read_timeout
             if isinstance(read_timeout, timedelta)
             else timedelta(seconds=float(read_timeout))
         )
+
         session = await stack.enter_async_context(
             ClientSession(
                 read_stream=read,
