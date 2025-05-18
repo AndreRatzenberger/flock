@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from asyncio import Lock
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from opentelemetry import trace
 from pydantic import (
@@ -49,11 +49,19 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
     )
 
     @abstractmethod
-    async def make_client(self) -> type[TClient]:
+    async def make_client(
+        self,
+        additional_params: dict[str, Any] | None = None,
+    ) -> type[TClient]:
         """Instantiate-but don't connect yet-a fresh client of the concrete subtype."""
         pass
 
-    async def get_client(self, agent_id: str, run_id: str) -> type[TClient]:
+    async def get_client(
+        self,
+        agent_id: str,
+        run_id: str,
+        additional_params: dict[str, Any] | None = None,
+    ) -> type[TClient]:
         """Provides a client from the pool."""
         # Attempt to get a client from the client store.
         # clients are stored like this: agent_id -> run_id -> client
@@ -70,7 +78,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                     if run_clients is None:
                         # This means, that across all runs, no agent has ever needed a client.
                         # This also means that we need to create a client.
-                        client = await self.make_client()
+                        client = await self.make_client(additional_params)
                         # Insert the freshly created client
                         self.clients[agent_id] = {}
                         self.clients[agent_id][run_id] = client
@@ -94,15 +102,56 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                     span.record_exception(e)
                     raise e
 
+    async def call_tool(
+        self,
+        agent_id: str,
+        run_id: str,
+        name: str,
+        arguments: dict[str, Any],
+        additional_params: dict[str, Any] | None = None,
+    ) -> Any:
+        """Call a tool."""
+        with tracer.start_as_current_span("client_manager.call_tool") as span:
+            span.set_attribute("agent_id", agent_id)
+            span.set_attribute("run_id", run_id)
+            span.set_attribute("tool_name", name)
+            span.set_attribute("arguments", str(arguments))
+            try:
+                client = await self.get_client(
+                    agent_id=agent_id,
+                    run_id=run_id,
+                    additional_params=additional_params,
+                )
+                result = await client.call_tool(
+                    agent_id=agent_id,
+                    run_id=run_id,
+                    name=name,
+                    arguments=arguments,
+                )
+                return result
+            except Exception as e:
+                logger.error(
+                    f"Exception occurred while trying to call tool {name} on server '{self.client_config.server_name}': {e}"
+                )
+                span.record_exception(e)
+                return None
+
     async def get_tools(
-        self, agent_id: str, run_id: str
+        self,
+        agent_id: str,
+        run_id: str,
+        additional_params: dict[str, Any] | None = None,
     ) -> list[FlockMCPToolBase]:
         """Retrieves a list of tools for the agents to act on."""
         with tracer.start_as_current_span("client_manager.get_tools") as span:
             span.set_attribute("agent_id", agent_id)
             span.set_attribute("run_id", run_id)
             try:
-                client = await self.get_client(agent_id=agent_id, run_id=run_id)
+                client = await self.get_client(
+                    agent_id=agent_id,
+                    run_id=run_id,
+                    additional_params=additional_params,
+                )
                 tools: list[FlockMCPToolBase] = await client.get_tools(
                     agent_id=agent_id, run_id=run_id
                 )

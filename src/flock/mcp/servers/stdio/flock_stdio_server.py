@@ -1,7 +1,7 @@
 """This module provides the Flock MCP Stdio server functionality."""
 
 from contextlib import AbstractAsyncContextManager
-from typing import Literal
+from typing import Any, Literal
 
 from anyio.streams.memory import (
     MemoryObjectReceiveStream,
@@ -77,7 +77,9 @@ class FlockStdioClientManager(FlockMCPClientManager):
         ..., description="Configuration for clients."
     )
 
-    async def make_client(self) -> FlockStdioClient:
+    async def make_client(
+        self, additional_params: dict[str, Any] | None = None
+    ) -> FlockStdioClient:
         """Create a new client instance."""
         new_client = FlockStdioClient(
             config=self.client_config,

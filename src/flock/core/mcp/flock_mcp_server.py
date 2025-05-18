@@ -15,7 +15,6 @@ from pydantic import (
 from flock.core.flock_module import FlockModule
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.mcp.mcp_client import FlockMCPClientBase
 from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
 from flock.core.mcp.mcp_config import FlockMCPConfigurationBase
 
@@ -150,12 +149,8 @@ class FlockMCPServerBase(BaseModel, ABC):
             async with self.condition:
                 try:
                     await self.pre_mcp_call()
-                    client: FlockMCPClientBase = (
-                        await self.client_manager.get_client(
-                            agent_id=agent_id, run_id=run_id
-                        )
-                    )  # TODO: injection of hook result here.
-                    result = await client.call_tool(
+                    # TODO: inject additional params here.
+                    result = await self.client_manager.call_tool(
                         agent_id=agent_id,
                         run_id=run_id,
                         name=name,
@@ -188,6 +183,7 @@ class FlockMCPServerBase(BaseModel, ABC):
             async with self.condition:
                 try:
                     await self.pre_mcp_call()
+                    # TODO: inject additional params here.
                     result: list[
                         FlockMCPToolBase
                     ] = await self.client_manager.get_tools(
@@ -207,6 +203,26 @@ class FlockMCPServerBase(BaseModel, ABC):
                     return []
                 finally:
                     self.condition.notify()
+
+    async def before_connect(self, additional_params: dict[str, Any]) -> None:
+        """Run before_connect hooks on modules."""
+        logger.debug(
+            f"Running before_connect hooks for modules in server '{self.config.server_name}'."
+        )
+        with tracer.start_as_current_span("server.before_connect") as span:
+            span.set_attribute("server.name", self.config.server_name)
+            try:
+                for module in self.get_enabled_modules():
+                    await module.before_connect(
+                        server=self, additional_params=additional_params
+                    )
+            except Exception as module_error:
+                logger.error(
+                    "Error during before_connect",
+                    server=self.config.server_name,
+                    error=str(module_error),
+                )
+                span.record_exception(module_error)
 
     async def pre_init(self) -> None:
         """Run pre-init hooks on modules."""
