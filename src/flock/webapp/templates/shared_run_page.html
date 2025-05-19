@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" {% if theme_css %}data-theme="{{ active_theme_name | default('default') }}"{% endif %}>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flock Shared Agent: {{ selected_agent_name }}</title>
+    
+    {# Link to Pico.css #}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    
+    {# Inline generated theme CSS variables #}
+    {% if theme_css %}
+    <style>
+        /* Start Theme CSS */
+        /* stylelint-disable */
+        {{ theme_css | safe }}
+        /* stylelint-enable */
+        /* End Theme CSS */
+    </style>
+    {% endif %}
+
+    <style>
+        body { container-type: inline-size; }
+        main.container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+        }
+        .htmx-indicator.hidden { display: none; }
+        .htmx-indicator { margin-left: 0.5rem; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background-color: var(--pico-card-background-color); padding: 1em; border-radius: var(--pico-border-radius); }
+    </style>
+    {# HTMX script - ensure this is loaded for the page to work #}
+    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLNBPSSCIFmyl5IzlickEV DEALINGS IN THE SOFTWARE."></script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <hgroup>
+                <h1>Shared Agent Run</h1>
+                <h2>Agent: {{ selected_agent_name }}</h2>
+            </hgroup>
+            {% if share_id %}<p><small>Share ID: {{ share_id }}</small></p>{% endif %}
+        </header>
+
+        {% if error_message %}
+            <article class="error-message" style="border-color: var(--pico-form-invalid-border-color); background-color: var(--pico-form-invalid-background-color);">
+                <h4 style="color: var(--pico-form-invalid-color);">Error</h4>
+                <p>{{ error_message }}</p>
+                <p><a href="/">Return to main page</a></p>
+            </article>
+        {% elif flock and flock.agents and selected_agent_name in flock.agents %}
+            <article id="shared-agent-execution-form">
+                <form id="agent-run-form" 
+                      hx-post="/ui/api/flock/htmx/run" 
+                      hx-target="#results-display-shared" 
+                      hx-swap="innerHTML" 
+                      hx-indicator="#run-loading-indicator-shared">
+                    
+                    {# Hidden input for the fixed agent name #}
+                    <input type="hidden" name="start_agent_name" value="{{ selected_agent_name }}">
+                    
+                    <div id="dynamic-input-form-fields-shared" 
+                         hx-get="/ui/api/flock/htmx/agents/{{ selected_agent_name }}/input-form" 
+                         hx-trigger="load delay:50ms" {# Load the form for the selected agent automatically #}
+                         hx-swap="innerHTML"
+                         hx-indicator="#input-form-loading-indicator-shared">
+                        <p><small>Loading input form for <strong>{{ selected_agent_name }}</strong>...</small></p>
+                    </div>
+                    <div id="input-form-loading-indicator-shared" class="htmx-indicator hidden">
+                        <progress indeterminate></progress> Loading input form...
+                    </div>
+
+                    <button type="submit" id="runSharedAgentBtn">Run Agent</button>
+                    <span id="run-loading-indicator-shared" class="htmx-indicator hidden">
+                        <progress indeterminate></progress> Running...
+                    </span>
+                </form>
+            </article>
+
+            <article id="results-display-shared" style="margin-top: 2rem;">
+                <h4>Execution Results</h4>
+                <pre>Results will appear here after running the Agent.</pre>
+            </article>
+        {% else %}
+            {# This case should ideally be handled by the error_message block from the Python route #}
+            <article class="error-message">
+                <h4>Agent Not Available</h4>
+                <p>The specified agent '{{ selected_agent_name }}' could not be loaded for this shared link.</p>
+                <p><a href="/">Return to main page</a></p>
+            </article>
+        {% endif %}
+    </main>
+</body>
+</html> 

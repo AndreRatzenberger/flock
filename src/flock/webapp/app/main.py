@@ -2,13 +2,26 @@
 import json
 import shutil
 import urllib.parse
+
+# Added for share link creation
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from flock.core.api.endpoints import create_api_router
 from flock.core.api.run_store import RunStore
@@ -27,6 +40,7 @@ from flock.webapp.app.api import (
 from flock.webapp.app.config import (
     DEFAULT_THEME_NAME,
     FLOCK_FILES_DIR,
+    SHARED_LINKS_DB_PATH,
     THEMES_DIR,
     get_current_theme_name,
 )
@@ -34,7 +48,9 @@ from flock.webapp.app.config import (
 # Import dependency management and config
 from flock.webapp.app.dependencies import (
     get_pending_custom_endpoints_and_clear,
+    get_shared_link_store,
     set_global_flock_services,
+    set_global_shared_link_store,
 )
 
 # Import service functions (which now expect app_state)
@@ -46,6 +62,13 @@ from flock.webapp.app.services.flock_service import (
     load_flock_from_file_service,
     # Note: get_current_flock_instance/filename are removed from service,
     # as main.py will use request.app.state for this.
+)
+
+# Added for share link creation
+from flock.webapp.app.services.sharing_models import SharedLinkConfig
+from flock.webapp.app.services.sharing_store import (
+    SharedLinkStoreInterface,
+    SQLiteSharedLinkStore,
 )
 from flock.webapp.app.theme_mapper import alacritty_to_pico
 
@@ -113,6 +136,18 @@ async def lifespan(app: FastAPI):
     # by `start_unified_server` in `webapp/run.py` *before* uvicorn starts the app.
     # The call to `set_global_flock_services` also happens there.
 
+    # Initialize and set the SharedLinkStore
+    try:
+        logger.info(f"Initializing SharedLinkStore with DB path: {SHARED_LINKS_DB_PATH}")
+        shared_link_store = SQLiteSharedLinkStore(db_path=str(SHARED_LINKS_DB_PATH))
+        await shared_link_store.initialize() # Create tables if they don't exist
+        set_global_shared_link_store(shared_link_store)
+        logger.info("SharedLinkStore initialized and set globally.")
+    except Exception as e:
+        logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)
+        # Depending on the desired behavior, you might want to prevent app startup
+        # or run in a degraded mode. For now, just log and continue.
+
     # Add custom routes if any were passed during server startup
     # These are retrieved from the dependency module where `start_unified_server` stored them.
     pending_endpoints = get_pending_custom_endpoints_and_clear()
@@ -146,6 +181,152 @@ app.include_router(flock_management.router, prefix="/ui/api/flock", tags=["UI Fl
 app.include_router(agent_management.router, prefix="/ui/api/flock", tags=["UI Agent Management"])
 app.include_router(execution.router, prefix="/ui/api/flock", tags=["UI Execution"])
 app.include_router(registry_viewer.router, prefix="/ui/api/registry", tags=["UI Registry"])
+
+# --- Share Link API Models and Endpoint ---
+class CreateShareLinkRequest(BaseModel):
+    agent_name: str
+
+class CreateShareLinkResponse(BaseModel):
+    share_url: str
+
+@app.post("/api/v1/share/link", response_model=CreateShareLinkResponse, tags=["UI Sharing"])
+async def create_share_link(
+    request_data: CreateShareLinkRequest,
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+):
+    """Creates a new shareable link for an agent."""
+    share_id = uuid.uuid4().hex
+    agent_name = request_data.agent_name
+
+    if not agent_name: # Basic validation
+        raise HTTPException(status_code=400, detail="Agent name cannot be empty.")
+
+    config = SharedLinkConfig(share_id=share_id, agent_name=agent_name)
+    try:
+        await store.save_config(config)
+        share_url = f"/ui/shared-run/{share_id}" # Relative URL
+        logger.info(f"Created share link for agent '{agent_name}' with ID '{share_id}'. URL: {share_url}")
+        return CreateShareLinkResponse(share_url=share_url)
+    except Exception as e:
+        logger.error(f"Failed to create share link for agent '{agent_name}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create share link: {e!s}")
+
+# --- End Share Link API ---
+
+# --- HTMX Endpoint for Generating Share Link Snippet ---
+@app.post("/ui/htmx/share/generate-link", response_class=HTMLResponse, tags=["UI Sharing HTMX"])
+async def htmx_generate_share_link(
+    request: Request,
+    start_agent_name: str | None = Form(None), # Matches hx-include="#start_agent_name_select" which has name="start_agent_name"
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+):
+    if not start_agent_name:
+        logger.warning("HTMX generate share link: Agent name not provided.")
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "error_message": "No agent selected to share."}
+        )
+
+    share_id = uuid.uuid4().hex
+    config = SharedLinkConfig(share_id=share_id, agent_name=start_agent_name)
+
+    try:
+        await store.save_config(config)
+        # Construct full URL for display. The share_url in DB is relative.
+        # Scheme and host can be taken from the request object.
+        base_url = str(request.base_url)
+        full_share_url = f"{base_url.rstrip('/')}/ui/shared-run/{share_id}"
+
+        logger.info(f"HTMX: Generated share link for agent '{start_agent_name}' with ID '{share_id}'. URL: {full_share_url}")
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "share_url": full_share_url}
+        )
+    except Exception as e:
+        logger.error(f"HTMX: Failed to create share link for agent '{start_agent_name}': {e}", exc_info=True)
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "error_message": f"Could not generate link: {e!s}"}
+        )
+# --- End HTMX Endpoint ---
+
+# --- Route for Shared Run Page ---
+@app.get("/ui/shared-run/{share_id}", response_class=HTMLResponse, tags=["UI Sharing"])
+async def page_shared_run(
+    request: Request,
+    share_id: str,
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store),
+):
+    logger.info(f"Accessed shared run page with share_id: {share_id}")
+
+    shared_config = await store.get_config(share_id)
+
+    if not shared_config:
+        logger.warning(f"Share ID not found: {share_id}")
+        # Assuming error_page.html exists or using HTTPException
+        return templates.TemplateResponse(
+            "error_page.html",
+            {"request": request, "error_title": "Link Not Found", "error_message": "The shared link you are trying to access does not exist or may have expired."},
+            status_code=404
+        )
+
+    agent_name = shared_config.agent_name
+    error_for_template = None
+    theme_css_vars = "" # For theme styling
+
+    # Check if the agent actually exists in the registry before trying to render
+    from flock.core.flock_registry import get_registry
+    registry = get_registry()
+    agent_instance = registry.get_agent(agent_name)
+
+    if not agent_instance:
+        error_for_template = f"Agent '{agent_name}' (from shared link) not found in the Flock registry. It may have been removed or renamed."
+        logger.warning(error_for_template)
+        # Render the shared page with an error message within its own layout
+        return templates.TemplateResponse(
+            "shared_run_page.html",
+            {
+                "request": request,
+                "share_id": share_id,
+                "selected_agent_name": agent_name, # Pass agent_name even if not found, for display
+                "flock": None, # No flock data if agent is missing
+                "error_message": error_for_template
+            },
+            status_code=404
+        )
+
+    # Create a mock/minimal flock structure for the template, as it expects flock.agents
+    mock_flock_for_template = {
+        "name": "Shared Agent", # Placeholder name
+        "agents": {
+            # The _execution_form.html iterates flock.agents.keys(), so this structure is needed.
+            # The actual agent instance isn't deeply inspected by that part of the template, just its presence.
+            agent_name: {"name": agent_name, "description": agent_instance.resolved_description or ""}
+        }
+    }
+
+    # Generate theme CSS
+    try:
+        # Assuming generate_theme_css_web is accessible and works correctly
+        # It might rely on get_current_theme_name() from config.py
+        current_theme_name = get_current_theme_name() # From config.py
+        theme_css_vars = generate_theme_css_web(current_theme_name)
+    except Exception as e:
+        logger.error(f"Error generating theme CSS for shared page: {e}", exc_info=True)
+        # Continue without custom theme CSS if generation fails
+
+    return templates.TemplateResponse(
+        "shared_run_page.html",
+        {
+            "request": request,
+            "share_id": share_id,
+            "selected_agent_name": agent_name,
+            "flock": mock_flock_for_template,
+            "error_message": None,
+            "theme_css": theme_css_vars # Pass the generated CSS variables
+        }
+    )
+# --- End Route for Shared Run Page ---
 
 def generate_theme_css_web(theme_name: str | None) -> str:
     if not THEME_LOADER_AVAILABLE or THEMES_DIR is None: return ""

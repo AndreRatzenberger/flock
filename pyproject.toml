@@ -54,6 +54,7 @@ dependencies = [
     "uvicorn>=0.34.0",
     "zep-python>=2.0.2",
     "mem0ai[graph]>=0.1.100",
+    "aiosqlite>=0.21.0",
 ]
 
 [project.optional-dependencies]
