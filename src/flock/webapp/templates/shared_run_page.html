@@ -34,14 +34,7 @@
     <main class="main-content">
         <header>
             <hgroup>
-                <h2>Shared {{ selected_agent_name }}</h2>
-                {% if flock and flock.name %}
-                    <h2>Agent: <code>{{ selected_agent_name }}</code> from Flock: <code>{{ flock.name }}</code></h2>
-                {% elif selected_agent_name %}
-                    <h2>Agent: <code>{{ selected_agent_name }}</code></h2>
-                {% else %}
-                    <h2>Agent Execution</h2>
-                {% endif %}
+                <h2>Run {{ flock.name }} - {{ selected_agent_name }} </h2>
             </hgroup>
         </header>
 
@@ -77,7 +70,7 @@
                                 <h4>Inputs for <code>{{ selected_agent_name }}</code>:</h4>
                                 {% for field in input_fields %}
                                     <label for="agent_input_{{ field.name }}">
-                                        {{ field.name }} ({{ field.type }})
+                                        {{ field.name }} ({{ field.type }})<br>
                                         {% if field.description %}<small>{{ field.description }}</small>{% endif %}
                                     </label>
                                     {% if field.html_type == "checkbox" %}
