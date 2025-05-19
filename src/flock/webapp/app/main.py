@@ -29,6 +29,7 @@ from flock.core.api.run_store import RunStore
 # Import core Flock components and API related modules
 from flock.core.flock import Flock  # For type hinting
 from flock.core.logging.logging import get_logger  # For logging
+from flock.core.util.spliter import parse_schema
 
 # Import UI-specific routers
 from flock.webapp.app.api import (
@@ -191,6 +192,7 @@ class CreateShareLinkResponse(BaseModel):
 
 @app.post("/api/v1/share/link", response_model=CreateShareLinkResponse, tags=["UI Sharing"])
 async def create_share_link(
+    request: Request,
     request_data: CreateShareLinkRequest,
     store: SharedLinkStoreInterface = Depends(get_shared_link_store)
 ):
@@ -201,11 +203,37 @@ async def create_share_link(
     if not agent_name: # Basic validation
         raise HTTPException(status_code=400, detail="Agent name cannot be empty.")
 
-    config = SharedLinkConfig(share_id=share_id, agent_name=agent_name)
+    current_flock_instance: Flock | None = getattr(request.app.state, "flock_instance", None)
+    current_flock_filename: str | None = getattr(request.app.state, "flock_filename", None)
+
+    if not current_flock_instance or not current_flock_filename:
+        logger.error("Cannot create share link: No Flock is currently loaded in the application state.")
+        raise HTTPException(status_code=400, detail="No Flock loaded. Cannot create share link.")
+
+    if agent_name not in current_flock_instance.agents:
+        logger.error(f"Agent '{agent_name}' not found in currently loaded Flock '{current_flock_instance.name}'.")
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found in current Flock.")
+
+    try:
+        flock_file_path = FLOCK_FILES_DIR / current_flock_filename
+        if not flock_file_path.is_file():
+            logger.warning(f"Flock file {current_flock_filename} not found at {flock_file_path} for sharing. Using in-memory definition.")
+            flock_definition_str = current_flock_instance.to_yaml()
+        else:
+            flock_definition_str = flock_file_path.read_text()
+    except Exception as e:
+        logger.error(f"Failed to get flock definition for sharing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not retrieve Flock definition for sharing.")
+
+    config = SharedLinkConfig(
+        share_id=share_id,
+        agent_name=agent_name,
+        flock_definition=flock_definition_str
+    )
     try:
         await store.save_config(config)
-        share_url = f"/ui/shared-run/{share_id}" # Relative URL
-        logger.info(f"Created share link for agent '{agent_name}' with ID '{share_id}'. URL: {share_url}")
+        share_url = f"/ui/shared-run/{share_id}" # Relative URL for client-side navigation
+        logger.info(f"Created share link for agent '{agent_name}' in Flock '{current_flock_instance.name}' with ID '{share_id}'. URL: {share_url}")
         return CreateShareLinkResponse(share_url=share_url)
     except Exception as e:
         logger.error(f"Failed to create share link for agent '{agent_name}': {e}", exc_info=True)
@@ -217,7 +245,7 @@ async def create_share_link(
 @app.post("/ui/htmx/share/generate-link", response_class=HTMLResponse, tags=["UI Sharing HTMX"])
 async def htmx_generate_share_link(
     request: Request,
-    start_agent_name: str | None = Form(None), # Matches hx-include="#start_agent_name_select" which has name="start_agent_name"
+    start_agent_name: str | None = Form(None),
     store: SharedLinkStoreInterface = Depends(get_shared_link_store)
 ):
     if not start_agent_name:
@@ -227,20 +255,53 @@ async def htmx_generate_share_link(
             {"request": request, "error_message": "No agent selected to share."}
         )
 
+    current_flock_instance: Flock | None = getattr(request.app.state, "flock_instance", None)
+    current_flock_filename: str | None = getattr(request.app.state, "flock_filename", None)
+
+    if not current_flock_instance or not current_flock_filename:
+        logger.error("HTMX: Cannot create share link: No Flock is currently loaded.")
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "error_message": "No Flock loaded. Cannot create share link."}
+        )
+
+    if start_agent_name not in current_flock_instance.agents:
+        logger.error(f"HTMX: Agent '{start_agent_name}' not found in Flock '{current_flock_instance.name}'.")
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "error_message": f"Agent '{start_agent_name}' not found in current Flock."}
+        )
+
+    try:
+        flock_file_path = FLOCK_FILES_DIR / current_flock_filename
+        if not flock_file_path.is_file():
+            logger.warning(f"HTMX: Flock file {current_flock_filename} not found at {flock_file_path} for sharing. Using in-memory definition.")
+            flock_definition_str = current_flock_instance.to_yaml()
+        else:
+            flock_definition_str = flock_file_path.read_text()
+    except Exception as e:
+        logger.error(f"HTMX: Failed to get flock definition for sharing: {e}", exc_info=True)
+        return templates.TemplateResponse(
+            "partials/_share_link_snippet.html",
+            {"request": request, "error_message": "Could not retrieve Flock definition for sharing."}
+        )
+
     share_id = uuid.uuid4().hex
-    config = SharedLinkConfig(share_id=share_id, agent_name=start_agent_name)
+    config = SharedLinkConfig(
+        share_id=share_id,
+        agent_name=start_agent_name,
+        flock_definition=flock_definition_str
+    )
 
     try:
         await store.save_config(config)
-        # Construct full URL for display. The share_url in DB is relative.
-        # Scheme and host can be taken from the request object.
         base_url = str(request.base_url)
         full_share_url = f"{base_url.rstrip('/')}/ui/shared-run/{share_id}"
 
-        logger.info(f"HTMX: Generated share link for agent '{start_agent_name}' with ID '{share_id}'. URL: {full_share_url}")
+        logger.info(f"HTMX: Generated share link for agent '{start_agent_name}' in Flock '{current_flock_instance.name}' with ID '{share_id}'. URL: {full_share_url}")
         return templates.TemplateResponse(
             "partials/_share_link_snippet.html",
-            {"request": request, "share_url": full_share_url}
+            {"request": request, "share_url": full_share_url, "flock_name": current_flock_instance.name, "agent_name": start_agent_name}
         )
     except Exception as e:
         logger.error(f"HTMX: Failed to create share link for agent '{start_agent_name}': {e}", exc_info=True)
@@ -258,74 +319,80 @@ async def page_shared_run(
     store: SharedLinkStoreInterface = Depends(get_shared_link_store),
 ):
     logger.info(f"Accessed shared run page with share_id: {share_id}")
-
     shared_config = await store.get_config(share_id)
 
     if not shared_config:
-        logger.warning(f"Share ID not found: {share_id}")
-        # Assuming error_page.html exists or using HTTPException
+        logger.warning(f"Share ID {share_id} not found.")
         return templates.TemplateResponse(
             "error_page.html",
-            {"request": request, "error_title": "Link Not Found", "error_message": "The shared link you are trying to access does not exist or may have expired."},
+            {"request": request, "error_title": "Link Not Found", "error_message": "The shared link does not exist or may have expired."},
             status_code=404
         )
 
-    agent_name = shared_config.agent_name
-    error_for_template = None
-    theme_css_vars = "" # For theme styling
+    agent_name_from_link = shared_config.agent_name
+    flock_definition_str = shared_config.flock_definition
+    context: dict[str, Any] = {"request": request, "is_shared_run_page": True, "share_id": share_id}
 
-    # Check if the agent actually exists in the registry before trying to render
-    from flock.core.flock_registry import get_registry
-    registry = get_registry()
-    agent_instance = registry.get_agent(agent_name)
-
-    if not agent_instance:
-        error_for_template = f"Agent '{agent_name}' (from shared link) not found in the Flock registry. It may have been removed or renamed."
-        logger.warning(error_for_template)
-        # Render the shared page with an error message within its own layout
-        return templates.TemplateResponse(
-            "shared_run_page.html",
-            {
-                "request": request,
-                "share_id": share_id,
-                "selected_agent_name": agent_name, # Pass agent_name even if not found, for display
-                "flock": None, # No flock data if agent is missing
-                "error_message": error_for_template
-            },
-            status_code=404
-        )
-
-    # Create a mock/minimal flock structure for the template, as it expects flock.agents
-    mock_flock_for_template = {
-        "name": "Shared Agent", # Placeholder name
-        "agents": {
-            # The _execution_form.html iterates flock.agents.keys(), so this structure is needed.
-            # The actual agent instance isn't deeply inspected by that part of the template, just its presence.
-            agent_name: {"name": agent_name, "description": agent_instance.resolved_description or ""}
-        }
-    }
-
-    # Generate theme CSS
     try:
-        # Assuming generate_theme_css_web is accessible and works correctly
-        # It might rely on get_current_theme_name() from config.py
-        current_theme_name = get_current_theme_name() # From config.py
-        theme_css_vars = generate_theme_css_web(current_theme_name)
-    except Exception as e:
-        logger.error(f"Error generating theme CSS for shared page: {e}", exc_info=True)
-        # Continue without custom theme CSS if generation fails
+        from flock.core.flock import Flock as ConcreteFlock
+        loaded_flock = ConcreteFlock.from_yaml(flock_definition_str)
 
-    return templates.TemplateResponse(
-        "shared_run_page.html",
-        {
-            "request": request,
-            "share_id": share_id,
-            "selected_agent_name": agent_name,
-            "flock": mock_flock_for_template,
-            "error_message": None,
-            "theme_css": theme_css_vars # Pass the generated CSS variables
-        }
-    )
+        # Store the loaded_flock instance in app.state for later retrieval
+        if not hasattr(request.app.state, 'shared_flocks'):
+            request.app.state.shared_flocks = {}
+        request.app.state.shared_flocks[share_id] = loaded_flock
+        logger.info(f"Shared Run Page: Stored Flock instance for share_id {share_id} in app.state.")
+
+        context["flock"] = loaded_flock
+        context["selected_agent_name"] = agent_name_from_link # For pre-selection & hidden field
+        # flock_definition_str is no longer needed in the template for a hidden field if we reuse the instance
+        # context["flock_definition_str"] = flock_definition_str
+        logger.info(f"Shared Run Page: Loaded Flock '{loaded_flock.name}' for agent '{agent_name_from_link}'.")
+
+        if agent_name_from_link not in loaded_flock.agents:
+            context["error_message"] = f"Agent '{agent_name_from_link}' not found in the shared Flock definition."
+            logger.warning(context["error_message"])
+        else:
+            agent = loaded_flock.agents[agent_name_from_link]
+            input_fields = []
+            if agent.input and isinstance(agent.input, str):
+                try:
+                    parsed_spec = parse_schema(agent.input) # parse_schema is imported at top of main.py
+                    for name, type_str, description in parsed_spec:
+                        field_info = {"name": name, "type": type_str.lower(), "description": description or ""}
+                        if "bool" in field_info["type"]: field_info["html_type"] = "checkbox"
+                        elif "int" in field_info["type"] or "float" in field_info["type"]: field_info["html_type"] = "number"
+                        elif "list" in field_info["type"] or "dict" in field_info["type"]:
+                            field_info["html_type"] = "textarea"; field_info["placeholder"] = f"Enter JSON for {field_info['type']}"
+                        else: field_info["html_type"] = "text"
+                        input_fields.append(field_info)
+                    context["input_fields"] = input_fields
+                except Exception as e_parse:
+                    logger.error(f"Shared Run Page: Error parsing input for '{agent_name_from_link}': {e_parse}", exc_info=True)
+                    context["error_message"] = f"Could not parse inputs for agent '{agent_name_from_link}'."
+            else:
+                context["input_fields"] = [] # Agent has no inputs defined
+
+    except Exception as e_load:
+        logger.error(f"Shared Run Page: Failed to load Flock from definition for share_id {share_id}: {e_load}", exc_info=True)
+        context["error_message"] = f"Fatal: Could not load the shared Flock configuration: {e_load!s}"
+        context["flock"] = None
+        context["selected_agent_name"] = agent_name_from_link # Still pass for potential error display
+        context["input_fields"] = []
+        # context["flock_definition_str"] = flock_definition_str # Not needed if not sent to template
+
+    try:
+        current_theme_name = get_current_theme_name()
+        context["theme_css"] = generate_theme_css_web(current_theme_name)
+        context["active_theme_name"] = current_theme_name or DEFAULT_THEME_NAME
+    except Exception as e_theme:
+        logger.error(f"Shared Run Page: Error generating theme: {e_theme}", exc_info=True)
+        context["theme_css"] = ""
+        context["active_theme_name"] = DEFAULT_THEME_NAME
+
+    # The shared_run_page.html will now be a simple wrapper that includes _execution_form.html
+    return templates.TemplateResponse("shared_run_page.html", context)
+
 # --- End Route for Shared Run Page ---
 
 def generate_theme_css_web(theme_name: str | None) -> str:

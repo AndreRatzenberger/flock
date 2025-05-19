@@ -1,6 +1,6 @@
 import logging
+import sqlite3
 from abc import ABC, abstractmethod
-from datetime import datetime
 from pathlib import Path
 
 import aiosqlite
@@ -14,32 +14,24 @@ class SharedLinkStoreInterface(ABC):
     """Interface for storing and retrieving shared link configurations."""
 
     @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the store (e.g., create tables)."""
+        pass
+
+    @abstractmethod
     async def save_config(self, config: SharedLinkConfig) -> SharedLinkConfig:
-        """Saves a shared link configuration.
-
-        Args:
-            config: The SharedLinkConfig object to save.
-
-        Returns:
-            The saved SharedLinkConfig object (could be updated, e.g., with DB ID).
-        """
+        """Saves a shared link configuration."""
         pass
 
     @abstractmethod
     async def get_config(self, share_id: str) -> SharedLinkConfig | None:
-        """Retrieves a shared link configuration by its ID.
-
-        Args:
-            share_id: The unique ID of the shared link.
-
-        Returns:
-            The SharedLinkConfig object if found, otherwise None.
-        """
+        """Retrieves a shared link configuration by its ID."""
         pass
 
-    async def initialize(self):
-        """Initializes the store (e.g., creates database tables if they don't exist)."""
-        pass # Default implementation does nothing, can be overridden
+    @abstractmethod
+    async def delete_config(self, share_id: str) -> bool:
+        """Deletes a shared link configuration by its ID. Returns True if deleted, False otherwise."""
+        pass
 
 class SQLiteSharedLinkStore(SharedLinkStoreInterface):
     """SQLite implementation for storing and retrieving shared link configurations."""
@@ -47,9 +39,10 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
     def __init__(self, db_path: str):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+        logger.info(f"SQLiteSharedLinkStore initialized with db_path: {self.db_path}")
 
-    async def initialize(self):
-        """Initializes the database and creates the table if it doesn\'t exist."""
+    async def initialize(self) -> None:
+        """Initializes the database and creates the table if it doesn't exist."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute(
@@ -57,14 +50,15 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
                     CREATE TABLE IF NOT EXISTS shared_links (
                         share_id TEXT PRIMARY KEY,
                         agent_name TEXT NOT NULL,
+                        flock_definition TEXT NOT NULL,
                         created_at TEXT NOT NULL
                     )
                     """
                 )
                 await db.commit()
-            logger.info(f"SQLite database initialized at {self.db_path}")
-        except Exception as e:
-            logger.error(f"Failed to initialize SQLite database at {self.db_path}: {e}")
+            logger.info(f"Database initialized and shared_links table ensured at {self.db_path}")
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error during initialization: {e}", exc_info=True)
             raise
 
     async def save_config(self, config: SharedLinkConfig) -> SharedLinkConfig:
@@ -72,36 +66,56 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute(
-                    "INSERT INTO shared_links (share_id, agent_name, created_at) VALUES (?, ?, ?)",
-                    (config.share_id, config.agent_name, config.created_at.isoformat()),
+                    "INSERT INTO shared_links (share_id, agent_name, created_at, flock_definition) VALUES (?, ?, ?, ?)",
+                    (
+                        config.share_id,
+                        config.agent_name,
+                        config.created_at.isoformat(),
+                        config.flock_definition,
+                    ),
                 )
                 await db.commit()
-            logger.info(f"Saved shared link config with ID: {config.share_id}")
+            logger.info(f"Saved shared link config for ID: {config.share_id}")
             return config
-        except aiosqlite.IntegrityError as e:
-            logger.error(f"Integrity error saving config {config.share_id}: {e} - Share ID likely already exists.")
-            # Depending on desired behavior, you might re-raise, or return None, or handle specific cases
-            raise # Re-raising for now
-        except Exception as e:
-            logger.error(f"Failed to save shared link config {config.share_id}: {e}")
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error saving config for ID {config.share_id}: {e}", exc_info=True)
             raise
 
     async def get_config(self, share_id: str) -> SharedLinkConfig | None:
-        """Retrieves a shared link configuration by its ID from the SQLite database."""
+        """Retrieves a shared link configuration from SQLite by its ID."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 async with db.execute(
-                    "SELECT share_id, agent_name, created_at FROM shared_links WHERE share_id = ?",
-                    (share_id,),
+                    "SELECT share_id, agent_name, created_at, flock_definition FROM shared_links WHERE share_id = ?",
+                    (share_id,)
                 ) as cursor:
                     row = await cursor.fetchone()
-                    if row:
-                        return SharedLinkConfig(
-                            share_id=row[0],
-                            agent_name=row[1],
-                            created_at=datetime.fromisoformat(row[2]),
-                        )
+            if row:
+                logger.debug(f"Retrieved shared link config for ID: {share_id}")
+                return SharedLinkConfig(
+                    share_id=row[0],
+                    agent_name=row[1],
+                    created_at=row[2], # SQLite stores as TEXT, Pydantic will parse from ISO format
+                    flock_definition=row[3],
+                )
+            logger.debug(f"No shared link config found for ID: {share_id}")
             return None
-        except Exception as e:
-            logger.error(f"Failed to retrieve shared link config {share_id}: {e}")
-            raise # Or return None, depending on how errors should propagate
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error retrieving config for ID {share_id}: {e}", exc_info=True)
+            return None # Or raise, depending on desired error handling
+
+    async def delete_config(self, share_id: str) -> bool:
+        """Deletes a shared link configuration from SQLite by its ID."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                result = await db.execute("DELETE FROM shared_links WHERE share_id = ?", (share_id,))
+                await db.commit()
+                deleted_count = result.rowcount
+            if deleted_count > 0:
+                logger.info(f"Deleted shared link config for ID: {share_id}")
+                return True
+            logger.info(f"Attempted to delete non-existent shared link config for ID: {share_id}")
+            return False
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error deleting config for ID {share_id}: {e}", exc_info=True)
+            return False # Or raise

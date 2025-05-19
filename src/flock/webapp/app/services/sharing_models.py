@@ -8,6 +8,7 @@ class SharedLinkConfig(BaseModel):
 
     share_id: str = Field(..., description="Unique identifier for the shared link.")
     agent_name: str = Field(..., description="The name of the agent being shared.")
+    flock_definition: str = Field(..., description="The YAML/JSON string definition of the Flock the agent belongs to.")
     created_at: datetime = Field(
         default_factory=datetime.utcnow, description="Timestamp of when the link was created."
     )
@@ -16,9 +17,16 @@ class SharedLinkConfig(BaseModel):
     #     None, description="Optional pre-filled input values for the agent."
     # )
 
-    class Config:
-        # For Pydantic V2, use model_config instead of Config class if appropriate
-        # For Pydantic V1 style
-        # orm_mode = True # If you were to load this from an ORM
-        # For Pydantic V2 style (if you update Pydantic later)
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "share_id": "abcdef123456",
+                    "agent_name": "MyChatAgent",
+                    "flock_definition": "name: MySharedFlock\nagents:\n  MyChatAgent:\n    input: 'message: str'\n    output: 'response: str'\n    # ... rest of flock YAML ...",
+                    "created_at": "2023-10-26T10:00:00Z",
+                }
+            ]
+        }
+    }
