@@ -53,6 +53,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "uvicorn>=0.34.0",
     "zep-python>=2.0.2",
+    "mem0ai[graph]>=0.1.100",
 ]
 
 [project.optional-dependencies]
