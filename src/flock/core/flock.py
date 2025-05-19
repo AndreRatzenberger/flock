@@ -4,6 +4,7 @@
 from __future__ import annotations  # Ensure forward references work
 
 import asyncio
+import concurrent.futures  # Added import
 import os
 import uuid
 from collections.abc import Callable, Sequence
@@ -115,6 +116,19 @@ class Flock(BaseModel, Serializable):
         default=True,
         description="If True (default) and enable_temporal=True, start a temporary in-process worker for development/testing convenience. Set to False when using dedicated workers.",
     )
+
+    benchmark_agent_name: str | None = Field(
+        default=None,
+        description="The name of the agent to use for the benchmark.",
+    )
+    benchmark_eval_field: str | None = Field(
+        default=None,
+        description="The output field to use for the benchmark.",
+    )
+    benchmark_input_field: str | None = Field(
+        default=None,
+        description="The input field to use for the benchmark.",
+    )
     # Internal agent storage - not part of the Pydantic model for direct serialization
     # Marked with underscore to indicate it's managed internally and accessed via property
     _agents: dict[str, FlockAgent]
@@ -190,12 +204,54 @@ class Flock(BaseModel, Serializable):
         # Ensure session ID exists in baggage
         self._ensure_session_id()
 
+        FlockRegistry.discover_and_register_components()
+
         logger.info(
             "Flock instance initialized",
             name=self.name,
             model=self.model,
             enable_temporal=self.enable_temporal,
         )
+
+    def prepare_benchmark(self, agent: FlockAgent | str | None = None, input_field: str | None = None, eval_field: str | None = None):
+        """Prepare a benchmark for the Flock instance."""
+        from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
+
+        logger.info(f"Preparing benchmark for Flock instance '{self.name}' with agent '{agent}'.")
+
+        name = agent.name if isinstance(agent, ConcreteFlockAgent) else agent
+
+        if self._agents.get(name) is None:
+            raise ValueError(f"Agent '{name}' not found in Flock instance '{self.name}'.")
+
+        self.benchmark_agent_name = name
+        self.benchmark_eval_field = eval_field
+        self.benchmark_input_field = input_field
+
+
+
+    def inspect(self):
+        """Inspect the Flock instance."""
+        logger.info(f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'.")
+
+        async def run(input: dict[str, Any])-> dict[str, Any]:
+            """Inspect the Flock instance."""
+            logger.info(f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'.")
+            msg_content = input.get("messages")[0].get("content")
+
+            agent_input = {
+                self.benchmark_input_field: msg_content
+            }
+
+            result = await self.run_async(start_agent=self.benchmark_agent_name, input=agent_input, box_result=False)
+
+            agent_output = result.get(self.benchmark_eval_field, "No answer found")
+
+            return {
+                "output": agent_output,
+            }
+
+        return run
 
     def _configure_logging(self, enable_logging_config: bool | list[str]):
         """Configure logging levels based on the enable_logging flag."""
@@ -302,45 +358,37 @@ class Flock(BaseModel, Serializable):
         agents: list[FlockAgent] | None = None,
     ) -> Box | dict:
         """Entry point for running an agent system synchronously."""
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-        except RuntimeError:  # No running loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # Prepare the coroutine that needs to be run
+        coro = self.run_async(
+            start_agent=start_agent,
+            input=input,
+            context=context,
+            run_id=run_id,
+            box_result=box_result,  # run_async handles boxing
+            agents=agents,
+        )
 
-        # Ensure the loop runs the task and handles closure if we created it
-        if asyncio.get_event_loop() is loop and not loop.is_running():
-            result = loop.run_until_complete(
-                self.run_async(
-                    start_agent=start_agent,
-                    input=input,
-                    context=context,
-                    run_id=run_id,
-                    box_result=box_result,
-                    agents=agents,
-                )
-            )
-            return result
+        try:
+            # Check if an event loop is already running in the current thread
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop is running in the current thread.
+            # We can safely use asyncio.run() to create a new loop,
+            # run the coroutine, and close the loop.
+            return asyncio.run(coro)
         else:
-            # If called from an already running loop (e.g. Jupyter, FastAPI endpoint)
-            # Create a future and run it to completion. This is tricky and
-            # ideally, one should use `await self.run_async` directly in async contexts.
-            # This simple run_until_complete on a future might block the existing loop.
-            # For truly non-blocking execution in an existing loop, one might need
-            # to schedule the coroutine differently or advise users to use `await`.
-            future = asyncio.ensure_future(
-                self.run_async(
-                    start_agent=start_agent,
-                    input=input,
-                    context=context,
-                    run_id=run_id,
-                    box_result=box_result,
-                    agents=agents,
-                )
+            # An event loop is already running in the current thread.
+            # Calling loop.run_until_complete() or asyncio.run() here would raise an error.
+            # To run the async code and wait for its result synchronously,
+            # we execute it in a separate thread with its own event loop.
+            logger.debug(
+                "Flock.run called in a context with an existing event loop. "
+                "Running async task in a separate thread to avoid event loop conflict."
             )
-            return loop.run_until_complete(future)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                # Block and wait for the result from the other thread
+                return future.result()
 
 
     async def run_async(
@@ -555,14 +603,6 @@ class Flock(BaseModel, Serializable):
         delimiter: str = ",",
     ) -> list[Box | dict | None | Exception]:
         """Synchronous wrapper for run_batch_async."""
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-        except RuntimeError:  # No running loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
         coro = self.run_batch_async(
             start_agent=start_agent,
             batch_inputs=batch_inputs,
@@ -579,12 +619,18 @@ class Flock(BaseModel, Serializable):
             delimiter=delimiter,
         )
 
-        if asyncio.get_event_loop() is loop and not loop.is_running():
-            results = loop.run_until_complete(coro)
-            return results
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
         else:
-            future = asyncio.ensure_future(coro)
-            return loop.run_until_complete(future)
+            logger.debug(
+                "Flock.run_batch called in a context with an existing event loop. "
+                "Running async task in a separate thread."
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
 
     # --- Evaluation (Delegation) ---
     async def evaluate_async(
@@ -659,14 +705,6 @@ class Flock(BaseModel, Serializable):
         metadata_columns: list[str] | None = None,
     ) -> DataFrame | list[dict[str, Any]]: # type: ignore
         """Synchronous wrapper for evaluate_async."""
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_closed():
-                raise RuntimeError("Event loop is closed")
-        except RuntimeError:  # No running loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
         coro = self.evaluate_async(
             dataset=dataset,
             start_agent=start_agent,
@@ -685,12 +723,18 @@ class Flock(BaseModel, Serializable):
             metadata_columns=metadata_columns,
         )
 
-        if asyncio.get_event_loop() is loop and not loop.is_running():
-            results = loop.run_until_complete(coro)
-            return results
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
         else:
-            future = asyncio.ensure_future(coro)
-            return loop.run_until_complete(future)
+            logger.debug(
+                "Flock.evaluate called in a context with an existing event loop. "
+                "Running async task in a separate thread."
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
 
     # --- Server & CLI Starters (Delegation) ---
     def start_api(

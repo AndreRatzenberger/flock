@@ -149,18 +149,70 @@ app.include_router(registry_viewer.router, prefix="/ui/api/registry", tags=["UI 
 
 def generate_theme_css_web(theme_name: str | None) -> str:
     if not THEME_LOADER_AVAILABLE or THEMES_DIR is None: return ""
-    active_theme_name = theme_name or get_current_theme_name() or DEFAULT_THEME_NAME
-    theme_filename = f"{active_theme_name}.toml"
-    theme_path = THEMES_DIR / theme_filename
-    if not theme_path.exists():
-        logger.warning(f"Theme file not found: {theme_path}. Using default: {DEFAULT_THEME_NAME}.toml")
-        theme_path = THEMES_DIR / f"{DEFAULT_THEME_NAME}.toml"
-        active_theme_name = DEFAULT_THEME_NAME
+
+    chosen_theme_name_input = theme_name or get_current_theme_name() or DEFAULT_THEME_NAME
+
+    # Sanitize the input to get only the filename component
+    sanitized_name_part = Path(chosen_theme_name_input).name
+    # Ensure we have a stem
+    theme_stem_candidate = sanitized_name_part
+    if theme_stem_candidate.endswith(".toml"):
+        theme_stem_candidate = theme_stem_candidate[:-5]
+
+    effective_theme_filename = f"{theme_stem_candidate}.toml"
+    _theme_to_load_stem = theme_stem_candidate # This will be the name of the theme we attempt to load
+
+    try:
+        resolved_themes_dir = THEMES_DIR.resolve(strict=True) # Ensure THEMES_DIR itself is valid
+        prospective_theme_path = resolved_themes_dir / effective_theme_filename
+
+        # Resolve the prospective path
+        resolved_theme_path = prospective_theme_path.resolve()
+
+        # Validate:
+        # 1. Path is still within the resolved THEMES_DIR
+        # 2. The final filename component of the resolved path matches the intended filename
+        #    (guards against symlinks or normalization changing the name unexpectedly)
+        # 3. The file exists
+        if (
+            str(resolved_theme_path).startswith(str(resolved_themes_dir)) and
+            resolved_theme_path.name == effective_theme_filename and
+            resolved_theme_path.is_file() # is_file checks existence too
+        ):
+            theme_path = resolved_theme_path
+        else:
+            logger.warning(
+                f"Validation failed or theme '{effective_theme_filename}' not found in '{resolved_themes_dir}'. "
+                f"Attempted path: '{prospective_theme_path}'. Resolved to: '{resolved_theme_path}'. "
+                f"Falling back to default theme: {DEFAULT_THEME_NAME}.toml"
+            )
+            _theme_to_load_stem = DEFAULT_THEME_NAME
+            theme_path = resolved_themes_dir / f"{DEFAULT_THEME_NAME}.toml"
+            if not theme_path.is_file():
+                logger.error(f"Default theme file '{theme_path}' not found. No theme CSS will be generated.")
+                return ""
+    except FileNotFoundError: # THEMES_DIR does not exist
+        logger.error(f"Themes directory '{THEMES_DIR}' not found. Falling back to default theme.")
+        _theme_to_load_stem = DEFAULT_THEME_NAME
+        # Attempt to use a conceptual default path if THEMES_DIR was bogus, though it's unlikely to succeed
+        theme_path = Path(f"{DEFAULT_THEME_NAME}.toml") # This won't be in THEMES_DIR if THEMES_DIR is bad
+        if not theme_path.exists(): # Check existence without assuming a base directory
+             logger.error(f"Default theme file '{DEFAULT_THEME_NAME}.toml' not found at root or THEMES_DIR is inaccessible. No theme CSS.")
+             return ""
+    except Exception as e:
+        logger.error(f"Error during theme path resolution for '{effective_theme_filename}': {e}. Falling back to default.")
+        _theme_to_load_stem = DEFAULT_THEME_NAME
+        theme_path = THEMES_DIR / f"{DEFAULT_THEME_NAME}.toml" if THEMES_DIR else Path(f"{DEFAULT_THEME_NAME}.toml")
         if not theme_path.exists():
-            logger.warning(f"Default theme file not found: {theme_path}. No theme CSS.")
+            logger.error(f"Default theme file '{theme_path}' not found after error. No theme CSS.")
             return ""
-    try: theme_dict = load_theme_from_file(str(theme_path))
-    except Exception as e: logger.error(f"Error loading theme {theme_path}: {e}"); return ""
+
+    try:
+        theme_dict = load_theme_from_file(str(theme_path))
+        logger.debug(f"Successfully loaded theme '{_theme_to_load_stem}' from '{theme_path}'")
+    except Exception as e:
+        logger.error(f"Error loading theme file '{theme_path}' (intended: '{_theme_to_load_stem}.toml'): {e}")
+        return ""
 
     pico_vars = alacritty_to_pico(theme_dict)
     if not pico_vars: return ""
@@ -429,16 +481,57 @@ async def htmx_env_add(request: Request, var_name: str = Form(...), var_value: s
 
 @app.get("/ui/htmx/theme-preview", response_class=HTMLResponse, tags=["UI HTMX Partials"])
 async def htmx_theme_preview(request: Request, theme: str = Query(None)):
-    theme_name = theme or get_current_theme_name() or DEFAULT_THEME_NAME
+    if not THEME_LOADER_AVAILABLE:
+        return HTMLResponse("<p>Theme loading functionality is not available.</p>", status_code=500)
+    if THEMES_DIR is None or not THEMES_DIR.exists():
+        return HTMLResponse("<p>Themes directory is not configured or does not exist.</p>", status_code=500)
+
+    chosen_theme_name_input = theme or get_current_theme_name() or DEFAULT_THEME_NAME
+
+    # Sanitize the input to get only the filename component
+    sanitized_name_part = Path(chosen_theme_name_input).name
+    # Ensure we have a stem
+    theme_stem_from_input = sanitized_name_part
+    if theme_stem_from_input.endswith(".toml"):
+        theme_stem_from_input = theme_stem_from_input[:-5]
+
+    theme_filename_to_load = f"{theme_stem_from_input}.toml"
+    theme_name_for_display = theme_stem_from_input # Use the sanitized stem for display/logging
+
     try:
-        theme_path = THEMES_DIR / f"{theme_name}.toml" if THEMES_DIR else None
-        if not (theme_path and theme_path.exists()): return HTMLResponse("<p>Theme not found.</p>")
+        resolved_themes_dir = THEMES_DIR.resolve(strict=True)
+        theme_path_candidate = resolved_themes_dir / theme_filename_to_load
+        resolved_theme_path = theme_path_candidate.resolve()
+
+        if not str(resolved_theme_path).startswith(str(resolved_themes_dir)) or \
+           resolved_theme_path.name != theme_filename_to_load:
+            logger.warning(f"Invalid theme path access attempt for '{theme_name_for_display}'. "
+                           f"Original input: '{chosen_theme_name_input}', Sanitized filename: '{theme_filename_to_load}', "
+                           f"Attempted path: '{theme_path_candidate}', Resolved to: '{resolved_theme_path}'")
+            return HTMLResponse(f"<p>Invalid theme name or path for '{theme_name_for_display}'.</p>", status_code=400)
+
+        if not resolved_theme_path.is_file():
+            logger.info(f"Theme preview: Theme file '{theme_filename_to_load}' not found at '{resolved_theme_path}'.")
+            return HTMLResponse(f"<p>Theme '{theme_name_for_display}' not found.</p>", status_code=404)
+
+        theme_path = resolved_theme_path
         theme_data = load_theme_from_file(str(theme_path))
-    except Exception as e: return HTMLResponse(f"<p>Error loading theme: {e}</p>")
+        logger.debug(f"Successfully loaded theme '{theme_name_for_display}' for preview from '{theme_path}'")
+
+    except FileNotFoundError: # For THEMES_DIR.resolve(strict=True)
+        logger.error(f"Themes directory '{THEMES_DIR}' not found during preview for '{theme_name_for_display}'.")
+        return HTMLResponse("<p>Themes directory not found.</p>", status_code=500)
+    except Exception as e:
+        logger.error(f"Error loading theme '{theme_name_for_display}' for preview (path: '{theme_path_candidate if 'theme_path_candidate' in locals() else 'unknown'}'): {e}")
+        return HTMLResponse(f"<p>Error loading theme '{theme_name_for_display}': {e}</p>", status_code=500)
+
     css_vars = alacritty_to_pico(theme_data)
-    css_vars_str = ":root {\n" + "\n".join([f"  {k}: {v};" for k, v in css_vars.items()]) + "\n}"
+    if not css_vars:
+        return HTMLResponse(f"<p>Could not convert theme '{theme_name_for_display}' to CSS variables.</p>")
+
+    css_vars_str = ":root {\n" + "\\n".join([f"  {k}: {v};" for k, v in css_vars.items()]) + "\\n}"
     main_colors = [("Background", css_vars.get("--pico-background-color")), ("Text", css_vars.get("--pico-color")), ("Primary", css_vars.get("--pico-primary")), ("Secondary", css_vars.get("--pico-secondary")), ("Muted", css_vars.get("--pico-muted-color"))]
-    return templates.TemplateResponse("partials/_theme_preview.html", {"request": request, "theme_name": theme_name, "css_vars_str": css_vars_str, "main_colors": main_colors})
+    return templates.TemplateResponse("partials/_theme_preview.html", {"request": request, "theme_name": theme_name_for_display, "css_vars_str": css_vars_str, "main_colors": main_colors})
 
 @app.post("/ui/apply-theme", tags=["UI Actions"])
 async def apply_theme(request: Request, theme: str = Form(...)):

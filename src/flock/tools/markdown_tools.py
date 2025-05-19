@@ -5,7 +5,7 @@ from flock.core.logging.trace_and_logged import traced_and_logged
 
 
 @traced_and_logged
-def split_markdown_by_headers(
+def markdown_split_by_headers(
     markdown_text: str, min_header_level: int = 1, max_header_level: int = 2
 ) -> list[dict[str, Any]]:
     if not markdown_text:
@@ -58,7 +58,7 @@ def split_markdown_by_headers(
 
 
 @traced_and_logged
-def extract_code_blocks(
+def markdown_extract_code_blocks(
     markdown_text: str, language: str = None
 ) -> list[dict[str, str]]:
     if not markdown_text:
@@ -92,7 +92,7 @@ def extract_code_blocks(
 
 
 @traced_and_logged
-def extract_links(markdown_text: str) -> list[dict[str, str]]:
+def markdown_extract_links(markdown_text: str) -> list[dict[str, str]]:
     if not markdown_text:
         return []
 
@@ -104,7 +104,7 @@ def extract_links(markdown_text: str) -> list[dict[str, str]]:
 
 
 @traced_and_logged
-def extract_tables(markdown_text: str) -> list[dict[str, Any]]:
+def markdown_extract_tables(markdown_text: str) -> list[dict[str, Any]]:
     if not markdown_text:
         return []
 
@@ -193,3 +193,13 @@ def markdown_to_plain_text(markdown_text: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip()
+
+
+
+@traced_and_logged
+def extract_links_from_markdown(markdown: str, url: str) -> list:
+    # Regular expression to find all markdown links
+    link_pattern = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+    links = link_pattern.findall(markdown)
+    return [url + link[1] for link in links]
+

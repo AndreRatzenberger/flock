@@ -27,6 +27,7 @@ async def run_agent(context: FlockContext) -> dict:
     # Start a top-level span for the entire run_agent activity.
     with tracer.start_as_current_span("run_agent") as span:
         registry = get_registry()
+
         previous_agent_name = ""
         if isinstance(context, dict):
             context = FlockContext.from_dict(context)
