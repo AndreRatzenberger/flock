@@ -36,20 +36,20 @@
         </div>
 
         <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>
-        <button type="button" 
-                id="shareAgentHtmxBtn" 
-                hx-post="/ui/htmx/share/generate-link" 
-                hx-target="#shareLinkDisplayArea" 
-                hx-swap="innerHTML"
-                hx-indicator="#share-loading-indicator"
-                hx-include="#start_agent_name_select"
-                {% if not flock.agents %}disabled{% endif %} 
-                style="margin-left: 0.5rem;">
-            Share Agent
-        </button>
-        <span id="share-loading-indicator" class="htmx-indicator" style="margin-left: 0.5rem;">
-            <progress indeterminate></progress>
-        </span>
+
+        <div id="share-agent-link-container" style="margin-top: 0.5rem;">
+            <a href="#" 
+               id="shareAgentHtmxLink"
+               hx-post="/ui/htmx/share/generate-link" 
+               hx-target="#shareLinkDisplayArea" 
+               hx-swap="innerHTML"
+               hx-indicator="#share-loading-indicator"
+               hx-include="#start_agent_name_select"
+               style="text-decoration: underline; cursor: pointer; color: var(--pico-primary);">
+                Create shareable link...
+            </a>
+        </div>
+
         <span id="run-loading-indicator" class="htmx-indicator">
             <progress indeterminate></progress> Running...
         </span>
@@ -68,23 +68,8 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const shareAgentHtmxBtn = document.getElementById('shareAgentHtmxBtn');
-        const agentSelect = document.getElementById('start_agent_name_select');
-
-        function toggleShareButton() {
-            if (agentSelect && shareAgentHtmxBtn) {
-                if (agentSelect.value) {
-                    shareAgentHtmxBtn.disabled = false;
-                } else {
-                    shareAgentHtmxBtn.disabled = true;
-                }
-            }
-        }
-
-        if (agentSelect) {
-            agentSelect.addEventListener('change', toggleShareButton);
-            // Initial state
-            toggleShareButton(); 
-        }
+        // All previous JavaScript for toggling share link visibility is removed.
+        // If there are other unrelated JavaScript functions in this script block,
+        // they would remain.
     });
 </script>
