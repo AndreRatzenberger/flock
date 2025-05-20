@@ -1359,7 +1359,7 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.0b49"
+version = "0.4.0b50"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -1404,6 +1404,7 @@ dependencies = [
     { name = "toml" },
     { name = "tqdm" },
     { name = "uvicorn" },
+    { name = "wd-di" },
 ]
 
 [package.optional-dependencies]
@@ -1510,6 +1511,7 @@ requires-dist = [
     { name = "toml", specifier = ">=0.10.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "uvicorn", specifier = ">=0.34.0" },
+    { name = "wd-di", specifier = ">=0.2.14" },
 ]
 provides-extras = ["basic-tools", "azure-tools", "llm-tools", "all-tools"]
 
@@ -6447,6 +6449,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6c/63/53559446a878410fc5a5974feb13d31d78d752eb18aeba59c7fef1af7598/wcwidth-0.2.13.tar.gz", hash = "sha256:72ea0c06399eb286d978fdedb6923a9eb47e1c486ce63e9b4e64fc18303972b5", size = 101301 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/84/fd2ba7aafacbad3c4201d395674fc6348826569da3c0937e75505ead3528/wcwidth-0.2.13-py2.py3-none-any.whl", hash = "sha256:3da69048e4540d84af32131829ff948f1e022c1c6bdb8d6102117aac784f6859", size = 34166 },
+]
+
+[[package]]
+name = "wd-di"
+version = "0.2.14"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/42/a07cabcdd8e4cdf95bf26a1a125b0d54df9d8c24721b47feca20631c5a45/wd_di-0.2.14.tar.gz", hash = "sha256:9d81b23dadd480df607202b152bbbdb60b9224722d8aeb2e9867d153e16757a3", size = 1016380 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8f/c3/888e7a3d787a56a09e2abce1f867c06f261a51d6ba015758db7ec5a02ba4/wd_di-0.2.14-py3-none-any.whl", hash = "sha256:cfe1ce957d8cb7624f3517029117cae8f81319746652523e82e996ece16f8857", size = 30129 },
 ]
 
 [[package]]
