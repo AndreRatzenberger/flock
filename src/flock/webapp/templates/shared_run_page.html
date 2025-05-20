@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="/static/css/chat.css">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Prism.js CSS for syntax highlighting (okaidia theme) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" referrerpolicy="no-referrer" />
     {# Inline generated theme CSS variables #}
     {% if theme_css %}
     <style>
@@ -112,5 +114,30 @@
             <small>Built with FastAPI, HTMX, Pico.CSS by 🤍 white duck 🦆 - Theme: {{ active_theme_name | default('default') }}</small>
         </footer>
     </main>
+
+    <!-- Prism.js JS (core and autoloader) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js" referrerpolicy="no-referrer"></script>
+    <script>
+        // Add HTMX event listener for Prism highlighting
+        document.addEventListener('htmx:afterSwap', function(event) {
+            const resultsDisplay = document.getElementById('results-display');
+            // Check if the swapped element is the results display or a child of it
+            if (resultsDisplay && (event.detail.target === resultsDisplay || resultsDisplay.contains(event.detail.target))) {
+                if (typeof Prism !== 'undefined') {
+                    // console.log('Prism highlighting triggered for swapped content in results-display.');
+                    Prism.highlightAllUnder(resultsDisplay);
+                }
+            }
+        });
+
+        // Initial highlight on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof Prism !== 'undefined') {
+                // console.log('Prism initial highlighting on shared page.');
+                Prism.highlightAll(); 
+            }
+        });
+    </script>
 </body>
 </html> 

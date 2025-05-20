@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import markdown2  # Added for Markdown to HTML conversion
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -272,7 +272,7 @@ async def chat_settings_form(request: Request):
     return templates.TemplateResponse("partials/_chat_settings_form.html", context)
 
 
-@router.post("/chat/settings", response_class=HTMLResponse, include_in_schema=False)
+@router.post("/chat/settings", include_in_schema=False)
 async def chat_settings_submit(
     request: Request,
     agent_name: str | None = Form(default=None),
@@ -280,19 +280,23 @@ async def chat_settings_submit(
     history_key: str = Form("history"),
     response_key: str = Form("response"),
 ):
-    """Apply submitted chat config, then re-render the form with a success message."""
+    """Handles chat settings submission and triggers a toast notification."""
     cfg = get_chat_config(request)
-    cfg.agent_name = agent_name or None
+    cfg.agent_name = agent_name
     cfg.message_key = message_key
     cfg.history_key = history_key
     cfg.response_key = response_key
 
-    headers = {
-        "HX-Trigger": json.dumps({"notify": {"type": "success", "message": "Chat settings saved"}}),
-        "HX-Redirect": "/chat"
+    logger.info(f"Chat settings updated: Agent: {cfg.agent_name}, MsgKey: {cfg.message_key}, HistKey: {cfg.history_key}, RespKey: {cfg.response_key}")
+
+    toast_event = {
+        "showGlobalToast": {
+            "message": "Chat settings saved successfully!",
+            "type": "success"
+        }
     }
-    # Response body empty; HTMX will redirect
-    return HTMLResponse("", headers=headers)
+    headers = {"HX-Trigger": json.dumps(toast_event)}
+    return Response(status_code=204, headers=headers)
 
 
 # --- Stand-alone Chat HTML page access to settings --------------------------

@@ -38,7 +38,7 @@ THEMES_DIR = FLOCK_BASE_DIR / "themes"
 CURRENT_FLOCK_INSTANCE: "Flock | None" = None
 CURRENT_FLOCK_FILENAME: str | None = None
 
-DEFAULT_THEME_NAME = OutputTheme.everblush.value # Default if random fails or invalid theme specified
+DEFAULT_THEME_NAME = OutputTheme.ciapre.value # Default if random fails or invalid theme specified
 
 def list_available_themes() -> list[str]:
     """Scans the THEMES_DIR for .toml files and returns their names (without .toml)."""

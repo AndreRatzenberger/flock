@@ -10,24 +10,28 @@
     </header>
 
     <div x-show="viewMode === 'json'">
-        {% if result_data is string %}
-            <p class="error" style="white-space: pre-wrap;">{{ result_data }}</p>
-        {% elif result_data %}
-            <pre><code style="word-break: break-all; white-space: pre-wrap;">{{ result_data | tojson(indent=2) }}</code></pre>
+        {# Check for the new result_raw_json variable first #}
+        {% if result_raw_json is defined %}
+            <pre><code class="language-json" style="word-break: break-all; white-space: pre-wrap;">{{ result_raw_json }}</code></pre>
+        {# Fallback for old context or if result was an error string from backend before formatting #}
+        {% elif result is string %}
+            <pre><code class="language-plaintext" style="word-break: break-all; white-space: pre-wrap;">{{ result }}</code></pre>
+        {% elif result %}
+            {# Fallback if result_raw_json is somehow not provided but result (dict) is #}
+            <pre><code class="language-json" style="word-break: break-all; white-space: pre-wrap;">{{ result | tojson(indent=2) }}</code></pre>
         {% else %}
             <p>No results to display yet.</p>
         {% endif %}
     </div>
 
     <div x-show="viewMode === 'structured'">
-        {% if result_data is string %}
-            <p class="error" style="white-space: pre-wrap;">{{ result_data }}</p>
-        {% elif result_data is mapping %}
-            {# Call our new macro for structured display #}
-            {{ render_value(result_data) }}
-        {% elif result_data %}
+        {% if result is string %}
+            <p class="error" style="white-space: pre-wrap;">{{ result }}</p>
+        {% elif result is mapping %}
+            {{ render_value(result) }}
+        {% elif result %}
              <p>Structured view not available for this result type (not a dictionary).</p>
-             <pre><code>{{ result_data | tojson(indent=2) }}</code></pre>
+             <pre><code class="language-json" style="word-break: break-all; white-space: pre-wrap;">{{ result | tojson(indent=2) }}</code></pre>
         {% else %}
             <p>No results to display yet.</p>
         {% endif %}
