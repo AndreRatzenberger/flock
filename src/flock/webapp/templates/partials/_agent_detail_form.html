@@ -14,9 +14,9 @@
     {% endif %}
 
     <form {% if is_new %}
-              hx-post="/api/flock/htmx/agents"
+              hx-post="/ui/api/flock/htmx/agents"
           {% else %}
-              hx-put="/api/flock/htmx/agents/{{ agent.name if agent else '' }}"
+              hx-put="/ui/api/flock/htmx/agents/{{ agent.name if agent else '' }}"
           {% endif %}
           hx-target="#agent-detail-form-content"
           hx-swap="innerHTML"
@@ -77,7 +77,7 @@
             </button>
             {% if not is_new and agent %}
             <button type="button" role="button" class="secondary outline"
-                    hx-delete="/api/flock/htmx/agents/{{ agent.name }}"
+                    hx-delete="/ui/api/flock/htmx/agents/{{ agent.name }}"
                     hx-target="#agent-detail-form-content" 
                     hx-confirm="Are you sure you want to delete agent '{{ agent.name }}'?"
                     hx-indicator="#agent-detail-loading-indicator">

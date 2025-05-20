@@ -31,8 +31,8 @@
     {% elif value is none %}
         <em style="color: var(--pico-code-color);">None</em>
     {% else %}
-        {# Apply pre-wrap for multi-line strings #}
-        <span style="white-space: pre-wrap; word-break: break-word;">{{ value }}</span>
+        {# Apply pre-wrap for multi-line strings and render markdown #}
+        <div class="markdown-content" style="word-break: break-word;">{{ value | markdown | safe }}</div>
     {% endif %}
 {% endmacro %}
 
