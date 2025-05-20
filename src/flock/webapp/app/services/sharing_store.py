@@ -42,9 +42,10 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         logger.info(f"SQLiteSharedLinkStore initialized with db_path: {self.db_path}")
 
     async def initialize(self) -> None:
-        """Initializes the database and creates the table if it doesn't exist."""
+        """Initializes the database and creates/updates the table if it doesn't exist."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
+                # Ensure the table exists with the base schema first
                 await db.execute(
                     """
                     CREATE TABLE IF NOT EXISTS shared_links (
@@ -52,11 +53,31 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
                         agent_name TEXT NOT NULL,
                         flock_definition TEXT NOT NULL,
                         created_at TEXT NOT NULL
+                        /* New columns will be added below if they don't exist */
                     )
                     """
                 )
+
+                # Add new columns individually, ignoring errors if they already exist
+                new_columns = [
+                    ("share_type", "TEXT DEFAULT 'agent_run' NOT NULL"),
+                    ("chat_message_key", "TEXT"),
+                    ("chat_history_key", "TEXT"),
+                    ("chat_response_key", "TEXT")
+                ]
+
+                for column_name, column_type in new_columns:
+                    try:
+                        await db.execute(f"ALTER TABLE shared_links ADD COLUMN {column_name} {column_type}")
+                        logger.info(f"Added column '{column_name}' to shared_links table.")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" in str(e).lower():
+                            logger.debug(f"Column '{column_name}' already exists in shared_links table.")
+                        else:
+                            raise # Re-raise if it's a different operational error
+
                 await db.commit()
-            logger.info(f"Database initialized and shared_links table ensured at {self.db_path}")
+            logger.info(f"Database initialized and shared_links table schema ensured at {self.db_path}")
         except sqlite3.Error as e:
             logger.error(f"SQLite error during initialization: {e}", exc_info=True)
             raise
@@ -66,16 +87,23 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute(
-                    "INSERT INTO shared_links (share_id, agent_name, created_at, flock_definition) VALUES (?, ?, ?, ?)",
+                    """INSERT INTO shared_links (
+                        share_id, agent_name, created_at, flock_definition, 
+                        share_type, chat_message_key, chat_history_key, chat_response_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         config.share_id,
                         config.agent_name,
                         config.created_at.isoformat(),
                         config.flock_definition,
+                        config.share_type,
+                        config.chat_message_key,
+                        config.chat_history_key,
+                        config.chat_response_key,
                     ),
                 )
                 await db.commit()
-            logger.info(f"Saved shared link config for ID: {config.share_id}")
+            logger.info(f"Saved shared link config for ID: {config.share_id} with type: {config.share_type}")
             return config
         except sqlite3.Error as e:
             logger.error(f"SQLite error saving config for ID {config.share_id}: {e}", exc_info=True)
@@ -86,7 +114,10 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 async with db.execute(
-                    "SELECT share_id, agent_name, created_at, flock_definition FROM shared_links WHERE share_id = ?",
+                    """SELECT 
+                        share_id, agent_name, created_at, flock_definition, 
+                        share_type, chat_message_key, chat_history_key, chat_response_key 
+                    FROM shared_links WHERE share_id = ?""",
                     (share_id,)
                 ) as cursor:
                     row = await cursor.fetchone()
@@ -97,6 +128,10 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
                     agent_name=row[1],
                     created_at=row[2], # SQLite stores as TEXT, Pydantic will parse from ISO format
                     flock_definition=row[3],
+                    share_type=row[4],
+                    chat_message_key=row[5],
+                    chat_history_key=row[6],
+                    chat_response_key=row[7],
                 )
             logger.debug(f"No shared link config found for ID: {share_id}")
             return None

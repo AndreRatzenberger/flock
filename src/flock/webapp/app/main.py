@@ -311,6 +311,89 @@ async def htmx_generate_share_link(
         )
 # --- End HTMX Endpoint ---
 
+# --- HTMX Endpoint for Generating SHARED CHAT Link Snippet ---
+@app.post("/ui/htmx/share/chat/generate-link", response_class=HTMLResponse, tags=["UI Sharing HTMX"])
+async def htmx_generate_share_chat_link(
+    request: Request,
+    agent_name: str | None = Form(None), # This is the chat agent
+    message_key: str | None = Form(None), # Changed default to None
+    history_key: str | None = Form(None), # Changed default to None
+    response_key: str | None = Form(None), # Changed default to None
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+):
+    if not agent_name:
+        logger.warning("HTMX generate share chat link: Agent name not provided.")
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html", # Will create this template
+            {"request": request, "error_message": "No agent selected for chat sharing."}
+        )
+
+    current_flock_instance: Flock | None = getattr(request.app.state, "flock_instance", None)
+    current_flock_filename: str | None = getattr(request.app.state, "flock_filename", None)
+
+    if not current_flock_instance or not current_flock_filename:
+        logger.error("HTMX Chat Share: Cannot create share link: No Flock is currently loaded.")
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html",
+            {"request": request, "error_message": "No Flock loaded. Cannot create share link."}
+        )
+
+    if agent_name not in current_flock_instance.agents:
+        logger.error(f"HTMX Chat Share: Agent '{agent_name}' not found in Flock '{current_flock_instance.name}'.")
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html",
+            {"request": request, "error_message": f"Agent '{agent_name}' not found in current Flock."}
+        )
+
+    try:
+        flock_file_path = FLOCK_FILES_DIR / current_flock_filename
+        if not flock_file_path.is_file():
+            logger.warning(f"HTMX Chat Share: Flock file {current_flock_filename} not found at {flock_file_path} for sharing. Using in-memory definition.")
+            flock_definition_str = current_flock_instance.to_yaml()
+        else:
+            flock_definition_str = flock_file_path.read_text()
+    except Exception as e:
+        logger.error(f"HTMX Chat Share: Failed to get flock definition for sharing: {e}", exc_info=True)
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html",
+            {"request": request, "error_message": "Could not retrieve Flock definition for sharing."}
+        )
+
+    share_id = uuid.uuid4().hex
+
+    # Explicitly convert empty strings from form to None for optional keys
+    actual_message_key = message_key if message_key else None
+    actual_history_key = history_key if history_key else None
+    actual_response_key = response_key if response_key else None
+
+    config = SharedLinkConfig(
+        share_id=share_id,
+        agent_name=agent_name, # agent_name from form is the chat agent
+        flock_definition=flock_definition_str,
+        share_type="chat",
+        chat_message_key=actual_message_key,
+        chat_history_key=actual_history_key,
+        chat_response_key=actual_response_key
+    )
+
+    try:
+        await store.save_config(config)
+        base_url = str(request.base_url)
+        # Link to the new /chat/shared/{share_id} endpoint
+        full_share_url = f"{base_url.rstrip('/')}/chat/shared/{share_id}"
+
+        logger.info(f"HTMX: Generated share CHAT link for agent '{agent_name}' in Flock '{current_flock_instance.name}' with ID '{share_id}'. URL: {full_share_url}")
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html", # Will create this template
+            {"request": request, "share_url": full_share_url, "flock_name": current_flock_instance.name, "agent_name": agent_name}
+        )
+    except Exception as e:
+        logger.error(f"HTMX Chat Share: Failed to create share link for agent '{agent_name}': {e}", exc_info=True)
+        return templates.TemplateResponse(
+            "partials/_share_chat_link_snippet.html",
+            {"request": request, "error_message": f"Could not generate chat link: {e!s}"}
+        )
+
 # --- Route for Shared Run Page ---
 @app.get("/ui/shared-run/{share_id}", response_class=HTMLResponse, tags=["UI Sharing"])
 async def page_shared_run(
