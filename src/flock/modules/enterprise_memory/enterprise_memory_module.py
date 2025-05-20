@@ -69,6 +69,15 @@ class EnterpriseMemoryModuleConfig(FlockModuleConfig):
         description="Persist to disk after this many new chunks (0 disables auto-save)",
     )
 
+    export_graph_image: bool = Field(
+        default=False,
+        description="If true, exports a PNG image of the concept graph each time it is updated.",
+    )
+    graph_image_dir: str = Field(
+        default="./concept_graphs",
+        description="Directory where graph images will be stored when export_graph_image is true.",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Storage Abstraction
@@ -84,6 +93,7 @@ class EnterpriseMemoryStore:
         self._driver = None  # Neo4j driver
         self._pending_writes: list[tuple[str, dict[str, Any]]] = []
         self._write_lock = asyncio.Lock()
+        self._concept_cache: set[str] | None = None  # names of known concepts
 
     # ---------------------------------------------------------------------
     # Connections
@@ -211,7 +221,45 @@ class EnterpriseMemoryStore:
                     params[concept_param] = list(extra["concepts"])
             cypher = "\n".join(tx_commands)
             await session.run(cypher, params)
+            # Export graph image if requested
+            if self.cfg.export_graph_image:
+                await self._export_graph_image(session)
         self._pending_writes.clear()
+
+    async def _export_graph_image(self, session):
+        """Generate and save a PNG of the concept graph."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import networkx as nx
+
+            records = await session.run(
+                "MATCH (c1:Concept)<-[:MENTIONS]-(:Memory)-[:MENTIONS]->(c2:Concept) "
+                "RETURN DISTINCT c1.name AS source, c2.name AS target"
+            )
+            edges = [(r["source"], r["target"]) for r in await records.values("source", "target")]
+            if not edges:
+                return
+
+            G = nx.Graph()
+            G.add_edges_from(edges)
+
+            pos = nx.spring_layout(G, k=0.4)
+            plt.figure(figsize=(12, 9), dpi=100)
+            nx.draw_networkx_nodes(G, pos, node_color="#8fa8d6", node_size=500, edgecolors="white")
+            nx.draw_networkx_edges(G, pos, alpha=0.5, width=1.5)
+            nx.draw_networkx_labels(G, pos, font_size=8)
+            plt.axis("off")
+
+            img_dir = Path(self.cfg.graph_image_dir)
+            img_dir.mkdir(parents=True, exist_ok=True)
+            filename = img_dir / f"concept_graph_{uuid.uuid4().hex[:8]}.png"
+            plt.savefig(filename, bbox_inches="tight", facecolor="white")
+            plt.close()
+            logger.info("Concept graph image exported to %s", filename)
+        except Exception as e:
+            logger.warning("Failed to export concept graph image: %s", e)
 
     async def close(self):
         if self._pending_writes:
@@ -280,6 +328,8 @@ class EnterpriseMemoryModule(FlockModule):
         try:
             full_text = json.dumps(inputs) + (json.dumps(result) if result else "")
             concepts = await self._extract_concepts(agent, full_text)
+            if self._store:
+                concepts = await self._store._deduplicate_concepts(concepts)
             await self._store.add_entry(full_text, concepts)
         except Exception as e:
             logger.warning("Enterprise memory store failed: %s", e, agent=agent.name)
@@ -309,3 +359,44 @@ class EnterpriseMemoryModule(FlockModule):
         predictor = agent._select_task(concept_signature, "Completion")
         res = predictor(text=text)
         return set(getattr(res, "concepts", []))
+
+    # --------------------------------------------------------------
+    # Concept helpers
+    # --------------------------------------------------------------
+    async def _ensure_concept_cache(self):
+        if self._concept_cache is not None:
+            return
+        driver = self._ensure_graph_driver()
+        async with driver.session() as session:
+            records = await session.run("MATCH (c:Concept) RETURN c.name AS name")
+            self._concept_cache = {r["name"] for r in await records.values("name")}
+
+    async def _deduplicate_concepts(self, new_concepts: set[str]) -> set[str]:
+        """Return a set of concept names that merges with existing ones to avoid duplicates.
+
+        Strategy: case-insensitive equality first, then fuzzy match via difflib with cutoff 0.85.
+        """
+        await self._ensure_concept_cache()
+        assert self._concept_cache is not None
+
+        from difflib import get_close_matches
+
+        unified: set[str] = set()
+        for concept in new_concepts:
+            # Exact (case-insensitive) match
+            lower = concept.lower()
+            exact = next((c for c in self._concept_cache if c.lower() == lower), None)
+            if exact:
+                unified.add(exact)
+                continue
+
+            # Fuzzy match (>=0.85 similarity)
+            close = get_close_matches(concept, list(self._concept_cache), n=1, cutoff=0.85)
+            if close:
+                unified.add(close[0])
+                continue
+
+            # No match – treat as new
+            unified.add(concept)
+            self._concept_cache.add(concept)
+        return unified
