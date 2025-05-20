@@ -163,7 +163,9 @@ class FlockMCPClientBase(BaseModel, ABC):
                     )
 
                     for attempt in range(1, max_tries + 2):
-                        span.set_attribute("max_tries", max_tries)
+                        span.set_attribute(
+                            "max_tries", max_tries
+                        )  # TODO: shift outside of loop
                         span.set_attribute("base_delay", base_delay)
                         span.set_attribute("attempt", attempt)
                         await client._ensure_connected()
@@ -363,6 +365,7 @@ class FlockMCPClientBase(BaseModel, ABC):
     async def create_transport(
         self,
         params: ServerParameters,
+        additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
             MemoryObjectReceiveStream[JSONRPCMessage | Exception],
@@ -536,7 +539,9 @@ class FlockMCPClientBase(BaseModel, ABC):
         server_params = self.config.connection_config.connection_parameters
 
         # Single Hook
-        transport_ctx = await self.create_transport(server_params)
+        transport_ctx = await self.create_transport(
+            server_params, self.additional_params
+        )
         read, write = await stack.enter_async_context(transport_ctx)
         read_timeout = self.config.connection_config.read_timeout_seconds
 

@@ -58,7 +58,9 @@ class FlockSSEClient(FlockMCPClientBase):
     config: FlockSSEConfig = Field(..., description="Client configuration.")
 
     async def create_transport(
-        self, params: SseServerParameters
+        self,
+        params: SseServerParameters,
+        additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
             MemoryObjectReceiveStream[JSONRPCMessage | Exception],

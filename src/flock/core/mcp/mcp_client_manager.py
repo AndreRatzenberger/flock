@@ -55,6 +55,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
         additional_params: dict[str, Any] | None = None,
     ) -> type[TClient]:
         """Instantiate-but don't connect yet-a fresh client of the concrete subtype."""
+        # default implementation
         pass
 
     async def get_client(

@@ -1,4 +1,4 @@
-"""This module provides the Flock MCP Stdio server functionality."""
+"""This module provides the default implementation for MCP servers using the stdio transport."""
 
 import copy
 from contextlib import AbstractAsyncContextManager
@@ -59,7 +59,9 @@ class FlockStdioClient(FlockMCPClientBase):
     config: FlockStdioConfig = Field(..., description="Client Configuration.")
 
     async def create_transport(
-        self, params: StdioServerParameters
+        self,
+        params: StdioServerParameters,
+        additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
             MemoryObjectReceiveStream[JSONRPCMessage | Exception],
@@ -73,29 +75,27 @@ class FlockStdioClient(FlockMCPClientBase):
         # avoid modifying the config of the client as a side-effect.
         param_copy = copy.deepcopy(params)
 
-        if self.additional_params:
+        if additional_params:
             # If it is present, then modify server parameters based on certain keys.
-            if "command" in self.additional_params:
-                param_copy.command = self.additional_params.get(
+            if "command" in additional_params:
+                param_copy.command = additional_params.get(
                     "command", params.command
                 )
-            if "args" in self.additional_params:
-                param_copy.args = self.additional_params.get(
-                    "args", params.command
-                )
-            if "env" in self.additional_params:
-                param_copy.env = self.additional_params.get("env", params.env)
+            if "args" in additional_params:
+                param_copy.args = additional_params.get("args", params.command)
+            if "env" in additional_params:
+                param_copy.env = additional_params.get("env", params.env)
 
-            if "cwd" in self.additional_params:
-                param_copy.cwd = self.additional_params.get("cwd", params.env)
+            if "cwd" in additional_params:
+                param_copy.cwd = additional_params.get("cwd", params.env)
 
-            if "encoding" in self.additional_params:
-                param_copy.encoding = self.additional_params.get(
+            if "encoding" in additional_params:
+                param_copy.encoding = additional_params.get(
                     "encoding", params.encoding
                 )
 
-            if "encoding_error_handler" in self.additional_params:
-                param_copy.encoding_error_handler = self.additional_params.get(
+            if "encoding_error_handler" in additional_params:
+                param_copy.encoding_error_handler = additional_params.get(
                     "encoding_error_handler", params.encoding_error_handler
                 )
 
@@ -103,6 +103,7 @@ class FlockStdioClient(FlockMCPClientBase):
         return stdio_client(server=param_copy)
 
 
+# Not really needed but kept here as an example.
 class FlockStdioClientManager(FlockMCPClientManager):
     """Manager for handling Stdio Clients."""
 
@@ -112,13 +113,12 @@ class FlockStdioClientManager(FlockMCPClientManager):
 
     async def make_client(
         self, additional_params: dict[str, Any] | None = None
-    ) -> FlockStdioClient:
-        """Create a new client instance."""
+    ):
+        """Create a new client instance with any additional parameters."""
         new_client = FlockStdioClient(
             config=self.client_config,
-            additional_params=additional_params,  # Inject additional parameters to allow modules to control how to create a transport.
+            additional_params=additional_params,
         )
-
         return new_client
 
 
