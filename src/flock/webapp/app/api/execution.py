@@ -26,6 +26,7 @@ from flock.core.util.spliter import parse_schema
 from flock.webapp.app.dependencies import (
     get_flock_instance,
     get_optional_flock_instance,
+    get_shared_link_store,
 )
 
 # Service function now takes app_state
@@ -33,6 +34,7 @@ from flock.webapp.app.services.flock_service import (
     run_current_flock_service,
     # get_current_flock_instance IS NO LONGER IMPORTED
 )
+from flock.webapp.app.services.sharing_store import SharedLinkStoreInterface
 
 router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -155,7 +157,16 @@ async def htmx_run_flock(
 
     return templates.TemplateResponse(
         "partials/_results_display.html",
-        {"request": request, "result": result_data, "result_raw_json": result_data_raw_json_str} # Pass both
+        {
+            "request": request,
+            "result": result_data,
+            "result_raw_json": result_data_raw_json_str,
+            "feedback_endpoint": "/ui/api/flock/htmx/feedback",
+            "share_id": None,
+            "flock_name": current_flock_from_state.name,
+            "agent_name": start_agent_name,
+            "flock_definition": current_flock_from_state.to_yaml(),
+        }
     )
 
 
@@ -218,5 +229,71 @@ async def htmx_run_shared_flock(
 
     return templates.TemplateResponse(
         "partials/_results_display.html",
-        {"request": request, "result": result_data, "result_raw_json": result_data_raw_json_str} # Pass both
+        {
+            "request": request,
+            "result": result_data,
+            "result_raw_json": result_data_raw_json_str,
+            "feedback_endpoint": "/ui/api/flock/htmx/feedback-shared",
+            "share_id": share_id,
+            "flock_name": temp_flock.name,
+            "agent_name": start_agent_name,
+            "flock_definition": temp_flock.to_yaml(),
+        }
     )
+
+# --- Feedback endpoints ---
+@router.post("/htmx/feedback", response_class=HTMLResponse)
+async def htmx_submit_feedback(
+    request: Request,
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_name: str | None = Form(None),
+    agent_name: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store),
+):
+    from uuid import uuid4
+
+    from flock.webapp.app.services.sharing_models import FeedbackRecord
+
+    record = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=None,
+        context_type="agent_run",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_name=flock_name,
+        agent_name=agent_name,
+        flock_definition=flock_definition,
+    )
+    await store.save_feedback(record)
+    return HTMLResponse("<p>🙏 Feedback received – thank you!</p>")
+
+
+@router.post("/htmx/feedback-shared", response_class=HTMLResponse)
+async def htmx_submit_feedback_shared(
+    request: Request,
+    share_id: str = Form(...),
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store),
+):
+    from uuid import uuid4
+
+    from flock.webapp.app.services.sharing_models import FeedbackRecord
+
+    record = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=share_id,
+        context_type="agent_run",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_definition=flock_definition,
+    )
+    await store.save_feedback(record)
+    return HTMLResponse("<p>🙏 Feedback received for shared run – thank you!</p>")

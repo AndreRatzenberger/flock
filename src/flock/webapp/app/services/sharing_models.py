@@ -41,3 +41,41 @@ class SharedLinkConfig(BaseModel):
             ]
         }
     }
+
+# -----------------------------------------------------------
+# Feedback model (user ratings / corrections)
+# -----------------------------------------------------------
+
+
+class FeedbackRecord(BaseModel):
+    """A user-submitted piece of feedback for an agent run or chat turn."""
+
+    feedback_id: str = Field(..., description="Unique identifier for this feedback entry.")
+    share_id: str | None = Field(None, description="If the feedback refers to a shared link, its ID; otherwise None.")
+    context_type: str = Field(
+        default="agent_run",
+        description="Where the feedback originates (agent_run | chat | other)",
+    )
+    reason: str = Field(..., description="User-supplied reason / comment.")
+    expected_response: str | None = Field(
+        None,
+        description="Desired or corrected response in JSON or plain text.",
+    )
+    actual_response: str | None = Field(
+        None,
+        description="Original response shown to the user (optional, for context).",
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # When share_id is None store explicit target identifiers
+    flock_name: str | None = Field(
+        None,
+        description="Name of the flock that produced the result when no share_id is used.",
+    )
+    agent_name: str | None = Field(
+        None,
+        description="Name of the agent or chat involved in the feedback.",
+    )
+    flock_definition: str | None = Field(
+        None,
+        description="Full YAML definition of the flock when feedback was submitted.",
+    )
