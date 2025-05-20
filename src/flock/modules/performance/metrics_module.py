@@ -495,3 +495,20 @@ class MetricsModule(FlockModule):
             1,
             {"agent": agent.name, "error_type": type(error).__name__},
         )
+
+    # --------------------------------------------------
+    # Public helper for external modules
+    # --------------------------------------------------
+    @classmethod
+    def record(cls, name: str, value: int | float | str, tags: dict[str, str] | None = None):
+        """Record a metric from anywhere in the codebase.
+
+        Example:
+            MetricsModule.record("custom_latency", 123, {"stage": "inference"})
+        The call will resolve the global instance named "performance_metrics";
+        if none exists, the call becomes a no-op (to avoid crashes).
+        """
+        instance: MetricsModule | None = cls.get_global("performance_metrics")  # type: ignore[arg-type]
+        if instance is None:
+            return  # silently ignore if module isn't active
+        instance._record_metric(name, value, tags or {})

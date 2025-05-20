@@ -52,6 +52,32 @@ class FlockModule(BaseModel, ABC):
         default_factory=FlockModuleConfig, description="Module configuration"
     )
 
+    # --- Global module registry (singleton-ish) ---
+    _global_modules: dict[str, "FlockModule"] = {}
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Automatically register this instance for cross-module access using its unique name
+        if self.name:
+            FlockModule._global_modules[self.name] = self
+
+    # -------------------------------------------------
+    # Generic cross-module access helpers
+    # -------------------------------------------------
+    @classmethod
+    def get_global(cls, name: str) -> "FlockModule | None":
+        """Retrieve a previously instantiated module by name, regardless of agent.
+
+        Useful when another component wants to call a module outside the agent lifecycle.
+        Returns None if not found.
+        """
+        return cls._global_modules.get(name)
+
+    @classmethod
+    def clear_global_modules(cls):
+        """Clear the global module registry (mainly for tests)."""
+        cls._global_modules.clear()
+
     async def on_initialize(
         self,
         agent: Any,

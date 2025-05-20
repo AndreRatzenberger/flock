@@ -13,6 +13,7 @@ is designed for large-scale, concurrent deployments.
 
 import asyncio
 import json
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -22,11 +23,19 @@ from opentelemetry import trace
 from pydantic import Field
 from sentence_transformers import SentenceTransformer
 
+from flock.adapter.azure_adapter import AzureSearchAdapter
+from flock.adapter.chroma_adapter import ChromaAdapter
+from flock.adapter.faiss_adapter import FAISSAdapter
+from flock.adapter.pinecone_adapter import PineconeAdapter
+
+# Adapter imports
+from flock.adapter.vector_base import VectorAdapter
 from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.flock_registry import flock_component
 from flock.core.logging.logging import get_logger
+from flock.modules.performance.metrics_module import MetricsModule
 
 logger = get_logger("enterprise_memory")
 tracer = trace.get_tracer(__name__)
@@ -110,7 +119,7 @@ class EnterpriseMemoryStore:
         self.cfg = cfg
         # Lazy initialise expensive resources
         self._embedding_model: SentenceTransformer | None = None
-        self._vector_store = None  # could be chroma collection, pinecone index, azure search client
+        self._adapter: VectorAdapter | None = None
         self._driver = None  # Neo4j driver
         self._pending_writes: list[tuple[str, dict[str, Any]]] = []
         self._write_lock = asyncio.Lock()
@@ -131,68 +140,37 @@ class EnterpriseMemoryStore:
                     raise
         return self._embedding_model
 
-    def _ensure_vector_store(self):
-        if self._vector_store is not None:
-            return self._vector_store
+    def _ensure_adapter(self) -> VectorAdapter:
+        if self._adapter is not None:
+            return self._adapter
 
         backend = self.cfg.vector_backend
 
         if backend == "chroma":
-            self._vector_store = self._init_chroma()
+            self._adapter = ChromaAdapter(
+                collection=self.cfg.chroma_collection,
+                host=self.cfg.chroma_host,
+                port=self.cfg.chroma_port,
+                path=self.cfg.chroma_path,
+            )
         elif backend == "pinecone":
-            self._vector_store = self._init_pinecone()
+            self._adapter = PineconeAdapter(
+                api_key=self.cfg.pinecone_api_key,
+                environment=self.cfg.pinecone_env,
+                index=self.cfg.pinecone_index,
+            )
         elif backend == "azure":
-            self._vector_store = self._init_azure()
+            self._adapter = AzureSearchAdapter(
+                endpoint=self.cfg.azure_search_endpoint,
+                key=self.cfg.azure_search_key,
+                index_name=self.cfg.azure_search_index_name,
+            )
+        elif backend == "faiss":
+            self._adapter = FAISSAdapter(index_path="./faiss.index")
         else:
             raise ValueError(f"Unsupported vector backend: {backend}")
 
-        return self._vector_store
-
-    def _init_chroma(self):
-        try:
-            import chromadb
-            from chromadb.config import Settings
-        except ImportError as e:
-            raise RuntimeError("chromadb package is required for Chroma backend") from e
-
-        if self.cfg.chroma_host:
-            client = chromadb.HttpClient(
-                host=self.cfg.chroma_host, port=self.cfg.chroma_port
-            )
-        else:
-            path = Path(self.cfg.chroma_path)
-            path.mkdir(parents=True, exist_ok=True)
-            client = chromadb.PersistentClient(settings=Settings(path=str(path)))
-
-        return client.get_or_create_collection(self.cfg.chroma_collection)
-
-    def _init_pinecone(self):
-        try:
-            import pinecone
-        except ImportError as e:
-            raise RuntimeError("pinecone-client package required for Pinecone backend") from e
-
-        if not (self.cfg.pinecone_api_key and self.cfg.pinecone_env and self.cfg.pinecone_index):
-            raise ValueError("pinecone_api_key, pinecone_env and pinecone_index must be set for Pinecone backend")
-
-        pinecone.init(api_key=self.cfg.pinecone_api_key, environment=self.cfg.pinecone_env)
-        return pinecone.Index(self.cfg.pinecone_index)
-
-    def _init_azure(self):
-        try:
-            from azure.core.credentials import AzureKeyCredential
-            from azure.search.documents import SearchClient
-        except ImportError as e:
-            raise RuntimeError("azure-search-documents package required for Azure backend") from e
-
-        if not (self.cfg.azure_search_endpoint and self.cfg.azure_search_key and self.cfg.azure_search_index_name):
-            raise ValueError("Azure search endpoint, key and index name must be provided for Azure backend")
-
-        return SearchClient(
-            endpoint=self.cfg.azure_search_endpoint,
-            index_name=self.cfg.azure_search_index_name,
-            credential=AzureKeyCredential(self.cfg.azure_search_key),
-        )
+        return self._adapter
 
     def _ensure_graph_driver(self):
         if self._driver is None:
@@ -221,28 +199,23 @@ class EnterpriseMemoryStore:
             span.set_attribute("embedding_length", len(embedding))
 
             # Vector store write
-            store = self._ensure_vector_store()
-            backend = self.cfg.vector_backend
-            span.set_attribute("vector_backend", backend)
+            adapter = self._ensure_adapter()
+            span.set_attribute("vector_backend", self.cfg.vector_backend)
 
+            start_t = time.perf_counter()
             try:
-                if backend == "chroma":
-                    store.add(ids=[span.get_attribute("entry_id")], documents=[content], embeddings=[embedding], metadatas=[metadata or {}])
-                elif backend == "pinecone":
-                    store.upsert(vectors=[(span.get_attribute("entry_id"), embedding, metadata or {})])
-                elif backend == "azure":
-                    document = {
-                        "id": span.get_attribute("entry_id"),
-                        "content": content,
-                        "embedding": embedding,
-                        **(metadata or {}),
-                    }
-                    store.upload_documents(documents=[document])
-                else:
-                    raise ValueError(f"Unsupported vector backend: {backend}")
+                adapter.add(
+                    id=span.get_attribute("entry_id"),
+                    content=content,
+                    embedding=embedding,
+                    metadata=metadata,
+                )
             except Exception as e:
                 span.record_exception(e)
                 raise
+            finally:
+                elapsed = (time.perf_counter() - start_t) * 1000  # ms
+                MetricsModule.record("memory_add_latency_ms", elapsed, {"backend": self.cfg.vector_backend})
 
         # Schedule graph writes (batched)
         async with self._write_lock:
@@ -261,70 +234,28 @@ class EnterpriseMemoryStore:
                 self._ensure_embedding_model().encode(query_text).tolist()
             )
             span.set_attribute("embedding_length", len(embedding))
-            store = self._ensure_vector_store()
+            adapter = self._ensure_adapter()
             backend = self.cfg.vector_backend
             results: list[dict[str, Any]] = []
 
-            if backend == "chroma":
-                res = store.query(
-                    query_embeddings=[embedding],
-                    n_results=k,
-                    include=["documents", "metadatas", "distances", "ids"],
+            search_start = time.perf_counter()
+            vector_hits = adapter.query(embedding=embedding, k=k)
+            search_elapsed = (time.perf_counter() - search_start) * 1000
+            MetricsModule.record("memory_search_hits", len(vector_hits), {"backend": backend})
+            for hit in vector_hits:
+                if hit.score < threshold:
+                    continue
+                results.append(
+                    {
+                        "id": hit.id,
+                        "content": hit.content,
+                        "metadata": hit.metadata,
+                        "score": hit.score,
+                    }
                 )
-                if res and res["ids"]:
-                    for idx in range(len(res["ids"][0])):
-                        distance = res["distances"][0][idx]
-                        score = 1 - distance
-                        if score < threshold:
-                            continue
-                        results.append(
-                            {
-                                "id": res["ids"][0][idx],
-                                "content": res["documents"][0][idx],
-                                "metadata": res["metadatas"][0][idx],
-                                "score": score,
-                            }
-                        )
-
-            elif backend == "pinecone":
-                query_res = store.query(vector=embedding, top_k=k, include_values=False, include_metadata=True)
-                for match in query_res.matches:
-                    if match.score < threshold:
-                        continue
-                    results.append(
-                        {
-                            "id": match.id,
-                            "content": None,  # pinecone doesn't store doc content directly
-                            "metadata": match.metadata,
-                            "score": match.score,
-                        }
-                    )
-
-            elif backend == "azure":
-                # Azure vector search – assuming index has 'embedding' vector field
-                search_res = store.search(
-                    search_text=None,
-                    vector=embedding,
-                    k=k,
-                    vector_fields="embedding",
-                )
-                for doc in search_res:
-                    score = doc["@search.score"]
-                    if score < threshold:
-                        continue
-                    results.append(
-                        {
-                            "id": doc["id"],
-                            "content": doc.get("content"),
-                            "metadata": {k: v for k, v in doc.items() if k not in ("id", "content", "embedding", "@search.score")},
-                            "score": score,
-                        }
-                    )
-
-            else:
-                raise ValueError(f"Unsupported backend: {backend}")
 
             span.set_attribute("results_count", len(results))
+            MetricsModule.record("memory_search_latency_ms", search_elapsed, {"backend": backend})
             return results
 
     # ------------------------------------------------------------------
@@ -399,6 +330,8 @@ class EnterpriseMemoryStore:
             await self._flush_pending_graph_writes()
         if self._driver:
             await self._driver.close()
+        if self._adapter and hasattr(self._adapter, "close"):
+            self._adapter.close()
 
 
 # ---------------------------------------------------------------------------
