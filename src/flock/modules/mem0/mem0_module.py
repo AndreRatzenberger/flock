@@ -24,9 +24,9 @@ config = {
 
 
 class Mem0ModuleConfig(FlockModuleConfig):
-    top_k: int = Field(default=5, description="Number of memories to retrieve")
-    user_id: str = Field(default="flock", description="User ID")
-    memory_input_key: str | None = Field(default=None, description="Key to use for memory input, if none the description of the agent will be used")
+    top_k: int = Field(default=10, description="Number of memories to retrieve")
+    user_id: str = Field(default="flock", description="User ID the memories will be associated with")
+    memory_input_key: str | None = Field(default=None, description="Input key to use for memory, if none the description of the agent will be used")
     api_key: str | None = Field(default=None, description="API key for mem0 Platform")
     config: dict[str, Any] = Field(default=config, description="Configuration for mem0")
 

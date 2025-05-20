@@ -22,7 +22,7 @@ GITHUB_USERNAME = config("GITHUB_USERNAME", "")
 # -- Debugging and Logging Configurations --
 LOCAL_DEBUG = config("LOCAL_DEBUG", True)
 LOG_LEVEL = config("LOG_LEVEL", "DEBUG")
-LOGGING_DIR = config("LOGGING_DIR", "logs")
+LOGGING_DIR = config("LOGGING_DIR", ".flock/logs")
 
 OTEL_SERVICE_NAME = config("OTL_SERVICE_NAME", "otel-flock")
 JAEGER_ENDPOINT = config(
