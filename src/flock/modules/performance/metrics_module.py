@@ -48,7 +48,7 @@ class MetricsModuleConfig(FlockModuleConfig):
         default="json", description="Where to store metrics"
     )
     metrics_dir: str = Field(
-        default="metrics/", description="Directory for metrics storage"
+        default=".flock/metrics/", description="Directory for metrics storage"
     )
 
     # Aggregation settings

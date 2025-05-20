@@ -26,7 +26,7 @@ class MemoryModuleConfig(FlockModuleConfig):
     """
 
     folder_path: str = Field(
-        default="concept_memory/",
+        default=".flock/memory/",
         description="Directory where memory file and concept graph will be saved",
     )
     concept_graph_file: str = Field(
@@ -49,14 +49,19 @@ class MemoryModuleConfig(FlockModuleConfig):
         default=True, description="Whether to save memory after each update"
     )
     splitting_mode: Literal["summary", "semantic", "characters", "none"] = (
-        Field(default="none", description="Mode to split memory content")
+        Field(default="characters", description="Mode to split memory content")
     )
     enable_read_only_mode: bool = Field(
         default=False, description="Whether to enable read only mode"
     )
+    enable_write_only_mode: bool = Field(
+        default=False, description="Whether to enable write only mode"
+    )
     number_of_concepts_to_extract: int = Field(
         default=3, description="Number of concepts to extract from the memory"
     )
+    memory_input_key: str | None = Field(default=None, description="Input key to use for memory, if none the description of the agent will be used")
+
 
 
 @flock_component(config_class=MemoryModuleConfig)
@@ -108,6 +113,9 @@ class MemoryModule(FlockModule):
     ) -> dict[str, Any]:
         """Check memory before evaluation."""
         if not self.memory_store:
+            return inputs
+
+        if self.config.enable_write_only_mode:
             return inputs
 
         inputs = await self.search_memory(agent, inputs)
@@ -235,6 +243,9 @@ class MemoryModule(FlockModule):
     ) -> dict[str, Any]:
         """Store results in memory after evaluation."""
         if not self.memory_store:
+            return result
+
+        if self.config.enable_read_only_mode:
             return result
 
         try:
