@@ -14,7 +14,7 @@ combining a true vector store (Chroma) with a property-graph database
 
 | Concern              | Technology |
 |--------------------- |------------|
-| Vector similarity    | **Chroma** collection (HNSW ANN index) |
+| Vector similarity    | **Pinecone**, **Chroma**, **Azure Cognitive Search** |
 | Concept graph        | **Cypher** database (Neo4j / Memgraph) |
 | Embeddings           | `sentence-transformers` (`all-MiniLM-L6-v2`) |
 | Concept extraction   | Agent's LLM via DSPy signature |
@@ -34,6 +34,18 @@ chroma_path: ./vector_store          # disk path if running embedded
 chroma_host: null                    # host of remote Chroma server (optional)
 chroma_port: 8000
 chroma_collection: flock_memories    # collection name
+
+# or Pinecone
+vector_backend: pinecone
+pinecone_api_key: <YOUR_KEY>
+pinecone_env: gcp-starter
+pinecone_index: flock-memories
+
+# or Azure Cognitive Search
+vector_backend: azure
+azure_search_endpoint: https://<service>.search.windows.net
+azure_search_key: <KEY>
+azure_search_index_name: flock-memories
 
 cypher_uri: bolt://localhost:7687
 cypher_username: neo4j
@@ -58,6 +70,8 @@ pip install chromadb>=0.4.20
 pip install neo4j>=5.14.0
 pip install sentence-transformers>=2.7.0
 pip install matplotlib networkx     # only needed when export_graph_image = true
+pip install pinecone-client         # if using Pinecone
+pip install azure-search-documents  # if using Azure Search
 ```
 
 You also need a running Neo4j **or** Memgraph instance.  The module uses

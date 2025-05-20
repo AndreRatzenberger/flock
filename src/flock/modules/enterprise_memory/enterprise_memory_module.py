@@ -15,9 +15,10 @@ import asyncio
 import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from neo4j import AsyncGraphDatabase
+from opentelemetry import trace
 from pydantic import Field
 from sentence_transformers import SentenceTransformer
 
@@ -28,6 +29,7 @@ from flock.core.flock_registry import flock_component
 from flock.core.logging.logging import get_logger
 
 logger = get_logger("enterprise_memory")
+tracer = trace.get_tracer(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +38,16 @@ logger = get_logger("enterprise_memory")
 class EnterpriseMemoryModuleConfig(FlockModuleConfig):
     """Configuration for EnterpriseMemoryModule."""
 
-    # Vector store (Chroma) settings
+    # ---------------------
+    # Vector store settings
+    # ---------------------
+
+    vector_backend: Literal["chroma", "pinecone", "azure"] = Field(
+        default="chroma",
+        description="Which vector backend to use (chroma | pinecone | azure)",
+    )
+
+    # --- Chroma ---
     chroma_path: str | None = Field(
         default="./vector_store",
         description="Disk path for Chroma persistent storage (if running embedded).",
@@ -49,6 +60,16 @@ class EnterpriseMemoryModuleConfig(FlockModuleConfig):
         description="If provided, connect to a remote Chroma HTTP server at this host",
     )
     chroma_port: int = Field(default=8000, description="Remote Chroma HTTP port")
+
+    # --- Pinecone ---
+    pinecone_api_key: str | None = Field(default=None, description="Pinecone API key")
+    pinecone_env: str | None = Field(default=None, description="Pinecone environment")
+    pinecone_index: str | None = Field(default=None, description="Pinecone index name")
+
+    # --- Azure Cognitive Search ---
+    azure_search_endpoint: str | None = Field(default=None, description="Azure search endpoint (https://<service>.search.windows.net)")
+    azure_search_key: str | None = Field(default=None, description="Azure search admin/key")
+    azure_search_index_name: str | None = Field(default=None, description="Azure search index name")
 
     # Graph DB (Neo4j / Memgraph) settings
     cypher_uri: str = Field(
@@ -89,7 +110,7 @@ class EnterpriseMemoryStore:
         self.cfg = cfg
         # Lazy initialise expensive resources
         self._embedding_model: SentenceTransformer | None = None
-        self._chroma_collection = None
+        self._vector_store = None  # could be chroma collection, pinecone index, azure search client
         self._driver = None  # Neo4j driver
         self._pending_writes: list[tuple[str, dict[str, Any]]] = []
         self._write_lock = asyncio.Lock()
@@ -101,32 +122,77 @@ class EnterpriseMemoryStore:
     def _ensure_embedding_model(self) -> SentenceTransformer:
         if self._embedding_model is None:
             logger.debug("Loading embedding model 'all-MiniLM-L6-v2'")
-            self._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            with tracer.start_as_current_span("memory.load_embedding_model") as span:
+                try:
+                    self._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+                    span.set_attribute("model", "all-MiniLM-L6-v2")
+                except Exception as e:
+                    span.record_exception(e)
+                    raise
         return self._embedding_model
 
     def _ensure_vector_store(self):
-        if self._chroma_collection is None:
-            try:
-                import chromadb
-                from chromadb.config import Settings
-            except ImportError as e:
-                raise RuntimeError(
-                    "chromadb package is required for EnterpriseMemoryModule"
-                ) from e
+        if self._vector_store is not None:
+            return self._vector_store
 
-            if self.cfg.chroma_host:
-                client = chromadb.HttpClient(
-                    host=self.cfg.chroma_host, port=self.cfg.chroma_port
-                )
-            else:
-                path = Path(self.cfg.chroma_path)
-                path.mkdir(parents=True, exist_ok=True)
-                client = chromadb.PersistentClient(settings=Settings(path=str(path)))
+        backend = self.cfg.vector_backend
 
-            self._chroma_collection = client.get_or_create_collection(
-                self.cfg.chroma_collection
+        if backend == "chroma":
+            self._vector_store = self._init_chroma()
+        elif backend == "pinecone":
+            self._vector_store = self._init_pinecone()
+        elif backend == "azure":
+            self._vector_store = self._init_azure()
+        else:
+            raise ValueError(f"Unsupported vector backend: {backend}")
+
+        return self._vector_store
+
+    def _init_chroma(self):
+        try:
+            import chromadb
+            from chromadb.config import Settings
+        except ImportError as e:
+            raise RuntimeError("chromadb package is required for Chroma backend") from e
+
+        if self.cfg.chroma_host:
+            client = chromadb.HttpClient(
+                host=self.cfg.chroma_host, port=self.cfg.chroma_port
             )
-        return self._chroma_collection
+        else:
+            path = Path(self.cfg.chroma_path)
+            path.mkdir(parents=True, exist_ok=True)
+            client = chromadb.PersistentClient(settings=Settings(path=str(path)))
+
+        return client.get_or_create_collection(self.cfg.chroma_collection)
+
+    def _init_pinecone(self):
+        try:
+            import pinecone
+        except ImportError as e:
+            raise RuntimeError("pinecone-client package required for Pinecone backend") from e
+
+        if not (self.cfg.pinecone_api_key and self.cfg.pinecone_env and self.cfg.pinecone_index):
+            raise ValueError("pinecone_api_key, pinecone_env and pinecone_index must be set for Pinecone backend")
+
+        pinecone.init(api_key=self.cfg.pinecone_api_key, environment=self.cfg.pinecone_env)
+        return pinecone.Index(self.cfg.pinecone_index)
+
+    def _init_azure(self):
+        try:
+            from azure.core.credentials import AzureKeyCredential
+            from azure.search.documents import SearchClient
+        except ImportError as e:
+            raise RuntimeError("azure-search-documents package required for Azure backend") from e
+
+        if not (self.cfg.azure_search_endpoint and self.cfg.azure_search_key and self.cfg.azure_search_index_name):
+            raise ValueError("Azure search endpoint, key and index name must be provided for Azure backend")
+
+        return SearchClient(
+            endpoint=self.cfg.azure_search_endpoint,
+            index_name=self.cfg.azure_search_index_name,
+            credential=AzureKeyCredential(self.cfg.azure_search_key),
+        )
 
     def _ensure_graph_driver(self):
         if self._driver is None:
@@ -147,52 +213,119 @@ class EnterpriseMemoryStore:
         metadata: dict[str, Any] | None = None,
     ) -> str:
         """Store a chunk in both vector store and graph DB and return its id."""
-        entry_id = str(uuid.uuid4())
-        # Embed
-        embedding = self._ensure_embedding_model().encode(content).tolist()
-        # Vector store write (immediate, thread-safe inside chroma client)
-        self._ensure_vector_store().add(
-            ids=[entry_id],
-            documents=[content],
-            embeddings=[embedding],
-            metadatas=[metadata or {}],
-        )
+        with tracer.start_as_current_span("memory.add_entry") as span:
+            span.set_attribute("entry_id", str(uuid.uuid4()))
+
+            # Embed
+            embedding = self._ensure_embedding_model().encode(content).tolist()
+            span.set_attribute("embedding_length", len(embedding))
+
+            # Vector store write
+            store = self._ensure_vector_store()
+            backend = self.cfg.vector_backend
+            span.set_attribute("vector_backend", backend)
+
+            try:
+                if backend == "chroma":
+                    store.add(ids=[span.get_attribute("entry_id")], documents=[content], embeddings=[embedding], metadatas=[metadata or {}])
+                elif backend == "pinecone":
+                    store.upsert(vectors=[(span.get_attribute("entry_id"), embedding, metadata or {})])
+                elif backend == "azure":
+                    document = {
+                        "id": span.get_attribute("entry_id"),
+                        "content": content,
+                        "embedding": embedding,
+                        **(metadata or {}),
+                    }
+                    store.upload_documents(documents=[document])
+                else:
+                    raise ValueError(f"Unsupported vector backend: {backend}")
+            except Exception as e:
+                span.record_exception(e)
+                raise
+
         # Schedule graph writes (batched)
         async with self._write_lock:
-            self._pending_writes.append((entry_id, {"concepts": concepts}))
+            self._pending_writes.append((span.get_attribute("entry_id"), {"concepts": concepts}))
             if self.cfg.save_interval and len(self._pending_writes) >= self.cfg.save_interval:
                 await self._flush_pending_graph_writes()
-        return entry_id
+        return span.get_attribute("entry_id")
 
     async def search(
         self, query_text: str, threshold: float, k: int
     ) -> list[dict[str, Any]]:
         """Vector similarity search followed by graph enrichment."""
-        embedding = (
-            self._ensure_embedding_model().encode(query_text).tolist()
-        )
-        collection = self._ensure_vector_store()
-        res = collection.query(
-            query_embeddings=[embedding],
-            n_results=k,
-            include=["documents", "metadatas", "distances", "ids"],
-        )
-        # Flatten result structure that Chroma returns
-        results: list[dict[str, Any]] = []
-        if res and res["ids"]:
-            for idx in range(len(res["ids"][0])):
-                distance = res["distances"][0][idx]
-                score = 1 - distance  # Convert L2 distance into a crude similarity
-                if score < threshold:
-                    continue
-                entry = {
-                    "id": res["ids"][0][idx],
-                    "content": res["documents"][0][idx],
-                    "metadata": res["metadatas"][0][idx],
-                    "score": score,
-                }
-                results.append(entry)
-        return results
+        with tracer.start_as_current_span("memory.search") as span:
+            span.set_attribute("vector_backend", self.cfg.vector_backend)
+            embedding = (
+                self._ensure_embedding_model().encode(query_text).tolist()
+            )
+            span.set_attribute("embedding_length", len(embedding))
+            store = self._ensure_vector_store()
+            backend = self.cfg.vector_backend
+            results: list[dict[str, Any]] = []
+
+            if backend == "chroma":
+                res = store.query(
+                    query_embeddings=[embedding],
+                    n_results=k,
+                    include=["documents", "metadatas", "distances", "ids"],
+                )
+                if res and res["ids"]:
+                    for idx in range(len(res["ids"][0])):
+                        distance = res["distances"][0][idx]
+                        score = 1 - distance
+                        if score < threshold:
+                            continue
+                        results.append(
+                            {
+                                "id": res["ids"][0][idx],
+                                "content": res["documents"][0][idx],
+                                "metadata": res["metadatas"][0][idx],
+                                "score": score,
+                            }
+                        )
+
+            elif backend == "pinecone":
+                query_res = store.query(vector=embedding, top_k=k, include_values=False, include_metadata=True)
+                for match in query_res.matches:
+                    if match.score < threshold:
+                        continue
+                    results.append(
+                        {
+                            "id": match.id,
+                            "content": None,  # pinecone doesn't store doc content directly
+                            "metadata": match.metadata,
+                            "score": match.score,
+                        }
+                    )
+
+            elif backend == "azure":
+                # Azure vector search – assuming index has 'embedding' vector field
+                search_res = store.search(
+                    search_text=None,
+                    vector=embedding,
+                    k=k,
+                    vector_fields="embedding",
+                )
+                for doc in search_res:
+                    score = doc["@search.score"]
+                    if score < threshold:
+                        continue
+                    results.append(
+                        {
+                            "id": doc["id"],
+                            "content": doc.get("content"),
+                            "metadata": {k: v for k, v in doc.items() if k not in ("id", "content", "embedding", "@search.score")},
+                            "score": score,
+                        }
+                    )
+
+            else:
+                raise ValueError(f"Unsupported backend: {backend}")
+
+            span.set_attribute("results_count", len(results))
+            return results
 
     # ------------------------------------------------------------------
     # Graph persistence helpers
