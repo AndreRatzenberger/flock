@@ -6,6 +6,8 @@
     <title>Flock Chat</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
     <link rel="stylesheet" href="/static/css/chat.css">
+    {# Prism.js CSS for syntax highlighting (okaidia theme) #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" referrerpolicy="no-referrer" />
     {# Inject active theme variables #}
     {% if theme_css %}
     <style>
@@ -17,6 +19,9 @@
     </style>
     {% endif %}
     <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+    {# Prism.js JS (core and components for common languages) #}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js" referrerpolicy="no-referrer"></script>
 </head>
 <body class="chat-page">
     <div id="chat-container">
@@ -25,21 +30,33 @@
                 <h2>Flock Chat</h2>
                 <h3>{{ chat_subtitle }}</h3>
             </hgroup>
-            <button class="secondary outline" hx-get="/chat/htmx/settings-form" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
+            {% if not is_shared_chat %}
+            <button class="secondary outline" hx-get="/chat/settings-standalone" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
+            {% else %}
+            {# Optionally, could show a disabled settings button or some other indicator #}
+            <span style="font-size: 0.8rem; color: var(--pico-muted-color);">Settings frozen for shared session.</span>
+            {% endif %}
         </div>
 
         <div id="chat-content-area">
-            <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
+            <div id="chat-log" 
+                 hx-get="{% if is_shared_chat %}/chat/messages-shared/{{ share_id }}{% else %}/chat/messages{% endif %}" 
+                 hx-trigger="load" {# Polling removed #}
+                 hx-swap="innerHTML">
                 <p><em>Loading chat…</em></p>
             </div>
             
             <form id="chat-form-standalone"
-                  hx-post="/chat/send"
+                  hx-post="{% if is_shared_chat %}/chat/send-shared{% else %}/chat/send{% endif %}"
                   hx-target="#chat-log"
                   hx-swap="innerHTML"
                   hx-disabled-elt="input[name='message'], button[type='submit']"
                   hx-on::before-request="htmx.find('#chat-form-standalone button[type=\'submit\']').textContent = 'Sending...'"
                   hx-on::after-request="htmx.find('#chat-form-standalone button[type=\'submit\']').textContent = 'Send'; this.reset();">
+                
+                {% if is_shared_chat %}
+                <input type="hidden" name="share_id" value="{{ share_id }}">
+                {% endif %}
                 <input type="text" name="message" placeholder="Type a message…" required autofocus>
                 <button type="submit">Send</button>
             </form>
@@ -57,9 +74,17 @@
             log.scrollTop = log.scrollHeight;
         }
         document.addEventListener('htmx:afterSwap', e => {
-            if (e.detail.target.id === 'chat-log') scrollBottom();
+            if (e.detail.target.id === 'chat-log') {
+                scrollBottom();
+                // Re-run Prism highlighting after new content is swapped in
+                Prism.highlightAllUnder(log);
+            }
         });
         window.addEventListener('load', scrollBottom);
+        // Initial highlight on page load for any pre-existing content
+        document.addEventListener('DOMContentLoaded', () => {
+            Prism.highlightAll();
+        });
     })();
 </script>
 </body>

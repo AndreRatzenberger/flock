@@ -62,4 +62,26 @@
         <button type="button" class="secondary outline" hx-get="/chat/htmx/chat-view" hx-target="#chat-content-area" hx-swap="innerHTML">Cancel</button>
     </div>
     <div id="chat-settings-saving" class="htmx-indicator" style="text-align:center; margin-top:0.5rem;"><progress indeterminate></progress></div>
+
+    {# Share Chat Link Section #}
+    <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color);">
+        <h5 style="margin-bottom: 0.5rem;">Share Chat Configuration</h5>
+        <p><small>Create a shareable link for this chat configuration. The current Flock and these chat settings will be frozen for the shared session.</small></p>
+        <a href="#" 
+           id="shareChatHtmxLink"
+           hx-post="/ui/htmx/share/chat/generate-link" 
+           hx-target="#shareChatLinkDisplayArea" 
+           hx-swap="innerHTML"
+           hx-indicator="#share-chat-loading-indicator"
+           hx-include="closest form"  {# Includes all fields from the parent form #}
+           style="text-decoration: underline; cursor: pointer; color: var(--pico-primary);">
+            Create shareable chat link...
+        </a>
+        <span id="share-chat-loading-indicator" class="htmx-indicator" style="margin-left: 0.5rem;">
+            <progress indeterminate style="width: 100px;"></progress>
+        </span>
+        <div id="shareChatLinkDisplayArea" style="margin-top: 1rem;">
+            <!-- Shareable chat link will be loaded here by HTMX -->
+        </div>
+    </div>
 </form> 

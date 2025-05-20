@@ -11,6 +11,20 @@ from flock.core.logging.formatters.themes import OutputTheme
 FLOCK_FILES_DIR = Path(os.getenv("FLOCK_FILES_DIR", "./.flock_ui_projects"))
 FLOCK_FILES_DIR.mkdir(parents=True, exist_ok=True)
 
+# --- Shared Links Database Configuration ---
+# Default path is relative to the .flock/ directory in the workspace root if FLOCK_ROOT is not set
+# or if .flock is not a sibling of FLOCK_BASE_DIR.
+# More robustly, place it inside a user-specific or project-specific data directory.
+_default_shared_links_db_parent = Path(os.getenv("FLOCK_ROOT", ".")) / ".flock"
+SHARED_LINKS_DB_PATH = Path(
+    os.getenv(
+        "SHARED_LINKS_DB_PATH",
+        str(_default_shared_links_db_parent / "shared_links.db")
+    )
+)
+# Ensure the directory for the DB exists, though the store will also do this.
+SHARED_LINKS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 # --- Theme Configuration ---
 # Calculate themes directory relative to this config file's location, assuming structure:
 # src/flock/webapp/app/config.py

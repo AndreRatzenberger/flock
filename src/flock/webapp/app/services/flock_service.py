@@ -1,5 +1,5 @@
 # src/flock/webapp/app/services/flock_service.py
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import yaml
 
@@ -248,25 +248,50 @@ def remove_agent_from_current_flock_service(agent_name: str, app_state: object) 
 
 
 async def run_current_flock_service(
-    start_agent_name: str, inputs: dict, app_state: object
-) -> dict | str:
-    """Runs the Flock instance from app_state."""
-    current_flock: Flock | None = getattr(app_state, 'flock_instance', None)
+    start_agent_name: str,
+    inputs: dict[str, Any],
+    app_state: Any,
+) -> dict[str, Any]:
+    """Runs the specified agent from the current flock instance in app_state."""
+    logger.info(f"Attempting to run agent: {start_agent_name} using flock from app_state.")
+
+    current_flock: Flock | None = getattr(app_state, "flock_instance", None)
+    run_store: RunStore | None = getattr(app_state, "run_store", None)
+
     if not current_flock:
-        logger.error("Service: Execution failed, no flock loaded.")
-        return "Error: No flock loaded."
-    if not start_agent_name or start_agent_name not in current_flock.agents:
-        logger.error(f"Service: Execution failed, start agent '{start_agent_name}' not found in flock '{current_flock.name}'.")
-        return f"Error: Start agent '{start_agent_name}' not found."
+        logger.error("Run service: No Flock instance available in app_state.")
+        return {"error": "No Flock loaded in the application."}
+    if not run_store:
+        logger.error("Run service: No RunStore instance available in app_state.")
+        # Attempt to initialize a default run_store if missing and this service is critical
+        # This might indicate an issue in the application lifecycle setup
+        logger.warning("Run service: Initializing a default RunStore as none was found in app_state.")
+        run_store = RunStore()
+        setattr(app_state, "run_store", run_store)
+        # Also update global DI if this is how it's managed elsewhere for consistency,
+        # though ideally DI setup handles this more centrally.
+        # from flock.webapp.app.dependencies import set_global_flock_services
+        # set_global_flock_services(current_flock, run_store)
+
+
+    if start_agent_name not in current_flock.agents:
+        logger.error(f"Run service: Agent '{start_agent_name}' not found in current flock '{current_flock.name}'.")
+        return {"error": f"Agent '{start_agent_name}' not found."}
+
     try:
-        logger.info(f"Service: Running flock '{current_flock.name}' starting with agent '{start_agent_name}'.")
+        logger.info(f"Executing agent '{start_agent_name}' from flock '{current_flock.name}' using app_state.")
+        # Direct execution using the flock from app_state
         result = await current_flock.run_async(
             start_agent=start_agent_name, input=inputs, box_result=False
         )
+        # Store run details using the run_store from app_state
+        if hasattr(run_store, "add_run_details"): # Check if RunStore has this method
+            run_id = result.get("run_id", "unknown_run_id") # Assuming run_async result might contain run_id
+            run_store.add_run_details(run_id=run_id, agent_name=start_agent_name, inputs=inputs, outputs=result)
         return result
     except Exception as e:
-        logger.error(f"Service: Error during flock execution for '{current_flock.name}': {e}", exc_info=True)
-        return f"Error: {e!s}"
+        logger.error(f"Run service: Error during agent execution: {e}", exc_info=True)
+        return {"error": f"An error occurred: {e}"}
 
 
 def get_registered_items_service(item_type: str) -> list[dict]:

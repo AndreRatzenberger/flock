@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import ast  # Add import ast
 import json
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Form, Request
+import markdown2  # Added for Markdown to HTML conversion
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from flock.core.flock import Flock
+from flock.core.logging.logging import get_logger
+from flock.webapp.app.dependencies import get_shared_link_store
 from flock.webapp.app.main import get_base_context_web, templates
+from flock.webapp.app.services.sharing_models import SharedLinkConfig
+from flock.webapp.app.services.sharing_store import SharedLinkStoreInterface
 
 router = APIRouter()
+logger = get_logger("webapp.chat")
 
 # ---------------------------------------------------------------------------
 # In-memory session store (cookie-based). Not suitable for production scale.
@@ -20,7 +28,7 @@ _chat_sessions: dict[str, list[dict[str, str]]] = {}
 COOKIE_NAME = "chat_sid"
 
 
-def _ensure_session(request: Request):
+def _ensure_session(request: Request) -> tuple[str, list[dict[str, str]]]:
     """Returns (sid, history_list) tuple and guarantees cookie presence."""
     sid: str | None = request.cookies.get(COOKIE_NAME)
     if not sid:
@@ -30,8 +38,23 @@ def _ensure_session(request: Request):
     return sid, _chat_sessions[sid]
 
 
+def _get_history_for_shared_chat(request: Request, share_id: str) -> list[dict[str, str]]:
+    """Manages history for a shared chat session, namespaced by share_id and user's session_id."""
+    user_sid: str | None = request.cookies.get(COOKIE_NAME)
+    if not user_sid: # Should have been set by _ensure_session on page load
+        user_sid = uuid4().hex
+        # Note: This history will be ephemeral if the cookie isn't set back to the client,
+        # but _ensure_session on the shared chat page load should handle cookie setting.
+
+    # Composite key for shared chat history
+    shared_session_key = f"shared_{share_id}_{user_sid}"
+    if shared_session_key not in _chat_sessions:
+        _chat_sessions[shared_session_key] = []
+    return _chat_sessions[shared_session_key]
+
+
 # ---------------------------------------------------------------------------
-# Chat configuration (per app instance)
+# Chat configuration (per app instance for non-shared, or from SharedLinkConfig for shared)
 # ---------------------------------------------------------------------------
 
 
@@ -42,11 +65,57 @@ class ChatConfig(BaseModel):
     response_key: str = "response"
 
 
-# Store a single global chat config on the FastAPI app state
+# Store a single global chat config on the FastAPI app state for non-shared chat
 def get_chat_config(request: Request) -> ChatConfig:
     if not hasattr(request.app.state, "chat_config"):
         request.app.state.chat_config = ChatConfig()
     return request.app.state.chat_config
+
+
+# ---------------------------------------------------------------------------
+# Helper for Shared Chat Context
+# ---------------------------------------------------------------------------
+async def _get_shared_chat_context(
+    request: Request,
+    share_id: str,
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+) -> tuple[ChatConfig | None, Flock | None, SharedLinkConfig | None]:
+    shared_config_db = await store.get_config(share_id)
+
+    if not shared_config_db or shared_config_db.share_type != "chat":
+        logger.warning(f"Shared chat link {share_id} not found or not a chat share type.")
+        return None, None, None
+
+    # Retrieve the pre-loaded Flock instance for this share_id
+    # This is loaded by the /chat/shared/{share_id} endpoint in main.py (or will be)
+    # For chat.py, we will create a specific /chat/shared/{share_id} endpoint
+
+    loaded_flock: Flock | None = None
+    if hasattr(request.app.state, 'shared_flocks') and share_id in request.app.state.shared_flocks:
+        loaded_flock = request.app.state.shared_flocks[share_id]
+    else:
+        # Attempt to load on-the-fly if not found (e.g., direct API call without page load)
+        # This is a fallback and might be slower if the Flock definition is large.
+        # The main /chat/shared/{share_id} page route should pre-load this.
+        try:
+            from flock.core.flock import Flock as ConcreteFlock  # Local import
+            loaded_flock = ConcreteFlock.from_yaml(shared_config_db.flock_definition)
+            if not hasattr(request.app.state, 'shared_flocks'):
+                request.app.state.shared_flocks = {}
+            request.app.state.shared_flocks[share_id] = loaded_flock # Cache it
+            logger.info(f"On-the-fly load of Flock for shared chat {share_id}.")
+        except Exception as e_load:
+            logger.error(f"Failed to load Flock from definition for shared chat {share_id}: {e_load}", exc_info=True)
+            return None, None, shared_config_db
+
+
+    frozen_chat_cfg = ChatConfig(
+        agent_name=shared_config_db.agent_name, # agent_name from SharedLinkConfig is the chat agent
+        message_key=shared_config_db.chat_message_key or "message",
+        history_key=shared_config_db.chat_history_key or "history",
+        response_key=shared_config_db.chat_response_key or "response",
+    )
+    return frozen_chat_cfg, loaded_flock, shared_config_db
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +129,7 @@ async def chat_page(request: Request):
     sid, history = _ensure_session(request)
     cfg = get_chat_config(request)
     context = get_base_context_web(request, ui_mode="standalone")
-    context.update({"history": history, "chat_cfg": cfg, "chat_subtitle": f"Agent: {cfg.agent_name}" if cfg.agent_name else "Echo demo"})
+    context.update({"history": history, "chat_cfg": cfg, "chat_subtitle": f"Agent: {cfg.agent_name}" if cfg.agent_name else "Echo demo", "is_shared_chat": False, "share_id": None})
     response = templates.TemplateResponse("chat.html", context)
     # Set cookie if not already present
     if COOKIE_NAME not in request.cookies:
@@ -86,31 +155,73 @@ async def chat_send(request: Request, message: str = Form(...)):
     cfg = get_chat_config(request)
     history.append({"role": "user", "text": message, "timestamp": current_time})
     start_time = datetime.now()
+    is_error = False # Initialize is_error
 
     flock_inst = getattr(request.app.state, "flock_instance", None)
     bot_agent = cfg.agent_name if cfg.agent_name else None
     bot_text: str
+
     if bot_agent and flock_inst and bot_agent in getattr(flock_inst, "agents", {}):
-        # Build input according to mapping keys
         run_input: dict = {}
-        if cfg.message_key:
-            run_input[cfg.message_key] = message
-        if cfg.history_key:
-            # Provide history without timestamps to keep things small
-            run_input[cfg.history_key] = [h["text"] for h in history]
+        if cfg.message_key: run_input[cfg.message_key] = message
+        if cfg.history_key: run_input[cfg.history_key] = [h["text"] for h in history if h.get("role") == "user" or h.get("role") == "bot"] # Simple text history
 
         try:
             result_dict = await flock_inst.run_async(start_agent=bot_agent, input=run_input, box_result=False)
-        except Exception as e:
-            bot_text = f"Error: {e}"
-        else:
+            # Assuming result_dict might be the actual dict, or its string representation is what we need.
+            # For now, we work with bot_text derived from it.
             if cfg.response_key:
                 bot_text = str(result_dict.get(cfg.response_key, result_dict))
             else:
                 bot_text = str(result_dict)
+
+        except Exception as e:
+            bot_text = f"Error: {e}"
+            is_error = True
+
+        if not is_error:
+            original_bot_text = bot_text # Keep a copy
+            formatted_as_json = False
+
+            stripped_text = bot_text.strip()
+            if (stripped_text.startswith('{') and stripped_text.endswith('}')) or \
+               (stripped_text.startswith('[') and stripped_text.endswith(']')):
+                try:
+                    parsed_obj = json.loads(bot_text)
+                    if isinstance(parsed_obj, (dict, list)):
+                        pretty_json = json.dumps(parsed_obj, indent=2).replace('\\n', '\n')
+                        bot_text = f'''<pre><code class="language-json">{pretty_json}</code></pre>'''
+                        formatted_as_json = True
+                except json.JSONDecodeError:
+                    try:
+                        evaluated_obj = ast.literal_eval(bot_text)
+                        if isinstance(evaluated_obj, (dict, list)):
+                            pretty_json = json.dumps(evaluated_obj, indent=2).replace('\\n', '\n')
+                            bot_text = f'''<pre><code class="language-json">{pretty_json}</code></pre>'''
+                            formatted_as_json = True
+                    except (ValueError, SyntaxError, TypeError):
+                        pass # Fall through
+                except Exception as e_json_fmt:
+                    logger.error(f"Error formatting likely JSON: {e_json_fmt}. Original: {original_bot_text[:200]}", exc_info=True)
+                    bot_text = original_bot_text
+
+            if not formatted_as_json:
+                try:
+                    bot_text = markdown2.markdown(original_bot_text, extras=["fenced-code-blocks", "tables", "break-on-newline"])
+                except Exception:
+                    logger.error(f"Error during Markdown conversion for bot_text. Original: {original_bot_text[:200]}", exc_info=True)
+                    bot_text = original_bot_text # Fallback to original text, will be HTML escaped by Jinja if not |safe
+
     else:
-        # Fallback echo behavior
-        bot_text = f"Echo: {message}"
+        # Fallback echo behavior or agent not found messages
+        is_error = True # Treat these as plain text, no special formatting
+        if bot_agent and not flock_inst:
+            bot_text = f"Agent '{bot_agent}' configured, but no Flock loaded."
+        elif bot_agent and flock_inst and bot_agent not in getattr(flock_inst, "agents", {}):
+             bot_text = f"Agent '{bot_agent}' configured, but not found in the loaded Flock."
+        else: # No agent configured
+            bot_text = f"Echo: {message}"
+            # If even echo should be markdown, remove is_error=True here and let it pass through. For now, plain.
 
     duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
     history.append({"role": "bot", "text": bot_text, "timestamp": current_time, "agent": bot_agent or "echo", "duration_ms": duration_ms})
@@ -231,3 +342,179 @@ async def htmx_chat_settings_partial(request: Request):
 
     context = {"request": request, "chat_cfg": cfg, "current_flock": flock_inst, "input_fields": input_fields, "output_fields": output_fields}
     return templates.TemplateResponse("partials/_chat_settings_form.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Shared Chat Routes
+# ---------------------------------------------------------------------------
+
+@router.get("/chat/shared/{share_id}", response_class=HTMLResponse, tags=["Chat Sharing"])
+async def page_shared_chat(
+    request: Request,
+    share_id: str,
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+):
+    """Serves the chat page for a shared chat session."""
+    logger.info(f"Accessing shared chat page for share_id: {share_id}")
+
+    sid, _ = _ensure_session(request) # Ensures user has a session for history tracking
+
+    shared_config_db = await store.get_config(share_id)
+
+    if not shared_config_db or shared_config_db.share_type != "chat":
+        logger.warning(f"Shared chat link {share_id} not found or not a chat share type.")
+        # Consider rendering an error template or redirecting
+        error_context = get_base_context_web(request, ui_mode="standalone", error="Shared chat link is invalid or has expired.")
+        return templates.TemplateResponse("error_page.html", {**error_context, "error_title": "Invalid Link"}, status_code=404)
+
+    # Load Flock from definition and cache in app.state.shared_flocks
+    loaded_flock: Flock | None = None
+    if hasattr(request.app.state, 'shared_flocks') and share_id in request.app.state.shared_flocks:
+        loaded_flock = request.app.state.shared_flocks[share_id]
+    else:
+        try:
+            from flock.core.flock import Flock as ConcreteFlock
+            loaded_flock = ConcreteFlock.from_yaml(shared_config_db.flock_definition)
+            if not hasattr(request.app.state, 'shared_flocks'):
+                request.app.state.shared_flocks = {}
+            request.app.state.shared_flocks[share_id] = loaded_flock
+            logger.info(f"Loaded and cached Flock for shared chat {share_id} in app.state.shared_flocks.")
+        except Exception as e_load:
+            logger.error(f"Fatal: Could not load Flock from definition for shared chat {share_id}: {e_load}", exc_info=True)
+            error_context = get_base_context_web(request, ui_mode="standalone", error=f"Could not load the shared Flock configuration: {e_load!s}")
+            return templates.TemplateResponse("error_page.html", {**error_context, "error_title": "Configuration Error"}, status_code=500)
+
+    frozen_chat_cfg = ChatConfig(
+        agent_name=shared_config_db.agent_name,
+        message_key=shared_config_db.chat_message_key or "message",
+        history_key=shared_config_db.chat_history_key or "history",
+        response_key=shared_config_db.chat_response_key or "response",
+    )
+
+    # Get history specific to this user and this shared chat
+    history = _get_history_for_shared_chat(request, share_id)
+
+    context = get_base_context_web(request, ui_mode="standalone")
+    context.update({
+        "history": history, # User-specific history for this shared chat
+        "chat_cfg": frozen_chat_cfg, # The "frozen" config from the share link
+        "chat_subtitle": f"Shared Chat - Agent: {frozen_chat_cfg.agent_name}" if frozen_chat_cfg.agent_name else "Shared Echo Chat",
+        "is_shared_chat": True,
+        "share_id": share_id,
+        "flock": loaded_flock # Pass flock for potential display, though backend uses cached one
+    })
+
+    response = templates.TemplateResponse("chat.html", context)
+    if COOKIE_NAME not in request.cookies: # Ensure cookie is set if _ensure_session created a new one
+        response.set_cookie(COOKIE_NAME, sid, max_age=60 * 60 * 24 * 7)
+    return response
+
+@router.get("/chat/messages-shared/{share_id}", response_class=HTMLResponse, tags=["Chat Sharing"], include_in_schema=False)
+async def chat_history_partial_shared(request: Request, share_id: str):
+    """HTMX endpoint that returns the rendered message list for a shared chat."""
+    # _ensure_session called on page load, so cookie should exist for history keying
+    history = _get_history_for_shared_chat(request, share_id)
+    return templates.TemplateResponse(
+        "partials/_chat_messages.html",
+        {"request": request, "history": history, "now": datetime.now}
+    )
+
+@router.post("/chat/send-shared", response_class=HTMLResponse, tags=["Chat Sharing"])
+async def chat_send_shared(
+    request: Request,
+    share_id: str = Form(...),
+    message: str = Form(...),
+    # Note: Dependencies need to be declared at the route level for FastAPI to inject them.
+    # So, we re-declare get_shared_link_store here or pass it to the helper if FastAPI handles sub-dependencies.
+    # For simplicity with current structure, let _get_shared_chat_context handle its own dependency.
+    # We can also make _get_shared_chat_context a Depends() if preferred.
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)
+):
+    """Handles message sending for a shared chat session."""
+    frozen_chat_cfg, flock_inst, _ = await _get_shared_chat_context(request, share_id, store)
+    is_error = False # Initialize is_error
+
+    if not frozen_chat_cfg or not flock_inst:
+        # Error response if config or flock couldn't be loaded
+        # This history is ephemeral as it won't be saved if the config is bad
+        error_history = [{"role": "bot", "text": "Error: Shared chat configuration is invalid or Flock not found.", "timestamp": datetime.now().strftime('%H:%M')}]
+        return templates.TemplateResponse(
+            "partials/_chat_messages.html",
+            {"request": request, "history": error_history, "now": datetime.now},
+            status_code=404
+        )
+
+    history = _get_history_for_shared_chat(request, share_id)
+    current_time = datetime.now().strftime('%H:%M')
+    history.append({"role": "user", "text": message, "timestamp": current_time})
+    start_time = datetime.now()
+
+    bot_agent = frozen_chat_cfg.agent_name
+    bot_text: str
+
+    if bot_agent and bot_agent in getattr(flock_inst, "agents", {}):
+        run_input: dict = {}
+        if frozen_chat_cfg.message_key: run_input[frozen_chat_cfg.message_key] = message
+        if frozen_chat_cfg.history_key: run_input[frozen_chat_cfg.history_key] = [h["text"] for h in history if h.get("role") == "user" or h.get("role") == "bot"]
+
+        try:
+            result_dict = await flock_inst.run_async(start_agent=bot_agent, input=run_input, box_result=False)
+            if frozen_chat_cfg.response_key:
+                bot_text = str(result_dict.get(frozen_chat_cfg.response_key, result_dict))
+            else:
+                bot_text = str(result_dict)
+
+        except Exception as e:
+            bot_text = f"Error running agent {bot_agent} in shared chat: {e}"
+            is_error = True
+            logger.error(f"Error in /chat/send-shared (agent: {bot_agent}, share: {share_id}): {e}", exc_info=True)
+
+        if not is_error:
+            original_bot_text = bot_text # Keep a copy
+            formatted_as_json = False
+
+            stripped_text = bot_text.strip()
+            if (stripped_text.startswith('{') and stripped_text.endswith('}')) or \
+               (stripped_text.startswith('[') and stripped_text.endswith(']')):
+                try:
+                    parsed_obj = json.loads(bot_text)
+                    if isinstance(parsed_obj, (dict, list)):
+                        pretty_json = json.dumps(parsed_obj, indent=2).replace('\\n', '\n')
+                        bot_text = f'''<pre><code class="language-json">{pretty_json}</code></pre>'''
+                        formatted_as_json = True
+                except json.JSONDecodeError:
+                    try:
+                        evaluated_obj = ast.literal_eval(bot_text)
+                        if isinstance(evaluated_obj, (dict, list)):
+                            pretty_json = json.dumps(evaluated_obj, indent=2).replace('\\n', '\n')
+                            bot_text = f'''<pre><code class="language-json">{pretty_json}</code></pre>'''
+                            formatted_as_json = True
+                    except (ValueError, SyntaxError, TypeError):
+                        pass # Fall through
+                except Exception as e_json_fmt:
+                    logger.error(f"Error formatting likely JSON (shared chat): {e_json_fmt}. Original: {original_bot_text[:200]}", exc_info=True)
+                    bot_text = original_bot_text
+
+            if not formatted_as_json:
+                try:
+                    bot_text = markdown2.markdown(original_bot_text, extras=["fenced-code-blocks", "tables", "break-on-newline"])
+                except Exception:
+                    logger.error(f"Error during Markdown conversion for shared chat bot_text. Original: {original_bot_text[:200]}", exc_info=True)
+                    bot_text = original_bot_text
+    else:
+        # Fallback if agent misconfigured or not found in the specific shared flock
+        is_error = True # Treat these as plain text
+        if bot_agent and bot_agent not in getattr(flock_inst, "agents", {}):
+             bot_text = f"Agent '{bot_agent}' (shared) not found in its Flock."
+        elif not bot_agent:
+             bot_text = f"No agent configured for this shared chat. Echoing: {message}"
+        else: # Should not happen if frozen_chat_cfg and flock_inst were valid earlier
+             bot_text = f"Shared Echo: {message}"
+
+    duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+    history.append({"role": "bot", "text": bot_text, "timestamp": current_time, "agent": bot_agent or "shared-echo", "duration_ms": duration_ms})
+
+    return templates.TemplateResponse(
+        "partials/_chat_messages.html",
+        {"request": request, "history": history, "now": datetime.now}
+    )

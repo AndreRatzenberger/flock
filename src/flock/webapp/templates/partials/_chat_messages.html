@@ -6,7 +6,7 @@
         </div>
     {% else %}
         <div class="bubble bot">
-            {{ entry.text }}
+            {{ entry.text | safe }}
             <span class="chat-timestamp">{{ entry.timestamp|default(now().strftime('%H:%M')) }}{% if entry.agent %} - {{ entry.agent }}{% endif %}{% if entry.duration_ms is defined %} - {{ entry.duration_ms }}ms{% endif %}</span>
         </div>
     {% endif %}

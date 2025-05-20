@@ -8,11 +8,13 @@ from flock.core.api.custom_endpoint import FlockEndpoint
 if TYPE_CHECKING:
     from flock.core.api.run_store import RunStore
     from flock.core.flock import Flock
+    from flock.webapp.app.services.sharing_store import SharedLinkStoreInterface
 
 
 # These will be set once when the FastAPI app starts, via set_global_flock_services
 _flock_instance: Optional["Flock"] = None
 _run_store_instance: Optional["RunStore"] = None
+_shared_link_store_instance: Optional["SharedLinkStoreInterface"] = None
 
 # Global-like variable (scoped to this module) to temporarily store custom endpoints
 # before the app is fully configured and the lifespan event runs.
@@ -74,6 +76,19 @@ def set_global_flock_services(flock: Optional["Flock"], run_store: "RunStore"):
     logger.info(f"Global services set in dependencies: Flock='{flock.name if flock else 'None'}', RunStore type='{type(run_store)}'")
 
 
+def set_global_shared_link_store(store: "SharedLinkStoreInterface"):
+    """Called once at application startup to set the global SharedLinkStore."""
+    global _shared_link_store_instance
+    from flock.core.logging.logging import get_logger
+    logger = get_logger("dependencies")
+
+    if _shared_link_store_instance is not None:
+        logger.warning("Global SharedLinkStore is being re-initialized in dependencies.py.")
+
+    _shared_link_store_instance = store
+    logger.info(f"Global SharedLinkStore set in dependencies: Store type='{type(store)}'")
+
+
 def get_flock_instance() -> "Flock":
     """FastAPI dependency to get the globally available Flock instance."""
     if _flock_instance is None:
@@ -93,3 +108,10 @@ def get_run_store() -> "RunStore":
         # Similar to Flock instance, should be initialized at app startup.
         raise RuntimeError("RunStore instance has not been initialized in the application.")
     return _run_store_instance
+
+
+def get_shared_link_store() -> "SharedLinkStoreInterface":
+    """FastAPI dependency to get the globally available SharedLinkStore instance."""
+    if _shared_link_store_instance is None:
+        raise RuntimeError("SharedLinkStore instance has not been initialized in the application.")
+    return _shared_link_store_instance
