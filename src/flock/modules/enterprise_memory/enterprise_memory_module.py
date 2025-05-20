@@ -115,8 +115,10 @@ class EnterpriseMemoryModuleConfig(FlockModuleConfig):
 class EnterpriseMemoryStore:
     """Persistence layer that wraps Chroma + Cypher graph."""
 
-    def __init__(self, cfg: EnterpriseMemoryModuleConfig):
+    def __init__(self, cfg: EnterpriseMemoryModuleConfig, metrics_module: MetricsModule | None = None):
         self.cfg = cfg
+        # Metrics module (DI-resolved or fallback)
+        self._metrics = metrics_module or MetricsModule  # can be either instance or class exposing .record
         # Lazy initialise expensive resources
         self._embedding_model: SentenceTransformer | None = None
         self._adapter: VectorAdapter | None = None
@@ -215,7 +217,11 @@ class EnterpriseMemoryStore:
                 raise
             finally:
                 elapsed = (time.perf_counter() - start_t) * 1000  # ms
-                MetricsModule.record("memory_add_latency_ms", elapsed, {"backend": self.cfg.vector_backend})
+                self._metrics.record(
+                    "memory_add_latency_ms",
+                    elapsed,
+                    {"backend": self.cfg.vector_backend},
+                )
 
         # Schedule graph writes (batched)
         async with self._write_lock:
@@ -241,7 +247,9 @@ class EnterpriseMemoryStore:
             search_start = time.perf_counter()
             vector_hits = adapter.query(embedding=embedding, k=k)
             search_elapsed = (time.perf_counter() - search_start) * 1000
-            MetricsModule.record("memory_search_hits", len(vector_hits), {"backend": backend})
+            self._metrics.record(
+                "memory_search_hits", len(vector_hits), {"backend": backend}
+            )
             for hit in vector_hits:
                 if hit.score < threshold:
                     continue
@@ -255,7 +263,9 @@ class EnterpriseMemoryStore:
                 )
 
             span.set_attribute("results_count", len(results))
-            MetricsModule.record("memory_search_latency_ms", search_elapsed, {"backend": backend})
+            self._metrics.record(
+                "memory_search_latency_ms", search_elapsed, {"backend": backend}
+            )
             return results
 
     # ------------------------------------------------------------------
@@ -345,6 +355,54 @@ class EnterpriseMemoryModule(FlockModule):
     config: EnterpriseMemoryModuleConfig = Field(default_factory=EnterpriseMemoryModuleConfig)
 
     _store: EnterpriseMemoryStore | None = None
+    _container: Any | None = None  # DI container if supplied
+    _metrics_module: MetricsModule | None = None
+
+    # ----------------------------------------------------------
+    # DI-enabled constructor
+    # ----------------------------------------------------------
+    def __init__(
+        self,
+        name: str = "enterprise_memory",
+        config: EnterpriseMemoryModuleConfig | None = None,
+        *,
+        container: object | None = None,
+        **kwargs,
+    ):
+        """Create a new EnterpriseMemoryModule instance.
+
+        Parameters
+        ----------
+        container : ServiceProvider | None
+            Optional DI container used to resolve shared services.  When
+            provided, the module will attempt to resolve
+            :class:`flock.modules.performance.metrics_module.MetricsModule` from
+            it.  Falling back to the global singleton when not available keeps
+            backward-compatibility.
+        """
+        from wd.di.container import (
+            ServiceProvider,  # Local import to avoid hard dependency if wd.di is absent
+        )
+
+        if config is None:
+            config = EnterpriseMemoryModuleConfig()
+
+        super().__init__(name=name, config=config, **kwargs)
+
+        self._container = container if isinstance(container, ServiceProvider) else None
+
+        # Attempt to resolve MetricsModule via DI, then via FlockModule registry
+        resolved_metrics: MetricsModule | None = None
+        if self._container is not None:
+            try:
+                resolved_metrics = self._container.get_service(MetricsModule)
+            except Exception:
+                resolved_metrics = None
+
+        if resolved_metrics is None:
+            resolved_metrics = MetricsModule._INSTANCE
+
+        self._metrics_module = resolved_metrics
 
     # ----------------------------------------------------------
     # Life-cycle hooks
@@ -355,7 +413,7 @@ class EnterpriseMemoryModule(FlockModule):
         inputs: dict[str, Any],
         context: FlockContext | None = None,
     ) -> None:
-        self._store = EnterpriseMemoryStore(self.config)
+        self._store = EnterpriseMemoryStore(self.config, self._metrics_module)
         logger.info("EnterpriseMemoryModule initialised", agent=agent.name)
 
     async def on_pre_evaluate(

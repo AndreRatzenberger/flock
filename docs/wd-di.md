@@ -45,7 +45,7 @@ Therefore **both systems should coexist**:
    from wd.di import ServiceCollection
 
    sc = ServiceCollection()
-   sc.add_singleton(MetricsModule.get_global("performance_metrics"))
+   sc.add_singleton(MetricsModule())  # attach a metrics collector
    sc.add_singleton(lambda: get_logger("run"))
    sc.add_singleton(trace.get_tracer("flock"))
 

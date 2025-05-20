@@ -1404,6 +1404,7 @@ dependencies = [
     { name = "toml" },
     { name = "tqdm" },
     { name = "uvicorn" },
+    { name = "wd-di" },
     { name = "zep-python" },
 ]
 
@@ -1478,7 +1479,7 @@ requires-dist = [
     { name = "markdownify", marker = "extra == 'all-tools'", specifier = ">=0.14.1" },
     { name = "markdownify", marker = "extra == 'basic-tools'", specifier = ">=0.14.1" },
     { name = "matplotlib", specifier = ">=3.10.0" },
-    { name = "mem0ai", extras = ["graph"], specifier = "==0.1.101" },
+    { name = "mem0ai", extras = ["graph"], specifier = ">=0.1.101" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "nltk", marker = "extra == 'all-tools'", specifier = ">=3.9.1" },
     { name = "nltk", marker = "extra == 'llm-tools'", specifier = ">=3.9.1" },
@@ -1511,6 +1512,7 @@ requires-dist = [
     { name = "toml", specifier = ">=0.10.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "uvicorn", specifier = ">=0.34.0" },
+    { name = "wd-di", specifier = ">=0.2.14" },
     { name = "zep-python", specifier = ">=2.0.2" },
 ]
 provides-extras = ["basic-tools", "azure-tools", "llm-tools", "all-tools"]
