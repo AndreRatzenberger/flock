@@ -60,9 +60,12 @@ class Mem0Module(FlockModule):
         if self.config.api_key:
             memory = AsyncMemoryClient(api_key=self.config.api_key)
         else:
-            memory = await AsyncMemory.from_config(self.config.config)
+            memory = await AsyncMemory.from_config(config_dict=self.config.config)
 
-        messages = [ {"role": "user", "content": self.dict_to_str_repr(result)}]
+
+        to_remember = " - ".join(str(value) for value in result.values())
+
+        messages = [ {"role": "user", "content": "Please remember the following information: " + to_remember}]
 
         await memory.add(messages, user_id=self.config.user_id)
 
@@ -78,7 +81,7 @@ class Mem0Module(FlockModule):
         if self.config.api_key:
             memory = AsyncMemoryClient(api_key=self.config.api_key)
         else:
-            memory = await AsyncMemory.from_config(self.config.config)
+            memory = await AsyncMemory.from_config(config_dict=self.config.config)
         message = self.dict_to_str_repr(inputs)
 
 
