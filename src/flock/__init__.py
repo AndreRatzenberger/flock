@@ -17,6 +17,11 @@ def main():
         help="Start the web interface instead of the CLI",
     )
     parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Start a chat interface. If --web is also used, enables chat within the web app; otherwise, starts standalone chat.",
+    )
+    parser.add_argument(
         "--theme",
         type=str,
         default=None,
@@ -30,7 +35,7 @@ def main():
             # Set environment variable for theme if provided
             if args.theme:
                 print(
-                    f"Setting FLOCK_WEB_THEME environment variable to: {args.theme}"
+                    f"INFO: Setting FLOCK_WEB_THEME environment variable to: {args.theme}"
                 )
                 os.environ["FLOCK_WEB_THEME"] = args.theme
             else:
@@ -38,10 +43,20 @@ def main():
                 if "FLOCK_WEB_THEME" in os.environ:
                     del os.environ["FLOCK_WEB_THEME"]
 
-            # Import and run the standalone webapp main function
-            # It will now read the theme from the environment variable
-            from flock.webapp.run import main as run_webapp_main
+            if args.chat: # --web --chat
+                print("INFO: Starting web application with chat feature enabled.")
+                os.environ["FLOCK_CHAT_ENABLED"] = "true"
+            else: # Just --web
+                print("INFO: Starting web application.")
+                if "FLOCK_CHAT_ENABLED" in os.environ:
+                    del os.environ["FLOCK_CHAT_ENABLED"]
 
+            # Ensure standalone chat mode is not active
+            if "FLOCK_START_MODE" in os.environ:
+                 del os.environ["FLOCK_START_MODE"]
+
+            # Import and run the standalone webapp main function
+            from flock.webapp.run import main as run_webapp_main
             run_webapp_main()
 
         except ImportError:
@@ -52,6 +67,33 @@ def main():
             sys.exit(1)
         except Exception as e:
             print(f"Error starting webapp: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    elif args.chat: # Standalone chat mode (args.web is false)
+        try:
+            print("INFO: Starting standalone chat application.")
+            os.environ["FLOCK_START_MODE"] = "chat"
+
+            # Clear web-specific env vars that might conflict or not apply
+            if "FLOCK_WEB_THEME" in os.environ:
+                del os.environ["FLOCK_WEB_THEME"]
+            if "FLOCK_CHAT_ENABLED" in os.environ:
+                del os.environ["FLOCK_CHAT_ENABLED"]
+
+            # Handle --theme if passed with --chat only
+            if args.theme:
+                 print(f"INFO: Standalone chat mode started with --theme '{args.theme}'. FLOCK_WEB_THEME will be set.")
+                 os.environ["FLOCK_WEB_THEME"] = args.theme
+
+            from flock.webapp.run import main as run_webapp_main
+            run_webapp_main() # The webapp main needs to interpret FLOCK_START_MODE="chat"
+
+        except ImportError:
+            print("Error: Could not import webapp components for chat. Ensure web dependencies are installed.", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting standalone chat application: {e}", file=sys.stderr)
             sys.exit(1)
         return
 

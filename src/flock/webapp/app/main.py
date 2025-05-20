@@ -1,5 +1,6 @@
 # src/flock/webapp/app/main.py
 import json
+import os  # Added import
 import shutil
 import urllib.parse
 
@@ -146,8 +147,68 @@ async def lifespan(app: FastAPI):
         logger.info("SharedLinkStore initialized and set globally.")
     except Exception as e:
         logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)
-        # Depending on the desired behavior, you might want to prevent app startup
-        # or run in a degraded mode. For now, just log and continue.
+
+    # Configure chat features based on environment variables
+    # These are typically set by __init__.py when launching with --chat or --web --chat
+    flock_start_mode = os.environ.get("FLOCK_START_MODE")
+    flock_chat_enabled_env = os.environ.get("FLOCK_CHAT_ENABLED", "false").lower() == "true"
+
+    should_enable_chat_routes = False
+    if flock_start_mode == "chat":
+        should_enable_chat_routes = True
+        app.state.initial_redirect_to_chat = True # Signal dashboard to redirect
+        logger.info("FLOCK_START_MODE='chat'. Chat routes will be enabled and initial redirect to chat is set.")
+    elif flock_chat_enabled_env:
+        should_enable_chat_routes = True
+        logger.info("FLOCK_CHAT_ENABLED='true'. Chat routes will be enabled.")
+
+    app.state.chat_enabled = should_enable_chat_routes # For context in templates
+
+    if should_enable_chat_routes:
+        try:
+            from flock.webapp.app.chat import router as chat_router
+            app.include_router(chat_router, tags=["Chat"])
+            logger.info("Chat routes included in the application.")
+        except Exception as e:
+            logger.error(f"Failed to include chat routes during lifespan startup: {e}", exc_info=True)
+
+    # If in standalone chat mode, strip non-essential UI routes
+    if flock_start_mode == "chat":
+        from fastapi.routing import APIRoute
+        logger.info("FLOCK_START_MODE='chat'. Stripping non-chat UI routes.")
+
+        # Define tags for routes to KEEP.
+        # "Chat" for primary chat functionality.
+        # "Chat Sharing" for shared chat links & pages.
+        # API tags might be needed if chat agents make internal API calls or for general health/docs.
+        # Public static files (/static/...) are typically handled by app.mount and not in app.router.routes directly this way.
+        allowed_tags_for_chat_mode = {
+            "Chat",
+            "Chat Sharing",
+            "Flock API Core", # Keep core API for potential underlying needs
+            "Flock API Custom Endpoints" # Keep custom API endpoints
+        }
+
+        def _route_is_allowed_in_chat_mode(route: APIRoute) -> bool:
+            # Keep documentation (e.g. /docs, /openapi.json - usually no tags or specific tags)
+            # and non-API utility routes (often no tags).
+            if not hasattr(route, "tags") or not route.tags:
+                # Check common doc paths explicitly as they might not have tags or might have default tags
+                if route.path in ["/docs", "/openapi.json", "/redoc"]:
+                    return True
+                # Allow other untagged routes for now, assuming they are essential (e.g. static mounts if they appeared here)
+                # This might need refinement if untagged UI routes exist.
+                return True
+            return any(tag in allowed_tags_for_chat_mode for tag in route.tags)
+
+        original_route_count = len(app.router.routes)
+        app.router.routes = [r for r in app.router.routes if _route_is_allowed_in_chat_mode(r)]
+        num_removed = original_route_count - len(app.router.routes)
+        logger.info(f"Stripped {num_removed} routes for chat-only mode. {len(app.router.routes)} routes remaining.")
+
+        if num_removed > 0 and hasattr(app, "openapi_schema"):
+            app.openapi_schema = None # Clear cached OpenAPI schema to regenerate
+            logger.info("Cleared OpenAPI schema cache due to route removal.")
 
     # Add custom routes if any were passed during server startup
     # These are retrieved from the dependency module where `start_unified_server` stored them.
@@ -558,6 +619,7 @@ def get_base_context_web(
     current_flock_filename_from_state: str | None = getattr(request.app.state, "flock_filename", None)
     theme_name = get_current_theme_name()
     theme_css = generate_theme_css_web(theme_name)
+
     return {
         "request": request,
         "current_flock": flock_instance_from_state,
@@ -567,13 +629,18 @@ def get_base_context_web(
         "ui_mode": ui_mode,
         "theme_css": theme_css,
         "active_theme_name": theme_name,
-        "chat_enabled": getattr(request.app.state, "chat_enabled", False),
+        "chat_enabled": getattr(request.app.state, "chat_enabled", False), # Reverted to app.state
     }
 
 @app.get("/", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_dashboard(
     request: Request, error: str = None, success: str = None, ui_mode: str = Query(None)
 ):
+    # Handle initial redirect if flagged during app startup
+    if getattr(request.app.state, "initial_redirect_to_chat", False):
+        logger.info("Initial redirect to CHAT page triggered from dashboard (FLOCK_START_MODE='chat').")
+        return RedirectResponse(url="/chat", status_code=307)
+
     effective_ui_mode = ui_mode
     flock_is_preloaded = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
 
