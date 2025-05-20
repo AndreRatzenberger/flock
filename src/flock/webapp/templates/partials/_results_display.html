@@ -7,20 +7,21 @@
             <button role="button" class="outline contrast" @click="viewMode = 'structured'" :aria-pressed="viewMode === 'structured'">Structured</button>
             <button role="button" class="outline contrast" @click="viewMode = 'json'" :aria-pressed="viewMode === 'json'">Raw JSON</button>
 
-            <!-- Quick thumbs-up feedback (inline form so we have the identifiers) -->
-            <form hx-post="{{ feedback_endpoint }}" hx-target="#results-display-content" hx-swap="innerHTML" style="display:inline-block;margin-left:0.5rem;vertical-align:middle;" hx-indicator="#feedback-loading-indicator">
-                {# identifiers duplicated #}
-                {% if share_id %}<input type="hidden" name="share_id" value="{{ share_id }}">{% endif %}
-                <input type="hidden" name="flock_name" value="{{ flock_name }}">
-                <input type="hidden" name="agent_name" value="{{ agent_name }}">
-                <input type="hidden" name="flock_definition" value='{{ flock_definition | replace("'", "&#39;") }}'>
-                <input type="hidden" name="actual_response" value='{{ result_raw_json | replace("'", "&#39;") }}'>
-                <input type="hidden" name="reason" value="positive">
-                <button type="submit" role="button" class="outline contrast" title="Looks good!" style="padding:0.3rem 0.5rem;"><i class="fa fa-thumbs-up"></i></button>
-            </form>
+            <div style="display:inline-block;margin-left:0.5rem;">
+                <!-- Quick thumbs-up feedback (inline form so we have the identifiers) -->
+                <form hx-post="{{ feedback_endpoint }}" hx-target="#results-display-content" hx-swap="innerHTML" style="display:inline-block;vertical-align:middle;margin:0;" hx-indicator="#feedback-loading-indicator">
+                    {% if share_id %}<input type="hidden" name="share_id" value="{{ share_id }}">{% endif %}
+                    <input type="hidden" name="flock_name" value="{{ flock_name }}">
+                    <input type="hidden" name="agent_name" value="{{ agent_name }}">
+                    <input type="hidden" name="flock_definition" value='{{ flock_definition | replace("'", "&#39;") }}'>
+                    <input type="hidden" name="actual_response" value='{{ result_raw_json | replace("'", "&#39;") }}'>
+                    <input type="hidden" name="reason" value="positive">
+                    <button type="submit" role="button" class="outline contrast" title="Looks good!" style="padding:0.3rem 0.5rem;line-height:1;vertical-align:middle;margin:0;"><i class="fa fa-thumbs-up"></i></button>
+                </form>
 
-            <!-- Thumbs-down toggles detailed feedback form -->
-            <button role="button" class="outline contrast" @click="viewMode = 'feedback'" :aria-pressed="viewMode === 'feedback'" title="Something's wrong" style="margin-left:0.5rem;padding:0.3rem 0.5rem;"><i class="fa fa-thumbs-down"></i></button>
+                <!-- Thumbs-down toggles detailed feedback form -->
+                <button role="button" class="outline contrast" @click="viewMode = 'feedback'" :aria-pressed="viewMode === 'feedback'" title="Something's wrong" style="padding:0.3rem 0.5rem;line-height:1;vertical-align:middle;margin:0;"><i class="fa fa-thumbs-down"></i></button>
+            </div>
         </div>
     </header>
 
