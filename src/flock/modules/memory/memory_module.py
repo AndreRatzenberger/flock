@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import Field
-from tqdm import tqdm
 
 from flock.core.context.context import FlockContext
 
@@ -169,10 +168,11 @@ class MemoryModule(FlockModule):
 
     async def search_memory(
         self, agent: FlockAgent, query: dict[str, Any]
-    ) -> list[str]:
+    ) -> dict[str, Any]:
         """Search memory for the query."""
         if not self.memory_store:
-            return []
+            # No memory store loaded – just return the untouched input
+            return query
 
         try:
             input_text = json.dumps(query)
@@ -313,7 +313,7 @@ class MemoryModule(FlockModule):
         agent: FlockAgent,
         inputs: dict[str, Any],
         result: dict[str, Any],
-    ) -> str | list[dict[str, str]]:
+    ) -> list[str]:
         """Extract information chunks using semantic mode."""
         split_signature = agent.create_dspy_signature_class(
             f"{self.name}_splitter",
@@ -327,7 +327,15 @@ class MemoryModule(FlockModule):
         splitter = agent._select_task(split_signature, "Completion")
         full_text = json.dumps(inputs) + (json.dumps(result) if result else "")
         split_result = splitter(content=full_text)
-        return split_result.chunks
+        # Flatten list[dict] into list[str] of "title: content" strings to
+        # keep downstream storage logic simple and type-safe.
+        flattened: list[str] = []
+        for chunk in split_result.chunks:
+            if isinstance(chunk, dict):
+                flattened.extend([f"{k}: {v}" for k, v in chunk.items()])
+            else:
+                flattened.append(str(chunk))
+        return flattened
 
     async def _character_splitter_mode(
         self,
@@ -394,7 +402,8 @@ class MemoryModule(FlockModule):
         if isinstance(chunks, str):
             await self._store_chunk(agent, chunks)
         elif isinstance(chunks, list):
-            for chunk in tqdm(chunks, desc="Storing chunks in memory"):
+            # Avoid tqdm in async context – simple for-loop is safer.
+            for chunk in chunks:
                 await self._store_chunk(agent, chunk)
 
     def save_memory(self) -> None:
