@@ -14,7 +14,10 @@ from flock.core.flock import Flock
 from flock.core.logging.logging import get_logger
 from flock.webapp.app.dependencies import get_shared_link_store
 from flock.webapp.app.main import get_base_context_web, templates
-from flock.webapp.app.services.sharing_models import SharedLinkConfig
+from flock.webapp.app.services.sharing_models import (
+    FeedbackRecord,
+    SharedLinkConfig,
+)
 from flock.webapp.app.services.sharing_store import SharedLinkStoreInterface
 
 router = APIRouter()
@@ -224,7 +227,15 @@ async def chat_send(request: Request, message: str = Form(...)):
             # If even echo should be markdown, remove is_error=True here and let it pass through. For now, plain.
 
     duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
-    history.append({"role": "bot", "text": bot_text, "timestamp": current_time, "agent": bot_agent or "echo", "duration_ms": duration_ms})
+    history.append({
+        "role": "bot",
+        "text": bot_text,
+        "timestamp": current_time,
+        "agent": bot_agent or "echo",
+        "duration_ms": duration_ms,
+        "raw_json": original_bot_text if 'original_bot_text' in locals() else bot_text,
+        "flock_yaml": getattr(flock_inst, 'to_yaml', lambda: "")()
+    })
     # Return updated history partial
     return templates.TemplateResponse(
         "partials/_chat_messages.html",
@@ -516,9 +527,78 @@ async def chat_send_shared(
              bot_text = f"Shared Echo: {message}"
 
     duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
-    history.append({"role": "bot", "text": bot_text, "timestamp": current_time, "agent": bot_agent or "shared-echo", "duration_ms": duration_ms})
+    history.append({
+        "role": "bot",
+        "text": bot_text,
+        "timestamp": current_time,
+        "agent": bot_agent or "shared-echo",
+        "duration_ms": duration_ms,
+        "raw_json": original_bot_text if 'original_bot_text' in locals() else bot_text,
+        "flock_yaml": getattr(flock_inst, 'to_yaml', lambda: "")()
+    })
 
     return templates.TemplateResponse(
         "partials/_chat_messages.html",
         {"request": request, "history": history, "now": datetime.now}
     )
+
+# ---------------- Feedback endpoints ----------------
+@router.post("/chat/htmx/feedback", response_class=HTMLResponse, include_in_schema=False)
+async def chat_feedback(request: Request,
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    agent_name: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)):
+    from uuid import uuid4
+    rec = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=None,
+        context_type="chat",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_definition=flock_definition,
+        agent_name=agent_name,
+    )
+    await store.save_feedback(rec)
+    toast_event = {
+        "showGlobalToast": {
+            "message": "Feedback received! Thanks",
+            "type": "success"
+        }
+    }
+    headers = {"HX-Trigger": json.dumps(toast_event)}
+    return Response(status_code=204, headers=headers)
+
+
+@router.post("/chat/htmx/feedback-shared", response_class=HTMLResponse, include_in_schema=False)
+async def chat_feedback_shared(request: Request,
+    share_id: str = Form(...),
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    agent_name: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store)):
+    from uuid import uuid4
+    rec = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=share_id,
+        context_type="chat",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_definition=flock_definition,
+        agent_name=agent_name,
+    )
+    await store.save_feedback(rec)
+    toast_event = {
+        "showGlobalToast": {
+            "message": "Feedback received! Thanks",
+            "type": "success"
+        }
+    }
+    headers = {"HX-Trigger": json.dumps(toast_event)}
+    return Response(status_code=204, headers=headers)

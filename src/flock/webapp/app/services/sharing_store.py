@@ -5,7 +5,10 @@ from pathlib import Path
 
 import aiosqlite
 
-from flock.webapp.app.services.sharing_models import SharedLinkConfig
+from flock.webapp.app.services.sharing_models import (
+    FeedbackRecord,
+    SharedLinkConfig,
+)
 
 # Get a logger instance
 logger = logging.getLogger(__name__)
@@ -31,6 +34,12 @@ class SharedLinkStoreInterface(ABC):
     @abstractmethod
     async def delete_config(self, share_id: str) -> bool:
         """Deletes a shared link configuration by its ID. Returns True if deleted, False otherwise."""
+        pass
+
+    # Feedback
+    @abstractmethod
+    async def save_feedback(self, record: FeedbackRecord):
+        """Persist a feedback record."""
         pass
 
 class SQLiteSharedLinkStore(SharedLinkStoreInterface):
@@ -75,6 +84,25 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
                             logger.debug(f"Column '{column_name}' already exists in shared_links table.")
                         else:
                             raise # Re-raise if it's a different operational error
+
+                # Feedback table
+                await db.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        feedback_id TEXT PRIMARY KEY,
+                        share_id TEXT,
+                        context_type TEXT NOT NULL,
+                        reason TEXT NOT NULL,
+                        expected_response TEXT,
+                        actual_response TEXT,
+                        flock_name TEXT,
+                        agent_name TEXT,
+                        flock_definition TEXT,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY(share_id) REFERENCES shared_links(share_id)
+                    )
+                    """
+                )
 
                 await db.commit()
             logger.info(f"Database initialized and shared_links table schema ensured at {self.db_path}")
@@ -154,3 +182,34 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         except sqlite3.Error as e:
             logger.error(f"SQLite error deleting config for ID {share_id}: {e}", exc_info=True)
             return False # Or raise
+
+    # ----------------------- Feedback methods -----------------------
+
+    async def save_feedback(self, record: FeedbackRecord) -> FeedbackRecord:
+        """Persist a feedback record to SQLite."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    """INSERT INTO feedback (
+                        feedback_id, share_id, context_type, reason,
+                        expected_response, actual_response, flock_name, agent_name, flock_definition, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        record.feedback_id,
+                        record.share_id,
+                        record.context_type,
+                        record.reason,
+                        record.expected_response,
+                        record.actual_response,
+                        record.flock_name,
+                        record.agent_name,
+                        record.flock_definition,
+                        record.created_at.isoformat(),
+                    ),
+                )
+                await db.commit()
+            logger.info(f"Saved feedback {record.feedback_id} (share={record.share_id})")
+            return record
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error saving feedback {record.feedback_id}: {e}", exc_info=True)
+            raise

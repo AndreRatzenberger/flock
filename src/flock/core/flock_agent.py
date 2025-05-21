@@ -335,9 +335,64 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                     # For now, assume evaluator handles tool resolution if necessary
                     registered_tools = self.tools
 
-                result = await self.evaluator.evaluate(
-                    self, current_inputs, registered_tools
-                )
+                # --------------------------------------------------
+                # Optional DI middleware pipeline
+                # --------------------------------------------------
+                container = None
+                if self.context is not None:
+                    container = self.context.get_variable("di.container")
+
+                # If a MiddlewarePipeline is registered in DI, wrap the evaluator
+                result: dict[str, Any] | None = None
+
+                if container is not None:
+                    try:
+                        from wd.di.middleware import (
+                            MiddlewarePipeline,
+                        )
+
+                        pipeline: MiddlewarePipeline | None = None
+                        try:
+                            pipeline = container.get_service(MiddlewarePipeline)
+                        except Exception:
+                            pipeline = None
+
+                        if pipeline is not None:
+                            # Build execution chain where the evaluator is the terminal handler
+
+                            async def _final_handler():
+                                return await self.evaluator.evaluate(
+                                    self, current_inputs, registered_tools
+                                )
+
+                            idx = 0
+
+                            async def _invoke_next():
+                                nonlocal idx
+
+                                if idx < len(pipeline._middleware):
+                                    mw = pipeline._middleware[idx]
+                                    idx += 1
+                                    return await mw(self.context, _invoke_next)  # type: ignore[arg-type]
+                                return await _final_handler()
+
+                            # Execute pipeline
+                            result = await _invoke_next()
+                        else:
+                            # No pipeline registered, direct evaluation
+                            result = await self.evaluator.evaluate(
+                                self, current_inputs, registered_tools
+                            )
+                    except ImportError:
+                        # wd.di not installed – fall back
+                        result = await self.evaluator.evaluate(
+                            self, current_inputs, registered_tools
+                        )
+                else:
+                    # No DI container – standard execution
+                    result = await self.evaluator.evaluate(
+                        self, current_inputs, registered_tools
+                    )
             except Exception as eval_error:
                 logger.error(
                     "Error during evaluate",

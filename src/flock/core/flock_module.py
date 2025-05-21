@@ -52,6 +52,11 @@ class FlockModule(BaseModel, ABC):
         default_factory=FlockModuleConfig, description="Module configuration"
     )
 
+    # (Historic) global-module registry removed – prefer DI container instead.
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
     async def on_initialize(
         self,
         agent: Any,

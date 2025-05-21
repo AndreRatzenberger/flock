@@ -6,6 +6,22 @@
         <div style="text-align: right;">
             <button role="button" class="outline contrast" @click="viewMode = 'structured'" :aria-pressed="viewMode === 'structured'">Structured</button>
             <button role="button" class="outline contrast" @click="viewMode = 'json'" :aria-pressed="viewMode === 'json'">Raw JSON</button>
+
+            <div style="display:inline-block;margin-left:0.5rem;">
+                <!-- Quick thumbs-up feedback (inline form so we have the identifiers) -->
+                <form hx-post="{{ feedback_endpoint }}" hx-target="#results-display-content" hx-swap="innerHTML" style="display:inline-block;vertical-align:middle;margin:0;" hx-indicator="#feedback-loading-indicator">
+                    {% if share_id %}<input type="hidden" name="share_id" value="{{ share_id }}">{% endif %}
+                    <input type="hidden" name="flock_name" value="{{ flock_name }}">
+                    <input type="hidden" name="agent_name" value="{{ agent_name }}">
+                    <input type="hidden" name="flock_definition" value='{{ flock_definition | replace("'", "&#39;") }}'>
+                    <input type="hidden" name="actual_response" value='{{ result_raw_json | replace("'", "&#39;") }}'>
+                    <input type="hidden" name="reason" value="positive">
+                    <button type="submit" role="button" class="outline contrast" title="Looks good!" style="padding:0.3rem 0.5rem;line-height:1;vertical-align:middle;margin:0;"><i class="fa fa-thumbs-up"></i></button>
+                </form>
+
+                <!-- Thumbs-down toggles detailed feedback form -->
+                <button role="button" class="outline contrast" @click="viewMode = 'feedback'" :aria-pressed="viewMode === 'feedback'" title="Something's wrong" style="padding:0.3rem 0.5rem;line-height:1;vertical-align:middle;margin:0;"><i class="fa fa-thumbs-down"></i></button>
+            </div>
         </div>
     </header>
 
@@ -35,5 +51,28 @@
         {% else %}
             <p>No results to display yet.</p>
         {% endif %}
+    </div>
+
+    <!-- ---------------- Feedback form ---------------- -->
+    <div x-show="viewMode === 'feedback'" style="margin-top: 1rem;">
+        <form hx-post="{{ feedback_endpoint }}" hx-target="#results-display-content" hx-swap="innerHTML" hx-indicator="#feedback-loading-indicator">
+            {# Hidden identifiers #}
+            {% if share_id %}
+                <input type="hidden" name="share_id" value="{{ share_id }}">
+            {% endif %}
+            <input type="hidden" name="flock_name" value="{{ flock_name }}">
+            <input type="hidden" name="agent_name" value="{{ agent_name }}">
+            <input type="hidden" name="flock_definition" value='{{ flock_definition | replace("'", "&#39;") }}'>
+            <input type="hidden" name="actual_response" value='{{ result_raw_json | replace("'", "&#39;") }}'>
+
+            <label for="feedback_reason">Reason / Comment</label>
+            <textarea id="feedback_reason" name="reason" placeholder="Why isn't the answer good?" required style="min-height:6rem;"></textarea>
+
+            <label for="expected_response" style="margin-top:0.5rem;">Correct / Expected Response (JSON or text)</label>
+            <textarea id="expected_response" name="expected_response" style="white-space: pre; font-family: monospace; min-height:10rem;">{{ result_raw_json }}</textarea>
+
+            <button type="submit" class="secondary" style="margin-top:0.5rem;">Send Feedback</button>
+            <span id="feedback-loading-indicator" class="htmx-indicator"><progress indeterminate></progress> Sending…</span>
+        </form>
     </div>
 </article>

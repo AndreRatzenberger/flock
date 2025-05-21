@@ -1,8 +1,8 @@
 from typing import Any
 
-# from mem0.client.main import MemoryClient
-# from mem0.memory.main import Memory
-from mem0 import Memory, MemoryClient
+# from mem0.client.main import AsyncMemoryClient, MemoryClient
+# from mem0.memory.main import AsyncMemory
+from mem0 import AsyncMemory, AsyncMemoryClient
 from pydantic import Field
 
 from flock.core.context.context import FlockContext
@@ -25,7 +25,7 @@ config = {
 }
 
 
-class Mem0ModuleConfig(FlockModuleConfig):
+class AsyncMem0ModuleConfig(FlockModuleConfig):
     top_k: int = Field(default=10, description="Number of memories to retrieve")
     user_id: str = Field(default="flock", description="User ID the memories will be associated with")
     agent_id: str = Field(default="flock", description="Agent ID the memories will be associated with")
@@ -34,14 +34,14 @@ class Mem0ModuleConfig(FlockModuleConfig):
     config: dict[str, Any] = Field(default=config, description="Configuration for mem0")
 
 
-@flock_component(config_class=Mem0ModuleConfig)
-class Mem0Module(FlockModule):
+@flock_component(config_class=AsyncMem0ModuleConfig)
+class AsyncMem0Module(FlockModule):
 
     name: str = "mem0"
-    config: Mem0ModuleConfig = Mem0ModuleConfig()
+    config: AsyncMem0ModuleConfig = AsyncMem0ModuleConfig()
 
 
-    def __init__(self, name, config: Mem0ModuleConfig) -> None:
+    def __init__(self, name, config: AsyncMem0ModuleConfig) -> None:
         global memory
         """Initialize Mem0 module."""
         super().__init__(name=name, config=config)
@@ -62,9 +62,9 @@ class Mem0Module(FlockModule):
         result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self.config.api_key:
-            memory = MemoryClient(api_key=self.config.api_key)
+            memory = AsyncMemoryClient(api_key=self.config.api_key)
         else:
-            memory = Memory.from_config(config_dict=self.config.config)
+            memory = await AsyncMemory.from_config(config_dict=self.config.config)
 
         agent_id = self.config.agent_id if self.config.agent_id else agent.name
 
@@ -74,11 +74,11 @@ class Mem0Module(FlockModule):
         filtered_inputs = {k: v for k, v in inputs.items() if k not in [self.config.memory_input_key]}
 
         # add memories about the user inputs
-        added_user_memory =  memory.add(self.dict_to_str_repr(filtered_inputs), user_id=self.config.user_id)
+        added_user_memory = await memory.add(self.dict_to_str_repr(filtered_inputs), user_id=self.config.user_id)
         logger.info(f"Added caller memory: {added_user_memory}")
 
         # add memories about the agent result
-        added_agent_memory =  memory.add(self.dict_to_str_repr(filtered_result), agent_id=agent_id)
+        added_agent_memory = await memory.add(self.dict_to_str_repr(filtered_result), agent_id=agent_id)
         logger.info(f"Added agent memory: {added_agent_memory}")
 
 
@@ -91,17 +91,17 @@ class Mem0Module(FlockModule):
         context: FlockContext | None = None,
     ) -> dict[str, Any]:
         if self.config.api_key:
-            memory = MemoryClient(api_key=self.config.api_key)
+            memory = AsyncMemoryClient(api_key=self.config.api_key)
         else:
-            memory = Memory.from_config(config_dict=self.config.config)
+            memory = await AsyncMemory.from_config(config_dict=self.config.config)
 
         message = self.dict_to_str_repr(inputs)
         agent_id = self.config.agent_id if self.config.agent_id else agent.name
 
-        relevant_agent_memories = memory.search(query=message, agent_id=agent_id, limit=self.config.top_k)
+        relevant_agent_memories = await memory.search(query=message, agent_id=agent_id, limit=self.config.top_k)
         logger.info(f"Relevant agent memories: {relevant_agent_memories}")
 
-        relevant_user_memories = memory.search(query=message, user_id=self.config.user_id, limit=self.config.top_k)
+        relevant_user_memories = await memory.search(query=message, user_id=self.config.user_id, limit=self.config.top_k)
         logger.info(f"Relevant user memories: {relevant_user_memories}")
 
         if relevant_agent_memories or relevant_user_memories:
