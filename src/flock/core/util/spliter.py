@@ -188,6 +188,9 @@ if __name__ == "__main__":
 
 
     SAMPLE_18 = "ticket_info : str, reasoning : str, search_queries : list[str], relevant_documents: dict[str, float] | dict of pdf_ids as keys and scores as values"
+
+
+    SAMPLE_19 = "title, headings: list[str], entities_and_metadata: list[dict[str, str]], type:Literal['news', 'blog', 'opinion piece', 'tweet']"
     # ➜ [('münze', 'str', "Deutsche Münzbezeichnung, engl. 'coin'")]
 
     for title, spec in [
@@ -209,6 +212,7 @@ if __name__ == "__main__":
         ("Sample-16", SAMPLE_16),
         ("Sample-17", SAMPLE_17),
         ("Sample-18", SAMPLE_18),
+        ("Sample-19", SAMPLE_19),
     ]:
         print(f"\n{title}")
         for row in parse_schema(spec):

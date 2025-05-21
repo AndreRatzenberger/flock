@@ -1,10 +1,13 @@
 # src/flock/core/mixin/dspy_integration.py
 """Mixin class for integrating with the dspy library."""
 
+import ast
 import re  # Import re for parsing
 import typing
 from typing import Any, Literal
+
 from dspy import Tool
+
 from flock.core.logging.logging import get_logger
 from flock.core.util.spliter import split_top_level
 
@@ -68,12 +71,15 @@ def _resolve_type_string(type_str: str) -> type:
             # Special handling for Literal
             if BaseType is typing.Literal:
                 # Split literal values, remove quotes, strip whitespace
-                literal_args_raw = split_top_level(args_str)
-                literal_args = tuple(
-                    s.strip().strip("'\"") for s in literal_args_raw
-                )
+                def parse_literal_args(args_str: str) -> tuple[str, ...]:
+                    try:
+                        return tuple(ast.literal_eval(f"[{args_str}]"))
+                    except (SyntaxError, ValueError) as exc:
+                        raise ValueError(f"Cannot parse {args_str!r} as literals") from exc
+
+                literal_args = parse_literal_args(args_str)
                 logger.debug(
-                    f"Parsing Literal arguments: {literal_args_raw} -> {literal_args}"
+                    f"Parsing Literal arguments: {args_str} -> {literal_args}"
                 )
                 resolved_type = typing.Literal[literal_args]  # type: ignore
                 logger.debug(f"Constructed Literal type: {resolved_type}")
