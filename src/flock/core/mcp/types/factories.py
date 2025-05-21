@@ -44,7 +44,7 @@ def default_flock_mcp_logging_callback_factory(
         return await default_logging_callback(
             params=params,
             logger=logger_to_use,
-            server_name=associated_client.config.server_name,
+            server_name=associated_client.config.name,
         )
 
 
@@ -60,7 +60,7 @@ def default_flock_mcp_sampling_callback_factory(
         params: CreateMessageRequestParams,
     ):
         logger_to_use.info(
-            f"SAMPLING_REQUEST: server '{associated_client.config.server_name}' sent a sampling request: {params}"
+            f"SAMPLING_REQUEST: server '{associated_client.config.name}' sent a sampling request: {params}"
         )
         await default_sampling_callback(
             ctx=ctx, params=params, logger=logger_to_use

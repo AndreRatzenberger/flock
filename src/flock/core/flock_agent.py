@@ -331,7 +331,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                         server_tools = []
                         if isinstance(server, FlockMCPServerBase):
                             # check if registered
-                            server_name = server.config.server_name
+                            server_name = server.config.name
                             registered_server = FlockRegistry.get_server(
                                 server_name
                             )
@@ -626,7 +626,14 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         FlockRegistry = get_registry()
 
-        exclude = ["context", "evaluator", "modules", "handoff_router", "tools"]
+        exclude = [
+            "context",
+            "evaluator",
+            "modules",
+            "handoff_router",
+            "tools",
+            "servers",
+        ]
 
         is_descrition_callable = False
         is_input_callable = False
@@ -727,7 +734,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             serialized_servers = []
             for server in self.servers:
                 if isinstance(server, FlockMCPServerBase):
-                    serialized_servers.append(server.config.server_name)
+                    serialized_servers.append(server.config.name)
                 else:
                     # Write it down as a list of server names.
                     serialized_servers.append(server)
@@ -976,40 +983,36 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                         exc_info=True,
                     )
 
-            # --- Deserialize Servers ---
-            agent.servers = []  # Initialize Servers list.
-            if servers_config:
-                logger.debug(
-                    f"Deserializing {len(servers_config)} servers for '{agent.name}'"
-                )
-                # Ask the registry for registered servers
-                for server_name in servers_config:
-                    try:
-                        from flock.core.mcp.flock_mcp_server import (
-                            FlockMCPServerBase as ConcreteFlockMCPServer,
-                        )
+        # --- Deserialize Servers ---
+        agent.servers = []  # Initialize Servers list.
+        if servers_config:
+            logger.debug(
+                f"Deserializing {len(servers_config)} servers for '{agent.name}'"
+            )
+            # Agents keep track of server by getting a list of server names.
+            # The server instances will be retrieved during runtime from the registry. (default behavior)
 
-                        found_server = registry.get_server(server_name)
-                        if found_server and isinstance(
-                            found_server, ConcreteFlockMCPServer
-                        ):
-                            agent.servers.append(found_server)
-                            logger.debug(
-                                f"Resolved and added server '{server_name}' for agent '{agent.name}'"
-                            )
-                        else:
-                            logger.warning(
-                                f"Registry returned no server instance for server '{server_name}' for agent '{agent.name}'. Skipping..."
-                            )
-                    except ValueError as e:
-                        logger.warning(
-                            f"Could not resolve server '{server_name}' for agent '{agent.name}': {e}. Skipping..."
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Unexpected error resolving server '{server_name}' for agent '{agent.name}': {e}. Skipping...",
-                            exc_info=True,
-                        )
+            for server_name in servers_config:
+                if isinstance(server_name, str):
+                    # Case 1 (default behavior): A server name is passe.
+                    agent.servers.append(server_name)
+                elif isinstance(server_name, FlockMCPServerBase):
+                    # Case 2 (highly unlikely): If someone somehow manages to pass
+                    # an instance of a server during the deserialization step (however that might be achieved)
+                    # check the registry, if the server is already registered, if not, register it
+                    # and store the name in the servers list
+                    FlockRegistry = get_registry()
+                    server_exists = (
+                        FlockRegistry.get_server(server_name.config.name)
+                        is not None
+                    )
+                    if server_exists:
+                        agent.servers.append(server_name.config.name)
+                    else:
+                        FlockRegistry.register_server(
+                            server=server_name
+                        )  # register it.
+                        agent.servers.append(server_name.config.name)
 
         # --- Deserialize Callables ---
         logger.debug(f"Deserializing callable fields for '{agent.name}'")

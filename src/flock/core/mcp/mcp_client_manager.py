@@ -73,7 +73,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
             async with self.lock:
                 try:
                     logger.debug(
-                        f"Attempting to get client for server '{self.client_config.server_name}'"
+                        f"Attempting to get client for server '{self.client_config.name}'"
                     )
                     refresh = False
                     if additional_params:
@@ -110,7 +110,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                 except Exception as e:
                     # Log the exception and raise it so it becomes visible downstream
                     logger.error(
-                        f"Unexpected Exception ocurred while trying to get client for server '{self.client_config.server_name}' with agent_id: {agent_id} and run_id: {run_id}: {e}"
+                        f"Unexpected Exception ocurred while trying to get client for server '{self.client_config.name}' with agent_id: {agent_id} and run_id: {run_id}: {e}"
                     )
                     span.record_exception(e)
                     raise e
@@ -144,7 +144,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                 return result
             except Exception as e:
                 logger.error(
-                    f"Exception occurred while trying to call tool {name} on server '{self.client_config.server_name}': {e}"
+                    f"Exception occurred while trying to call tool {name} on server '{self.client_config.name}': {e}"
                 )
                 span.record_exception(e)
                 return None
@@ -171,7 +171,7 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                 return tools
             except Exception as e:
                 logger.error(
-                    f"Exception occurred while trying to retrieve Tools for server '{self.client_config.server_name}' with agent_id: {agent_id} and run_id: {run_id}: {e}"
+                    f"Exception occurred while trying to retrieve Tools for server '{self.client_config.name}' with agent_id: {agent_id} and run_id: {run_id}: {e}"
                 )
                 span.record_exception(e)
                 return []
@@ -192,10 +192,10 @@ class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
                             await client.disconnect()
                         except Exception as e:
                             logger.error(
-                                f"Error when trying to disconnect client for server '{self.client_config.server_name}': {e}"
+                                f"Error when trying to disconnect client for server '{self.client_config.name}': {e}"
                             )
                             span.record_exception(e)
                 self.clients = {}  # Let the GC take care of the rest.
                 logger.info(
-                    f"All clients disconnected for server '{self.client_config.server_name}'"
+                    f"All clients disconnected for server '{self.client_config.name}'"
                 )

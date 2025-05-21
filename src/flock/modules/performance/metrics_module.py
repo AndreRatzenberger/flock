@@ -15,6 +15,7 @@ from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.flock_registry import flock_component
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
 
 class MetricPoint(BaseModel):
@@ -87,7 +88,10 @@ class MetricsModule(FlockModule):
         super().__init__(name=name, config=config)
         self._metrics = defaultdict(list)
         self._start_time: float | None = None
+        self._server_start_time: float | None = None
         self._start_memory: int | None = None
+        self._server_start_memory: int | None = None
+        self._client_refreshs: int = 0
 
         # Set up storage
         if self.config.storage_type == "json":
@@ -253,7 +257,7 @@ class MetricsModule(FlockModule):
             # Get all unique metric names from files
             all_metrics = self._load_metrics_from_files()
 
-            for metric_name in all_metrics.keys():
+            for metric_name in all_metrics:
                 stats = self.get_statistics(metric_name)
                 if stats:  # Only include metrics that have data
                     summary["metrics"][metric_name] = stats
@@ -495,3 +499,157 @@ class MetricsModule(FlockModule):
             1,
             {"agent": agent.name, "error_type": type(error).__name__},
         )
+
+    # --- MCP Server Lifecycle Hooks ---
+    async def on_server_error(
+        self, server: FlockMCPServerBase, error: Exception
+    ) -> None:
+        """Record server error metrics."""
+        self._record_metric(
+            "errors",
+            1,
+            {
+                "server": server.config.name,
+                "error_type": type(error).__name__,
+            },
+        )
+
+    async def on_pre_server_init(self, server: FlockMCPServerBase):
+        """Initialize metrics collection for server."""
+        self._server_start_time = time.time()
+
+        if self.config.collect_memory:
+            self._server_start_memory = psutil.Process().memory_info().rss
+            self._record_metric(
+                "server_memory",
+                self._server_start_memory,
+                {"server": server.config.name, "phase": "pre_init"},
+            )
+
+    async def on_post_server_init(self, server: FlockMCPServerBase):
+        """Collect metrics after server starts."""
+        if self.config.collect_memory:
+            checkpoint_memory = psutil.Process().memory_info().rss
+            self._record_metric(
+                "server_memory",
+                checkpoint_memory,
+                {"server": server.config.name, "phase": "post_init"},
+            )
+
+    async def on_pre_server_terminate(self, server: FlockMCPServerBase):
+        """Collect metrics before server terminates."""
+        if self.config.collect_memory:
+            checkpoint_memory = psutil.Process().memory_info().rss
+            self._record_metric(
+                "server_memory",
+                checkpoint_memory,
+                {"server": server.config.name, "phase": "pre_terminate"},
+            )
+
+    async def on_post_server_terminate(self, server: FlockMCPServerBase):
+        """Collect metrics after server terminates.
+
+        Clean up and final metric recording.
+        """
+        if self.config.storage_type == "json":
+            # Save aggregated metrics
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            summary_file = os.path.join(
+                self.config.metrics_dir,
+                f"summary_{server.config.name}_{timestamp}.json",
+            )
+
+            # Calculate summary for all metrics
+            summary = {
+                "server": server.config.name,
+                "timestamp": timestamp,
+                "metrics": {},
+            }
+
+            # Get all unique metric names from files
+            all_metrics = self._load_metrics_from_files()
+
+            for metric_name in all_metrics:
+                stats = self.get_statistics(metric_name)
+                if stats:  # Only include metrics that have data
+                    summary["metrics"][metric_name] = stats
+            with open(summary_file, "w") as f:
+                json.dump(summary, f, indent=2)
+
+    async def on_pre_mcp_call(
+        self, server: FlockMCPServerBase, arguments: Any | None = None
+    ):
+        """Record pre-call metrics."""
+        if self.config.collect_cpu:
+            cpu_percent = psutil.Process().cpu_percent()
+            self._record_metric(
+                "cpu",
+                cpu_percent,
+                {"server": server.config.name, "phase": "pre_mcp_call"},
+            )
+        if self.config.collect_memory:
+            current_memory = psutil.Process().memory_info().rss
+            memory_diff = current_memory - self._server_start_memory
+            self._record_metric(
+                "memory",
+                memory_diff,
+                {"server": server.config.name, "phase": "pre_mcp_call"},
+            )
+
+        if isinstance(arguments, dict):
+            self._record_metric(
+                "arguments",
+                len(arguments),
+                {
+                    "server": server.config.name,
+                    "phase": "pre_mcp_call",
+                }.update(arguments),
+            )
+
+    async def on_post_mcp_call(
+        self, server: FlockMCPServerBase, result: Any | None = None
+    ):
+        """Record post-call metrics."""
+        if self.config.collect_timing and self._server_start_time:
+            latency = time.time() - self._server_start_time
+            self._record_metric(
+                "latency", latency, {"server": server.config.name}
+            )
+
+            # Check for alerts
+            if self._should_alert("latency", latency):
+                # In practice, you'd want to integrate with a proper alerting system
+                print(f"ALERT: High latency detected: {latency * 1000:.2f}ms")
+
+        if self.config.collect_cpu:
+            cpu_percent = psutil.Process().cpu_percent()
+            self._record_metric(
+                "cpu",
+                cpu_percent,
+                {"server": server.config.name, "phase": "post_mcp_call"},
+            )
+        if self.config.collect_memory:
+            current_memory = psutil.Process().memory_info().rss
+            memory_diff = current_memory - self._server_start_memory
+            self._record_metric(
+                "memory",
+                memory_diff,
+                {"server": server.config.name, "phase": "post_mcp_call"},
+            )
+
+    async def on_connect(
+        self, server: FlockMCPServerBase, additional_params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Collect metrics during connect."""
+        # We should track the refresh rate for clients
+        if "refresh_client" in additional_params and additional_params.get(
+            "refresh_client", False
+        ):
+            self._client_refreshs += 1
+            self._record_metric(
+                "client_refreshs",
+                self._client_refreshs,
+                {"server": server.config.name, "phase": "connect"},
+            )
+
+        return additional_params

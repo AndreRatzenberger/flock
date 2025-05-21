@@ -268,6 +268,31 @@ class Flock(BaseModel, Serializable):
             set_baggage("session_id", session_id)
             logger.debug(f"Generated new session_id: {session_id}")
 
+    def _ensure_server_is_in_registry(
+        self, server: FlockMCPServerBase
+    ) -> FlockMCPServerBase:
+        """Ensure that a passed server is actually in the registry."""
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockMCPServer,
+        )
+
+        if not isinstance(server, ConcreteFlockMCPServer):
+            raise TypeError("Provided object is not a FlockMCPServer instance.")
+        if not server.config.name:
+            raise ValueError("Server must have a name.")
+
+        # check if server exists.
+        registered_server = FlockRegistry.get_server(server.config.name)
+
+        # if server is already registered, return it
+        if registered_server:
+            return server
+        else:
+            # else, register the server.
+            FlockRegistry.register_server(server=server)
+            registered_server = FlockRegistry.get_server(server.config.name)
+            return registered_server
+
     def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
         """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by self._mgr."""
         from flock.core.mcp.flock_mcp_server import (
@@ -276,13 +301,13 @@ class Flock(BaseModel, Serializable):
 
         if not isinstance(server, ConcreteFlockMCPServer):
             raise TypeError("Provided object is not a FlockMCPServer instance.")
-        if not server.config.server_name:
+        if not server.config.name:
             raise ValueError("Server must have a name.")
 
-        if server.config.server_name in self._servers:
+        if server.config.name in self._servers:
             raise ValueError("Server with this name already exists.")
 
-        self._servers[server.config.server_name] = server
+        self._servers[server.config.name] = server
         FlockRegistry.register_server(server)  # Register globally.
 
         # Make sure that the server is also added to
@@ -291,21 +316,21 @@ class Flock(BaseModel, Serializable):
             self._mgr = FlockServerManager()
 
         # Prepare server to be managed by the FlockServerManager
-        logger.info(
-            f"Adding server '{server.config.server_name}' to managed list."
-        )
+        logger.info(f"Adding server '{server.config.name}' to managed list.")
         self._mgr.add_server_sync(server=server)
-        logger.info(
-            f"Server '{server.config.server_name}' is now on managed list."
-        )
+        logger.info(f"Server '{server.config.name}' is now on managed list.")
 
         logger.info(
-            f"Server '{server.config.server_name}' added to Flock '{self.name}'"
+            f"Server '{server.config.name}' added to Flock '{self.name}'"
         )
         return server
 
     def add_agent(self, agent: FlockAgent) -> FlockAgent:
-        """Adds an agent instance to this Flock configuration and registry."""
+        """Adds an agent instance to this Flock configuration and registry.
+
+        This also registers all servers attached to the agent, if they have not been registered
+        beforehand.
+        """
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
 
         if not isinstance(agent, ConcreteFlockAgent):
@@ -337,6 +362,11 @@ class Flock(BaseModel, Serializable):
     def agents(self) -> dict[str, FlockAgent]:
         """Returns the dictionary of agents managed by this Flock instance."""
         return self._agents
+
+    @property
+    def servers(self) -> dict[str, FlockMCPServerBase]:
+        """Returns the dictionary of servers managed by this Flock instance."""
+        return self._servers
 
     def run(
         self,
@@ -405,14 +435,27 @@ class Flock(BaseModel, Serializable):
         )
 
         with tracer.start_as_current_span("flock.run_async") as span:
-            # Add passed servers first, so that agents have access to them
+            # Ensure that servers managed by this Flock instance are also
+            # registered within the registry, in order for agents
+            # who are attached to servers not explicitly passed in
+            # `servers` have access to those servers.
+            if self.servers:
+                for _, server_obj in self.servers.items():
+                    if isinstance(server_obj, ConcreteFlockServer):
+                        self._ensure_server_is_in_registry(server=server_obj)
+                    else:
+                        logger.warning(
+                            f"Item in 'self.servers' is not a FlockMCPServer: {type(server_obj)}"
+                        )
+
+            # Add passed servers so that agents have access to them.
             if servers:
                 for server_obj in servers:
                     if isinstance(server_obj, ConcreteFlockServer):
                         self.add_server(server=server_obj)
                     else:
                         logger.warning(
-                            f"Item in 'servers' list is not a FlocMCPServer: {type(server_obj)}"
+                            f"Item in 'servers' list is not a FlockMCPServer: {type(server_obj)}"
                         )
 
             # Add passed agents

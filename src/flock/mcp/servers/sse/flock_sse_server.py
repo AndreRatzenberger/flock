@@ -103,8 +103,8 @@ class FlockSSEClient(FlockMCPClientBase):
         return sse_client(
             url=param_copy.url,
             headers=param_copy.headers,
-            timeout=param_copy.timeout,
-            sse_read_timeout=param_copy.sse_read_timeout,
+            timeout=float(param_copy.timeout),
+            sse_read_timeout=float(param_copy.sse_read_timeout),
         )
 
 

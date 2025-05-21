@@ -173,23 +173,20 @@ class FlockRegistry:
     # --- Server Registration ---
     def register_server(self, server: FlockMCPServerBase) -> None:
         """Registers a flock mcp server by its name."""
-        if (
-            not hasattr(server.config, "server_name")
-            or not server.config.server_name
-        ):
+        if not hasattr(server.config, "name") or not server.config.name:
             logger.error(
-                "Attempted to register a server without a valid 'server_name' attribute."
+                "Attempted to register a server without a valid 'name' attribute."
             )
             return
         if (
-            server.config.server_name in self._servers
-            and self._servers[server.config.server_name] != server
+            server.config.name in self._servers
+            and self._servers[server.config.name] != server
         ):
             logger.warning(
-                f"Server '{server.config.server_name}' already registered. Overwriting."
+                f"Server '{server.config.name}' already registered. Overwriting."
             )
-        self._servers[server.config.server_name] = server
-        logger.debug(f"Registered server: {server.config.server_name}")
+        self._servers[server.config.name] = server
+        logger.debug(f"Registered server: {server.config.name}")
 
     def get_server(self, name: str) -> FlockMCPServerBase | None:
         """Retrieves a registered FlockMCPServer instance by name."""

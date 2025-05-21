@@ -100,19 +100,19 @@ class FlockModule(BaseModel, ABC):
         """Called when an error occurs during agent execution."""
         pass
 
-    async def pre_server_init(self, server: Any) -> None:
+    async def on_pre_server_init(self, server: Any) -> None:
         """Called before a server initializes."""
         pass
 
-    async def post_server_init(self, server: Any) -> None:
+    async def on_post_server_init(self, server: Any) -> None:
         """Called after a server initialized."""
         pass
 
-    async def pre_server_terminate(self, server: Any) -> None:
+    async def on_pre_server_terminate(self, server: Any) -> None:
         """Called before a server terminates."""
         pass
 
-    async def post_server_teminate(self, server: Any) -> None:
+    async def on_post_server_terminate(self, server: Any) -> None:
         """Called after a server terminates."""
         pass
 
@@ -120,11 +120,11 @@ class FlockModule(BaseModel, ABC):
         """Called when a server errors."""
         pass
 
-    async def before_connect(
+    async def on_connect(
         self,
         server: Any,
         additional_params: dict[str, Any],
-    ) -> None:
+    ) -> dict[str, Any]:
         """Called before a connection is being established to a mcp server.
 
         use `server` (type FlockMCPServer) to modify the core behavior of the server.
@@ -185,7 +185,7 @@ class FlockModule(BaseModel, ABC):
         """
         pass
 
-    async def pre_mcp_call(
+    async def on_pre_mcp_call(
         self,
         server: Any,
         arguments: Any | None = None,
@@ -193,7 +193,7 @@ class FlockModule(BaseModel, ABC):
         """Called before any MCP Calls."""
         pass
 
-    async def post_mcp_call(
+    async def on_post_mcp_call(
         self,
         server: Any,
         result: Any | None = None,

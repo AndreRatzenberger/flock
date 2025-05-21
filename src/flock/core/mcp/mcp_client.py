@@ -158,9 +158,7 @@ class FlockMCPClientBase(BaseModel, ABC):
                     cfg = client.config
                     max_tries = cfg.connection_config.max_retries or 1
                     base_delay = 0.1
-                    span.set_attribute(
-                        "client.server_name", client.config.server_name
-                    )
+                    span.set_attribute("client.name", client.config.name)
 
                     for attempt in range(1, max_tries + 2):
                         span.set_attribute(
@@ -441,7 +439,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         Uses a lock under the hood.
         """
         async with self.lock:
-            return self.config.server_name
+            return self.config.name
 
     async def get_roots(self) -> list[Root] | None:
         """Get the currently set roots of the client.
@@ -466,55 +464,53 @@ class FlockMCPClientBase(BaseModel, ABC):
 
     async def invalidate_tool_cache(self) -> None:
         """Invalidate the entries in the tool cache."""
-        logger.debug(
-            f"Invalidating tool_cache for server '{self.config.server_name}'"
-        )
+        logger.debug(f"Invalidating tool_cache for server '{self.config.name}'")
         async with self.lock:
             if self.tool_cache:
                 self.tool_cache.clear()
                 logger.debug(
-                    f"Invalidated tool_cache for server '{self.config.server_name}'"
+                    f"Invalidated tool_cache for server '{self.config.name}'"
                 )
 
     async def invalidate_resource_list_cache(self) -> None:
         """Invalidate the entries in the resource list cache."""
         logger.debug(
-            f"Invalidating resource_list_cache for server '{self.config.server_name}'"
+            f"Invalidating resource_list_cache for server '{self.config.name}'"
         )
         async with self.lock:
             if self.resource_list_cache:
                 self.resource_list_cache.clear()
                 logger.debug(
-                    f"Invalidated resource_list_cache for server '{self.config.server_name}'"
+                    f"Invalidated resource_list_cache for server '{self.config.name}'"
                 )
 
     async def invalidate_resource_contents_cache(self) -> None:
         """Invalidate the entries in the resource contents cache."""
         logger.debug(
-            f"Invalidating resource_contents_cache for server '{self.config.server_name}'."
+            f"Invalidating resource_contents_cache for server '{self.config.name}'."
         )
         async with self.lock:
             if self.resource_contents_cache:
                 self.resource_contents_cache.clear()
                 logger.debug(
-                    f"Invalidated resource_contents_cache for server '{self.config.server_name}'"
+                    f"Invalidated resource_contents_cache for server '{self.config.name}'"
                 )
 
     async def invalidate_resource_contents_cache_entry(self, key: str) -> None:
         """Invalidate a single entry in the resource contents cache."""
         logger.debug(
-            f"Attempting to clear entry with key: {key} from resource_contents_cache for server '{self.config.server_name}'"
+            f"Attempting to clear entry with key: {key} from resource_contents_cache for server '{self.config.name}'"
         )
         async with self.lock:
             if self.resource_contents_cache:
                 try:
                     self.resource_contents_cache.pop(key, None)
                     logger.debug(
-                        f"Cleared entry with key {key} from resource_contents_cache for server '{self.config.server_name}'"
+                        f"Cleared entry with key {key} from resource_contents_cache for server '{self.config.name}'"
                     )
                 except Exception as e:
                     logger.debug(
-                        f"No entry for key {key} found in resource_contents_cache for server '{self.config.server_name}'. Ignoring. (Exception was: {e})"
+                        f"No entry for key {key} found in resource_contents_cache for server '{self.config.name}'. Ignoring. (Exception was: {e})"
                     )
                     return  # do nothing
 
@@ -530,9 +526,7 @@ class FlockMCPClientBase(BaseModel, ABC):
     # --- Private Methods ---
     async def _create_session(self) -> None:
         """Create and hol onto a single ClientSession + ExitStack."""
-        logger.debug(
-            f"Creating Client Session for server '{self.config.server_name}'"
-        )
+        logger.debug(f"Creating Client Session for server '{self.config.name}'")
         stack = AsyncExitStack()
         await stack.__aenter__()
 
@@ -570,9 +564,7 @@ class FlockMCPClientBase(BaseModel, ABC):
                 logging_callback=self.logging_callback,
             )
         )
-        logger.debug(
-            f"Created Client Session for server '{self.config.server_name}'"
-        )
+        logger.debug(f"Created Client Session for server '{self.config.name}'")
         # store for reuse
         self.session_stack = stack
         self.client_session = session
@@ -586,13 +578,13 @@ class FlockMCPClientBase(BaseModel, ABC):
             # if already connected, return it
             if self.client_session:
                 logger.debug(
-                    f"Client Session for Server '{self.config.server_name}' exists and is healthy."
+                    f"Client Session for Server '{self.config.name}' exists and is healthy."
                 )
                 return self.client_session
 
             else:
                 logger.debug(
-                    f"Client Session for Server '{self.config.server_name}' does not exist yet. Connecting..."
+                    f"Client Session for Server '{self.config.name}' does not exist yet. Connecting..."
                 )
                 await self._create_session()
 
@@ -605,14 +597,14 @@ class FlockMCPClientBase(BaseModel, ABC):
         """Tell the server who we are, what capabilities we have, and what roots we're interested in."""
         # 1) do the LSP-style initialize handshake
         logger.debug(
-            f"Performing intialize handshake with server '{self.config.server_name}'"
+            f"Performing intialize handshake with server '{self.config.name}'"
         )
         init: InitializeResult = await self.client_session.initialize()
 
         self.connected_server_capabilities = init
 
         init_report = f"""
-            Server Init Handshake completed Server '{self.config.server_name}'
+            Server Init Handshake completed Server '{self.config.name}'
             Lists the following Capabilities:
 
             - Protocol Version: {init.protocolVersion}
@@ -638,7 +630,7 @@ class FlockMCPClientBase(BaseModel, ABC):
             )
         except McpError as e:
             logger.warning(
-                f"Trying to set logging level for server '{self.config.server_name}' resulted in Exception: {e}"
+                f"Trying to set logging level for server '{self.config.name}' resulted in Exception: {e}"
             )
 
     async def _ensure_connected(self) -> None:
@@ -652,7 +644,7 @@ class FlockMCPClientBase(BaseModel, ABC):
             await self.client_session.send_ping()
         except Exception as e:
             logger.warning(
-                f"Session to '{self.config.server_name}' died, reconnecting. Exception was: {e}"
+                f"Session to '{self.config.name}' died, reconnecting. Exception was: {e}"
             )
             await self.disconnect()
             await self._connect()

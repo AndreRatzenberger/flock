@@ -1,6 +1,5 @@
 """Base Config for MCP Clients."""
 
-from datetime import timedelta
 from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
@@ -140,7 +139,7 @@ class FlockMCPConnectionConfiguration(BaseModel):
         default=None, description="Initial Mountpoints to operate under."
     )
 
-    read_timeout_seconds: float | timedelta = Field(
+    read_timeout_seconds: float | int = Field(
         default=60 * 5, description="Read Timeout."
     )
 
@@ -202,7 +201,7 @@ class FlockMCPConfigurationBase(BaseModel):
     model by inheriting from this class.
     """
 
-    server_name: str = Field(
+    name: str = Field(
         ..., description="Name of the server the client connects to."
     )
 

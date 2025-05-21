@@ -35,6 +35,8 @@ from mcp.types import (
 )
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
+from flock.core.mcp.util.helpers import get_default_env
+
 
 class ServerNotification(_MCPServerNotification):
     """A notification message sent by the server side."""
@@ -89,6 +91,11 @@ class ServerParameters(BaseModel):
 class StdioServerParameters(_MCPStdioServerParameters, ServerParameters):
     """Base Type for Stdio Server parameters."""
 
+    env: dict[str, str] | None = Field(
+        default_factory=get_default_env,
+        description="Environment for the MCP Server.",
+    )
+
 
 class WebsocketServerParameters(ServerParameters):
     """Base Type for Websocket Server params."""
@@ -105,9 +112,9 @@ class SseServerParameters(ServerParameters):
         default=None, description="Additional Headers to pass to the client."
     )
 
-    timeout: float = Field(default=5, description="Http Timeout")
+    timeout: float | int = Field(default=5, description="Http Timeout")
 
-    sse_read_timeout: float = Field(
+    sse_read_timeout: float | int = Field(
         default=60 * 5,
         description="How long the client will wait before disconnecting from the server.",
     )

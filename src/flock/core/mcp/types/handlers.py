@@ -35,7 +35,7 @@ async def handle_incoming_exception(
     associated_client: Any,
 ) -> None:
     """Process an incoming exception Message."""
-    server_name = await associated_client.config.server_name
+    server_name = await associated_client.config.name
 
     # For now, simply log it
     logger_to_use.error(
@@ -89,7 +89,7 @@ async def handle_resource_update_notification(
     metadata = params.meta or {}
     uri = params.uri
 
-    message = f"RESOURCE_UPDATE: Server '{associated_client.config.server_name}' reports change on resoure at: {uri}. (Meta Data: {metadata})"
+    message = f"RESOURCE_UPDATE: Server '{associated_client.config.name}' reports change on resoure at: {uri}. (Meta Data: {metadata})"
 
     logger_to_use.info(message)
 
@@ -108,7 +108,7 @@ async def handle_resource_list_changed_notification(
     params = n.params or {}
     metadata = params.meta or {}
 
-    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.config.server_name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
+    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.config.name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
 
     logger_to_use.info(message)
     await associated_client.invalidate_resource_list_cache()
@@ -123,7 +123,7 @@ async def handle_tool_list_changed_notification(
     params = n.params or {}
     metadata = params.meta or {}
 
-    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.config.server_name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
+    message = f"TOOLS_LIST_CHANGED: Server '{associated_client.config.name}' reports a change in their tools list: {metadata}. Resetting Tools Cache for associated clients."
 
     logger_to_use.info(message)
     await associated_client.invalidate_tool_cache()
@@ -135,7 +135,7 @@ _SERVER_NOTIFICATION_MAP: dict[type[_MCPServerNotification], Callable] = {
     LoggingMessageNotification: lambda n, log, client: handle_logging_message(
         params=n,
         logger=log,
-        server_name=client.config.server_name,
+        server_name=client.config.name,
     ),
     ProgressNotification: handle_progress_notification,
     CancelledNotification: handle_cancellation_notification,

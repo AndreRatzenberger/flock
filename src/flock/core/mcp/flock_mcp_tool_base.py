@@ -168,7 +168,7 @@ class FlockMCPToolBase(BaseModel):
                 try:
                     logger.debug(f"Tool: {self.name}: getting client.")
 
-                    server_name = server.config.server_name
+                    server_name = server.config.name
                     logger.debug(
                         f"Tool: {self.name}: got client for server '{server_name}' for agent {self.agent_id} on run {self.run_id}"
                     )
