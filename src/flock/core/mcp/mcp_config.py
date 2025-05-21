@@ -9,7 +9,7 @@ from flock.core.mcp.types.types import (
     FlockLoggingMCPCallback,
     FlockMessageHandlerMCPCallback,
     FlockSamplingMCPCallback,
-    Root,
+    MCPRoot,
     ServerParameters,
 )
 
@@ -25,14 +25,14 @@ LoggingLevel = Literal[
 ]
 
 
-A = TypeVar("A", bound="FlockMCPCallbackConfiguration")
-B = TypeVar("B", bound="FlockMCPConnectionConfiguration")
+A = TypeVar("A", bound="FlockMCPCallbackConfigurationBase")
+B = TypeVar("B", bound="FlockMCPConnectionConfigurationBase")
 C = TypeVar("C", bound="FlockMCPConfigurationBase")
-D = TypeVar("D", bound="FlockMCPCachingConfiguration")
-E = TypeVar("E", bound="FlockMCPFeatureConfiguration")
+D = TypeVar("D", bound="FlockMCPCachingConfigurationBase")
+E = TypeVar("E", bound="FlockMCPFeatureConfigurationBase")
 
 
-class FlockMCPCachingConfiguration(BaseModel):
+class FlockMCPCachingConfigurationBase(BaseModel):
     """Configuration for Caching in Clients."""
 
     tool_cache_max_size: float = Field(
@@ -87,7 +87,7 @@ class FlockMCPCachingConfiguration(BaseModel):
         )
 
 
-class FlockMCPCallbackConfiguration(BaseModel):
+class FlockMCPCallbackConfigurationBase(BaseModel):
     """Base Configuration Class for Callbacks for Clients."""
 
     sampling_callback: FlockSamplingMCPCallback | None = Field(
@@ -119,7 +119,7 @@ class FlockMCPCallbackConfiguration(BaseModel):
         )
 
 
-class FlockMCPConnectionConfiguration(BaseModel):
+class FlockMCPConnectionConfigurationBase(BaseModel):
     """Base Configuration Class for Connection Parameters for a client."""
 
     max_retries: int = Field(
@@ -135,7 +135,7 @@ class FlockMCPConnectionConfiguration(BaseModel):
         ..., description="Type of transport to use."
     )
 
-    mount_points: list[Root] | None = Field(
+    mount_points: list[MCPRoot] | None = Field(
         default=None, description="Initial Mountpoints to operate under."
     )
 
@@ -158,7 +158,7 @@ class FlockMCPConnectionConfiguration(BaseModel):
         )
 
 
-class FlockMCPFeatureConfiguration(BaseModel):
+class FlockMCPFeatureConfigurationBase(BaseModel):
     """Base Configuration Class for switching MCP Features on and off."""
 
     roots_enabled: bool = Field(
@@ -205,22 +205,22 @@ class FlockMCPConfigurationBase(BaseModel):
         ..., description="Name of the server the client connects to."
     )
 
-    connection_config: FlockMCPConnectionConfiguration = Field(
+    connection_config: FlockMCPConnectionConfigurationBase = Field(
         ..., description="MCP Connection Configuration for a client."
     )
 
-    caching_config: FlockMCPCachingConfiguration = Field(
-        default_factory=FlockMCPCachingConfiguration,
+    caching_config: FlockMCPCachingConfigurationBase = Field(
+        default_factory=FlockMCPCachingConfigurationBase,
         description="Configuration for the internal caches of the client.",
     )
 
-    callback_config: FlockMCPCallbackConfiguration = Field(
-        default_factory=FlockMCPCallbackConfiguration,
+    callback_config: FlockMCPCallbackConfigurationBase = Field(
+        default_factory=FlockMCPCallbackConfigurationBase,
         description="Callback configuration for the client.",
     )
 
-    feature_config: FlockMCPFeatureConfiguration = Field(
-        default_factory=FlockMCPFeatureConfiguration,
+    feature_config: FlockMCPFeatureConfigurationBase = Field(
+        default_factory=FlockMCPFeatureConfigurationBase,
         description="Feature configuration for the client.",
     )
 

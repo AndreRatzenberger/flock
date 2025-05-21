@@ -25,7 +25,7 @@ tracer = trace.get_tracer(__name__)
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
 
 
-class FlockMCPClientManager(BaseModel, ABC, Generic[TClient]):
+class FlockMCPClientManagerBase(BaseModel, ABC, Generic[TClient]):
     """Handles a Pool of MCPClients of type TClient."""
 
     client_config: FlockMCPConfigurationBase = Field(

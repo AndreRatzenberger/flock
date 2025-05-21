@@ -17,7 +17,7 @@ from pydantic import (
 from flock.core.flock_module import FlockModule
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
 from flock.core.mcp.mcp_config import FlockMCPConfigurationBase
 from flock.core.serialization.serializable import Serializable
 from flock.core.serialization.serialization_utils import (
@@ -81,7 +81,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     # --- Underlying ConnectionManager ---
     # (Manages a pool of ClientConnections and does the actual talking to the MCP Server)
     # (Excluded from Serialization)
-    client_manager: FlockMCPClientManager | None = Field(
+    client_manager: FlockMCPClientManagerBase | None = Field(
         default=None,
         exclude=True,
         description="Underlying Connection Manager. Handles the actual underlying connections to the server.",
@@ -134,7 +134,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
     # --- Lifecycle Hooks ---
     @abstractmethod
-    async def initialize(self) -> FlockMCPClientManager:
+    async def initialize(self) -> FlockMCPClientManagerBase:
         """Called when initializing the server."""
         pass
 

@@ -14,13 +14,12 @@ from flock.core.flock_registry import (
     flock_type,
     get_registry,
 )
-from flock.core.mcp.flock_mcp_prompt_base import FlockMCPPromptBase
 from flock.core.mcp.flock_mcp_server import (
     FlockMCPServerBase,
 )
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.mcp.mcp_client import FlockMCPClientBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
 
 __all__ = [
     "Flock",
@@ -30,8 +29,7 @@ __all__ = [
     "FlockEvaluatorConfig",
     "FlockFactory",
     "FlockMCPClientBase",
-    "FlockMCPClientManager",
-    "FlockMCPPromptBase",
+    "FlockMCPClientManagerBase",
     "FlockMCPServerBase",
     "FlockMCPServerConfig",
     "FlockMCPToolBase",

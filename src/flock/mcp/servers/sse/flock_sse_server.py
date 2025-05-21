@@ -16,10 +16,10 @@ from pydantic import Field
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.mcp.mcp_client import FlockMCPClientBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
 from flock.core.mcp.mcp_config import (
     FlockMCPConfigurationBase,
-    FlockMCPConnectionConfiguration,
+    FlockMCPConnectionConfigurationBase,
 )
 from flock.core.mcp.types.types import SseServerParameters
 
@@ -27,7 +27,7 @@ logger = get_logger("mcp.sse.server")
 tracer = trace.get_tracer(__name__)
 
 
-class FlockSSEConnectionConfig(FlockMCPConnectionConfiguration):
+class FlockSSEConnectionConfig(FlockMCPConnectionConfigurationBase):
     """Concrete ConnectionConfig for an SSEClient."""
 
     # Only thing we need to override here is the concrete transport_type
@@ -108,7 +108,7 @@ class FlockSSEClient(FlockMCPClientBase):
         )
 
 
-class FlockSSEClientManager(FlockMCPClientManager):
+class FlockSSEClientManager(FlockMCPClientManagerBase):
     """Manager for handling SSE Clients."""
 
     client_config: FlockSSEConfig = Field(

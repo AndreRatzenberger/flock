@@ -49,7 +49,7 @@ from flock.core.mcp.types.types import (
     FlockLoggingMCPCallback,
     FlockMessageHandlerMCPCallback,
     FlockSamplingMCPCallback,
-    Root,
+    MCPRoot,
     ServerParameters,
 )
 from flock.core.mcp.util.helpers import cache_key_generator
@@ -106,7 +106,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         description="Capabilities of the connected server.",
     )
 
-    current_roots: list[Root] | None = Field(
+    current_roots: list[MCPRoot] | None = Field(
         default=None, description="Currently used roots of the client."
     )
 
@@ -237,7 +237,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         list_roots_callback: FlockListRootsMCPCallback | None = None,
         logging_callback: FlockLoggingMCPCallback | None = None,
         message_handler: FlockMessageHandlerMCPCallback | None = None,
-        current_roots: list[Root] | None = None,
+        current_roots: list[MCPRoot] | None = None,
         **kwargs,
     ):
         """Init function."""
@@ -441,7 +441,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         async with self.lock:
             return self.config.name
 
-    async def get_roots(self) -> list[Root] | None:
+    async def get_roots(self) -> list[MCPRoot] | None:
         """Get the currently set roots of the client.
 
         Locks under the hood.
@@ -449,7 +449,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         async with self.lock:
             return self.current_roots
 
-    async def set_roots(self, new_roots: list[Root]) -> None:
+    async def set_roots(self, new_roots: list[MCPRoot]) -> None:
         """Set the current roots of the client.
 
         Locks under the hood.

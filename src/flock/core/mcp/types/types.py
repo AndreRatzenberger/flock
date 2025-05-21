@@ -76,7 +76,7 @@ class FlockLoggingMessageNotificationParams(
     """Parameters contained within a Logging Message Notification."""
 
 
-class Root(_MCPRoot):
+class MCPRoot(_MCPRoot):
     """Wrapper for mcp.types.Root."""
 
 

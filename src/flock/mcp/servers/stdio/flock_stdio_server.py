@@ -16,10 +16,10 @@ from pydantic import Field
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.mcp.mcp_client import FlockMCPClientBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
 from flock.core.mcp.mcp_config import (
     FlockMCPConfigurationBase,
-    FlockMCPConnectionConfiguration,
+    FlockMCPConnectionConfigurationBase,
 )
 from flock.core.mcp.types.types import StdioServerParameters
 
@@ -27,7 +27,7 @@ logger = get_logger("mcp.stdio.server")
 tracer = trace.get_tracer(__name__)
 
 
-class FlockStdioClientConnectionConfig(FlockMCPConnectionConfiguration):
+class FlockStdioConnectionConfig(FlockMCPConnectionConfigurationBase):
     """Concrete ConnectionConfig for an StdioClient."""
 
     # Only thing we need to override here is the concrete transport_type
@@ -48,7 +48,7 @@ class FlockStdioConfig(FlockMCPConfigurationBase):
     # The only thing we need to override here is the
     # concrete connection config. The rest is generic
     # enough to handle everything else.
-    connection_config: FlockStdioClientConnectionConfig = Field(
+    connection_config: FlockStdioConnectionConfig = Field(
         ..., description="Concrete Stdio Connection Configuration."
     )
 
@@ -104,7 +104,7 @@ class FlockStdioClient(FlockMCPClientBase):
 
 
 # Not really needed but kept here as an example.
-class FlockStdioClientManager(FlockMCPClientManager):
+class FlockStdioClientManager(FlockMCPClientManagerBase):
     """Manager for handling Stdio Clients."""
 
     client_config: FlockStdioConfig = Field(

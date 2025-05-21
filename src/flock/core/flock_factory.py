@@ -11,16 +11,16 @@ from flock.core.flock_agent import FlockAgent, SignatureType
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.mcp.mcp_config import (
-    FlockMCPCachingConfiguration,
-    FlockMCPCallbackConfiguration,
-    FlockMCPFeatureConfiguration,
+    FlockMCPCachingConfigurationBase,
+    FlockMCPCallbackConfigurationBase,
+    FlockMCPFeatureConfigurationBase,
 )
 from flock.core.mcp.types.types import (
     FlockListRootsMCPCallback,
     FlockLoggingMCPCallback,
     FlockMessageHandlerMCPCallback,
     FlockSamplingMCPCallback,
-    Root,
+    MCPRoot,
     SseServerParameters,
     StdioServerParameters,
     WebsocketServerParameters,
@@ -36,8 +36,8 @@ from flock.mcp.servers.sse.flock_sse_server import (
 )
 from flock.mcp.servers.stdio.flock_stdio_server import (
     FlockMCPStdioServer,
-    FlockStdioClientConnectionConfig,
     FlockStdioConfig,
+    FlockStdioConnectionConfig,
 )
 from flock.mcp.servers.websockets.flock_websocket_server import (
     FlockWSConfig,
@@ -135,7 +135,7 @@ class FlockFactory:
         name: str,
         connection_params: SSEParams | StdioParams | WebsocketParams,
         max_retries: int = 3,
-        mount_points: list[str | Root] | None = None,
+        mount_points: list[str | MCPRoot] | None = None,
         timeout_seconds: int | float = 10,
         server_logging_level: LoggingLevel = "error",
         enable_roots_feature: bool = False,
@@ -177,14 +177,14 @@ class FlockFactory:
             concrete_server_cls = FlockWSServer
 
         # convert mount points.
-        mounts: list[Root] = []
+        mounts: list[MCPRoot] = []
         if mount_points:
             for item in mount_points:
-                if isinstance(item, Root):
+                if isinstance(item, MCPRoot):
                     mounts.append(item)
                 elif isinstance(item, str):
                     try:
-                        conv = Root(uri=FileUrl(url=item))
+                        conv = MCPRoot(uri=FileUrl(url=item))
                         mounts.append(conv)
                     except Exception:
                         continue  # ignore
@@ -192,19 +192,19 @@ class FlockFactory:
                     continue  # ignore
 
         # build generic configs
-        feature_config = FlockMCPFeatureConfiguration(
+        feature_config = FlockMCPFeatureConfigurationBase(
             roots_enabled=enable_roots_feature,
             tools_enabled=enable_tools_feature,
             prompts_enabled=enable_prompts_feature,
             sampling_enabled=enable_sampling_feature,
         )
-        callback_config = FlockMCPCallbackConfiguration(
+        callback_config = FlockMCPCallbackConfigurationBase(
             sampling_callback=sampling_callback,
             list_roots_callback=list_roots_callback,
             logging_callback=logging_callback,
             message_handler=message_handler,
         )
-        caching_config = FlockMCPCachingConfiguration(
+        caching_config = FlockMCPCachingConfigurationBase(
             tool_cache_max_size=tool_cache_size,
             tool_cache_max_ttl=tool_cache_ttl,
             resource_contents_cache_max_size=resource_contents_cache_size,
@@ -222,7 +222,7 @@ class FlockFactory:
         # Instantiate correct server + config
         if server_kind == "stdio":
             # build stdio config
-            connection_config = FlockStdioClientConnectionConfig(
+            connection_config = FlockStdioConnectionConfig(
                 max_retries=max_retries,
                 connection_parameters=StdioServerParameters(
                     command=connection_params.command,

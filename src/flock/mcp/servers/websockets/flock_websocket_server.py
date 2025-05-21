@@ -16,10 +16,10 @@ from pydantic import Field
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.mcp.mcp_client import FlockMCPClientBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
 from flock.core.mcp.mcp_config import (
     FlockMCPConfigurationBase,
-    FlockMCPConnectionConfiguration,
+    FlockMCPConnectionConfigurationBase,
 )
 from flock.core.mcp.types.types import WebsocketServerParameters
 
@@ -28,7 +28,7 @@ tracer = trace.get_tracer(__name__)
 
 
 # Optional to provide type hints.
-class FlockWSConnectionConfig(FlockMCPConnectionConfiguration):
+class FlockWSConnectionConfig(FlockMCPConnectionConfigurationBase):
     """Concrete ConnectionConfig for a WS Client."""
 
     # Only thing we need to override here is the concrete transport_type
@@ -90,7 +90,7 @@ class FlockWSClient(FlockMCPClientBase):
 
 
 # not really needed, but kept for type hints and as an example.
-class FlockWSClientManager(FlockMCPClientManager):
+class FlockWSClientManager(FlockMCPClientManagerBase):
     """Manager for handling websocket clients."""
 
     client_config: FlockWSConfig = Field(
