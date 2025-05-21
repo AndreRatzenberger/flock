@@ -97,7 +97,7 @@ class MyCustomData(BaseModel):
 # --- Fixtures ---
 @pytest.fixture
 def basic_flock():
-    return Flock(name="serial_flock", model="serial_model", description="Serialization test flock", enable_logging=False, show_flock_banner=False)
+    return Flock(name="serial_flock", model="serial_model", description="Serialization test flock", show_flock_banner=False)
 
 @pytest.fixture
 def flock_with_agents(basic_flock):

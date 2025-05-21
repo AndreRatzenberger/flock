@@ -80,12 +80,15 @@ You can also override or set configurations directly when creating Flock or Floc
 ### Configure Flock instance
 ```python
 from flock.core import Flock, FlockAgent, FlockFactory
+from flock.core.logging.logging import configure_global_logging
+
+# Only show error logs
+configure_global_logging("ERROR")
 
 my_flock = Flock(
     name="ConfiguredFlock",
     model="anthropic/claude-3-sonnet-20240229", # Override default model
     enable_temporal=False, # Force local execution
-    enable_logging=True    # Enable logging for this flock instance
 )
 ```
 

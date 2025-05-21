@@ -74,19 +74,12 @@ def create_flock():
     # ).ask()
     enable_temporal = False
 
-    # Logging configuration
-    enable_logging = questionary.confirm(
-        "Enable logging?",
-        default=True,
-    ).ask()
-
     # Create the Flock instance
     flock = Flock(
         name=flock_name,
         model=model,
         description=description,
         enable_temporal=enable_temporal,
-        enable_logging=enable_logging,
     )
 
     console.print("\n[green]✓[/] Flock created successfully!")

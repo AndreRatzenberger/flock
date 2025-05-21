@@ -970,7 +970,7 @@ if __name__ == "__main__":
     temp_run_store = RunStore()
     # Create a default/dummy Flock instance for standalone UI testing
     # This allows the UI to function without being started by `Flock.start_api()`
-    dev_flock_instance = Flock(name="DevStandaloneFlock", model="test/dummy", enable_logging=True, show_flock_banner=False)
+    dev_flock_instance = Flock(name="DevStandaloneFlock", model="test/dummy", show_flock_banner=False)
 
     set_global_flock_services(dev_flock_instance, temp_run_store)
     app.state.flock_instance = dev_flock_instance
