@@ -17,7 +17,7 @@
 
 🐤 `pip install flock-core` will install the latest non-beta version 🐤
 
-🐤  Expected Release for 0.4.0 `Magpie`: End of April 2025 🐤
+🐤 The 0.4.0 Magpie release is in the works! 🐤
 
 ---
 
@@ -222,7 +222,7 @@ Flock makes this easy with:
 *   **Declarative Configuration:** Define Temporal timeouts, retry policies, and task queues directly within your `Flock` and `FlockAgent` configurations (YAML or Python).
 *   **Correct Patterns:** Uses Temporal's recommended granular activity execution for better control and visibility.
 *   **Clear Worker Separation:** Provides guidance and flags for running dedicated Temporal workers, separating development convenience from production best practices.
-  
+
 Visit the [Temporal Documentation](https://learn.temporal.io/python/workflows/) for more information on how to use Temporal.
 
 Or check out the [Flock Showcase](https://github.com/whiteducksoftware/flock-showcase) for a complete example of a Flock that uses Temporal or our [docs](https://whiteducksoftware.github.io/flock/guides/temporal-configuration/) for more information.
