@@ -174,6 +174,43 @@ if __name__ == "__main__":
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/34c2fe2f-6dd2-498c-a826-1687cb158755" />
 </p>
 
+### MCP Support - Declaratively connect to 1000s of different tools!
+
+Create a server
+
+```python 
+ws_fetch_server = FlockFactory.create_mcp_server(
+    name="fetch_server",
+    enable_tools_feature=True,
+    connection_params=FlockFactory.WebsocketParams(
+        url="ws://localhost:4001/message"
+    ),
+```
+
+Add it to Flock
+
+```python 
+flock = Flock(
+    name="mcp_testbed",
+    servers=[
+        ws_fetch_server
+    ]
+)
+```
+
+And tell the flock agents which server to use
+
+```python 
+webcrawler_agent = FlockFactory.create_default_agent(
+    name="webcrawler_agent",
+    description="Expert for looking up and retrieving web content",
+    input="query: str | User-Query, initial_url: Optional[str] | Optional url to start search from.",
+    output="answer: str | Answer to user-query, page_url: str | The url of the page where the answer was found on, page_content: str | Markdown content of the page where the answer was found.",
+    servers=[ws_fetch_server], # servers are passed here.
+)
+```
+
+Done! The Flock agent has now access to every tool the server offers.
 
 
 ### 🚀 REST API – Deploy Flock Agents as REST API Endpoints
