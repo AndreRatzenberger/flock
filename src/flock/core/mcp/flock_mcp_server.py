@@ -132,7 +132,6 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         """Get a list of currently enabled modules attached to this server."""
         return [m for m in self.modules.values() if m.config.enabled]
 
-    # --- Lifecycle Hooks ---
     @abstractmethod
     async def initialize(self) -> FlockMCPClientManagerBase:
         """Called when initializing the server."""
@@ -533,6 +532,24 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 f"Added {len(serialized_modules)} modules to server '{self.config.name}'"
             )
 
+        def _clean(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                return {
+                    k: _clean(v)
+                    for k, v in obj.items()
+                    if v is not None
+                    and not (isinstance(v, list | dict) and len(v) == 0)
+                }
+            if isinstance(obj, list):
+                return [
+                    _clean(v)
+                    for v in obj
+                    if v is not None
+                    and not (isinstance(v, dict | list) and len(v) == 0)
+                ]
+            return obj
+
+        data = _clean(data)
         return data
 
     @classmethod
