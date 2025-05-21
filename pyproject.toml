@@ -1,6 +1,6 @@
 [project]
 name = "flock-core"
-version = "0.4.4"
+version = "0.4.5"
 description = "Declarative LLM Orchestration at Scale"
 readme = "README.md"
 authors = [
@@ -23,11 +23,9 @@ dependencies = [
     "inspect-ai>=0.3.88",
     "litellm==1.69.3",
     "loguru>=0.7.3",
-    "markdownify>=0.14.1",
     "matplotlib>=3.10.0",
     "mcp>=1.7.1",
     "msgpack>=1.1.0",
-    "notion-client>=2.3.0",
     "opentelemetry-api>=1.30.0",
     "opentelemetry-exporter-jaeger>=1.21.0",
     "opentelemetry-exporter-jaeger-proto-grpc>=1.21.0",
@@ -50,7 +48,6 @@ dependencies = [
     "rich>=13.9.4",
     "rouge-score>=0.1.2",
     "sentence-transformers>=3.4.1",
-    "tavily-python>=0.5.1",
     "temporalio>=1.9.0",
     "thefuzz>=0.22.1",
     "tiktoken>=0.8.0",
