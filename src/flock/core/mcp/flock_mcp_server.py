@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import inspect
+import os
 from abc import ABC, abstractmethod
 from typing import Any, Literal, TypeVar
 
@@ -430,7 +431,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 span.record_exception(server_error)
 
     # --- Serialization Implementation ---
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, path_type: str = "relative") -> dict[str, Any]:
         """Convert instance to dictionary representation suitable for serialization."""
         from flock.core.flock_registry import get_registry
 
@@ -472,10 +473,13 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         builtin_cls = builtin_by_transport.get(transport)
 
         if type(self) is not builtin_cls:
+            file_path = inspect.getsourcefile(type(self))
+            if path_type == "relative":
+                file_path = os.path.relpath(file_path)
             data["implementation"] = {
                 "class_name": type(self).__name__,
                 "module_path": type(self).__module__,
-                "file_path": inspect.getsourcefile(type(self)),
+                "file_path": file_path,
             }
 
         logger.debug(

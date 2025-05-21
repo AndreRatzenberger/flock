@@ -60,7 +60,7 @@ class FlockSerializer:
         for name, server_instance in flock_instance._servers.items():
             try:
                 # Servers handle their own serialization via their to_dict method
-                server_data = server_instance.to_dict()
+                server_data = server_instance.to_dict(path_type=path_type)
                 data["mcp_servers"][name] = server_data
 
                 # --- Extract Component Information ---
