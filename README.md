@@ -286,7 +286,6 @@ Take note how even custom types like `FantasyCharacter` are serialized so the ta
 name: pydantic_example
 model: openai/gpt-4o
 enable_temporal: false
-enable_logging: false
 show_flock_banner: false
 temporal_start_in_process_worker: true
 agents:

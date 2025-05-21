@@ -84,7 +84,6 @@ def create_new_flock_service(
         model=effective_model,
         description=description,
         show_flock_banner=False,
-        enable_logging=True,
     )
     default_filename = f"{name.replace(' ', '_').lower()}.flock.yaml"
 

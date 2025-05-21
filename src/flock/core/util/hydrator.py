@@ -244,7 +244,6 @@ async def _run_hydration_agent(
         temp_flock = Flock(
             name=f"temp_hydrator_flock_{agent_name}",
             model=hydration_model,
-            enable_logging=False,
             show_flock_banner=False,
         )
         temp_flock.add_agent(dynamic_agent)

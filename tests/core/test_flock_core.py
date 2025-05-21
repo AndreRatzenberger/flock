@@ -33,7 +33,7 @@ def clear_registry():
 @pytest.fixture
 def basic_flock() -> Flock:
     """Fixture for a basic Flock instance."""
-    return Flock(name="test_basic_flock", model="test-model", enable_logging=False, show_flock_banner=False)
+    return Flock(name="test_basic_flock", model="test-model", show_flock_banner=False)
 
 
 @pytest.fixture
@@ -46,19 +46,17 @@ def simple_agent() -> SimpleAgent:
 
 def test_flock_init_defaults():
     """Test Flock initialization with default values."""
-    flock = Flock(enable_logging=False, show_flock_banner=False)
+    flock = Flock(show_flock_banner=False)
     assert flock.name.startswith("flock_")
     assert flock.model == "openai/gpt-4o"  # Default from config
     assert flock.description is None
     assert not flock.enable_temporal
-    assert not flock.enable_logging
     assert not flock.show_flock_banner
     assert flock._agents == {}
 
 
 def test_flock_init_custom(mocker):
     """Test Flock initialization with custom values."""
-    mock_configure_logging = mocker.patch.object(Flock, '_configure_logging')
     mock_set_temporal = mocker.patch.object(Flock, '_set_temporal_debug_flag')
     mock_ensure_session = mocker.patch.object(Flock, '_ensure_session_id')
 
@@ -67,25 +65,21 @@ def test_flock_init_custom(mocker):
         model="custom_model",
         description="My custom flock",
         enable_temporal=True,
-        enable_logging=True,
         show_flock_banner=False
     )
     assert flock.name == "custom_flock"
     assert flock.model == "custom_model"
     assert flock.description == "My custom flock"
     assert flock.enable_temporal
-    assert flock.enable_logging
     assert not flock.show_flock_banner
 
-    mock_configure_logging.assert_called_once_with(True)
     mock_set_temporal.assert_called_once()
     mock_ensure_session.assert_called_once()
 
 
 def test_flock_init_with_agents(simple_agent):
     """Test Flock initialization with agents passed in the constructor."""
-    flock = Flock(agents=[simple_agent],
-                  enable_logging=False, show_flock_banner=False)
+    flock = Flock(agents=[simple_agent], show_flock_banner=False)
     assert "agent1" in flock.agents
     assert flock.agents["agent1"] is simple_agent
 
@@ -302,7 +296,7 @@ def test_to_dict_delegates_to_serializer(basic_flock, mocker):
 def test_from_dict_delegates_to_serializer(mocker):
     """Verify Flock.from_dict calls FlockSerializer.deserialize."""
     mock_flock_instance = Flock(
-        name="deserialized", enable_logging=False, show_flock_banner=False)
+        name="deserialized", show_flock_banner=False)
     mock_serializer_deserialize = mocker.patch(
         'flock.core.serialization.flock_serializer.FlockSerializer.deserialize')
     mock_serializer_deserialize.return_value = mock_flock_instance
@@ -321,7 +315,7 @@ def test_load_from_file_delegates_to_loader(mocker):
     mock_loader_func = mocker.patch(
         'flock.core.util.loader.load_flock_from_file')
     mock_flock_instance = Flock(
-        name="loaded_from_file", enable_logging=False, show_flock_banner=False)
+        name="loaded_from_file", show_flock_banner=False)
     mock_loader_func.return_value = mock_flock_instance
     file_path = "dummy/path/flock.yaml"
 
@@ -356,7 +350,6 @@ async def test_run_async_temporal_uses_workflow_config(simple_agent, mocker):
         enable_temporal=True,
         temporal_config=workflow_config,
         agents=[simple_agent],  # Add agent directly
-        enable_logging=False,
         show_flock_banner=False
     )
 
@@ -461,7 +454,6 @@ async def test_run_async_temporal_no_in_process_worker(basic_flock, simple_agent
         enable_temporal=True,
         temporal_start_in_process_worker=False,  # Key setting
         agents=[simple_agent],
-        enable_logging=False,
         show_flock_banner=False
     )
 

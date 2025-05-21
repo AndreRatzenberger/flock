@@ -11,6 +11,7 @@ Key points:
 """
 
 import sys
+import logging
 
 from opentelemetry import trace
 
@@ -122,6 +123,19 @@ BOLD_CATEGORIES = [
     "api.ui",
 ]
 
+# Mapping from level names to numeric values
+LOG_LEVELS: dict[str, int] = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+}
+
+# Global minimum log level. Anything below this will be suppressed.
+# Default value disables all logging until configured by the user.
+GLOBAL_LOG_LEVEL: int = logging.CRITICAL + 1
+
 
 def color_for_category(category: str) -> str:
     """Return the Rich markup color code name for the given category."""
@@ -230,12 +244,35 @@ class PrintAndFlushSink:
 loguru_logger.remove()
 loguru_logger.add(
     PrintAndFlushSink(),
-    level="DEBUG",
+    level=GLOBAL_LOG_LEVEL,
     colorize=True,
     format=custom_format,
 )
 # Optionally add a file handler, e.g.:
 # loguru_logger.add("logs/flock.log", rotation="100 MB", retention="30 days", level="DEBUG")
+
+
+def configure_global_logging(level: str | int) -> None:
+    """Configure logging globally for all Flock loggers."""
+
+    global GLOBAL_LOG_LEVEL
+
+    if isinstance(level, str):
+        level = level.upper()
+        GLOBAL_LOG_LEVEL = LOG_LEVELS.get(level, logging.ERROR)
+    else:
+        GLOBAL_LOG_LEVEL = int(level)
+
+    # Reconfigure Loguru sink with the new level
+    loguru_logger.remove()
+    loguru_logger.add(
+        PrintAndFlushSink(),
+        level=GLOBAL_LOG_LEVEL,
+        colorize=True,
+        format=custom_format,
+    )
+
+    logging.basicConfig(level=GLOBAL_LOG_LEVEL)
 
 
 # Define a dummy logger that does nothing
@@ -276,7 +313,7 @@ class FlockLogger:
     - Otherwise, it uses Loguru.
     """
 
-    def __init__(self, name: str, enable_logging: bool = False):
+    def __init__(self, name: str, enable_logging: bool = True):
         """Initialize the FlockLogger.
 
         Args:
@@ -308,6 +345,10 @@ class FlockLogger:
             )
         return message
 
+    def _should_log(self, level: int) -> bool:
+        """Return True if the provided level should be logged."""
+        return self.enable_logging and level >= GLOBAL_LOG_LEVEL
+
     def debug(
         self,
         message: str,
@@ -323,6 +364,8 @@ class FlockLogger:
             flush (bool, optional): Whether to flush the message. Defaults to False.
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
+        if not self._should_log(logging.DEBUG):
+            return
         message = self._truncate_message(message, max_length)
         self._get_logger().debug(message, *args, **kwargs)
 
@@ -341,6 +384,8 @@ class FlockLogger:
             flush (bool, optional): Whether to flush the message. Defaults to False.
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
+        if not self._should_log(logging.INFO):
+            return
         message = self._truncate_message(message, max_length)
         self._get_logger().info(message, *args, **kwargs)
 
@@ -359,6 +404,8 @@ class FlockLogger:
             flush (bool, optional): Whether to flush the message. Defaults to False.
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
+        if not self._should_log(logging.WARNING):
+            return
         message = self._truncate_message(message, max_length)
         self._get_logger().warning(message, *args, **kwargs)
 
@@ -378,7 +425,8 @@ class FlockLogger:
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
         message = self._truncate_message(message, max_length)
-        self._get_logger().error(message, *args, **kwargs)
+        if self._should_log(logging.ERROR):
+            self._get_logger().error(message, *args, **kwargs)
 
     def exception(
         self,
@@ -396,7 +444,8 @@ class FlockLogger:
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
         message = self._truncate_message(message, max_length)
-        self._get_logger().exception(message, *args, **kwargs)
+        if self._should_log(logging.ERROR):
+            self._get_logger().exception(message, *args, **kwargs)
 
     def success(
         self,
@@ -413,6 +462,8 @@ class FlockLogger:
             flush (bool, optional): Whether to flush the message. Defaults to False.
             max_length (int, optional): The maximum length of the message. Defaults to MAX_LENGTH.
         """
+        if not self._should_log(logging.INFO):
+            return
         message = self._truncate_message(message, max_length)
         self._get_logger().success(message, *args, **kwargs)
 
@@ -420,7 +471,10 @@ class FlockLogger:
 _LOGGER_CACHE: dict[str, FlockLogger] = {}
 
 
-def get_logger(name: str = "flock", enable_logging: bool = True) -> FlockLogger:
+def get_logger(
+    name: str = "flock",
+    enable_logging: bool = True,
+) -> FlockLogger:
     """Return a cached FlockLogger instance for the given name.
 
     If the logger doesn't exist, create it.
