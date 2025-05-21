@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from flock.core.flock import Flock
+from flock.core.logging.logging import configure_global_logging
 from flock.core.util.cli_helper import init_console
 
 # Create console instance
@@ -109,9 +110,16 @@ def execute_flock(flock: Flock):
 
     # Logging options
     enable_logging = questionary.confirm(
-        "Enable detailed logging?",
+        "Enable logging?",
         default=False,
     ).ask()
+    if enable_logging:
+        log_level = questionary.select(
+            "Minimum log level:",
+            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            default="ERROR",
+        ).ask()
+        configure_global_logging(log_level)
 
     # Preview input
     console.print("\n[bold]Input Preview:[/]")
@@ -130,10 +138,7 @@ def execute_flock(flock: Flock):
     console.print("\n[bold]Executing Flock...[/]")
 
     try:
-        # Handle logging settings
-        if enable_logging:
-            # Enable logging through the logging configuration method
-            flock._configure_logging(True)
+        # Logging was configured earlier if enabled
 
         # Run the Flock
         result = flock.run(
@@ -509,9 +514,16 @@ def execute_flock_batch(flock: Flock):
 
     # Logging options
     enable_logging = questionary.confirm(
-        "Enable detailed logging?",
+        "Enable logging?",
         default=False,
     ).ask()
+    if enable_logging:
+        log_level = questionary.select(
+            "Minimum log level:",
+            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            default="ERROR",
+        ).ask()
+        configure_global_logging(log_level)
 
     # Preview configuration
     console.print("\n[bold]Batch Configuration Preview:[/]")
@@ -554,9 +566,7 @@ def execute_flock_batch(flock: Flock):
     console.print("\n[bold]Executing Batch...[/]")
 
     try:
-        # Handle logging settings
-        if enable_logging:
-            flock._configure_logging(True)
+        # Logging was already configured above if enabled
 
         # Run the batch
         results = flock.run_batch(

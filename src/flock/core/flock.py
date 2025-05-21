@@ -48,7 +48,7 @@ from flock.core.context.context_manager import initialize_context
 # Assuming run_temporal_workflow is correctly placed and importable
 from flock.core.execution.temporal_executor import run_temporal_workflow
 from flock.core.flock_evaluator import FlockEvaluator  # For type hint
-from flock.core.logging.logging import LOGGERS, get_logger, get_module_loggers
+from flock.core.logging.logging import get_logger
 from flock.core.serialization.serializable import Serializable
 from flock.core.util.cli_helper import init_console
 from flock.workflow.temporal_config import TemporalWorkflowConfig
@@ -102,10 +102,6 @@ class Flock(BaseModel, Serializable):
     enable_temporal: bool = Field(
         default=False,
         description="If True, execute workflows via Temporal; otherwise, run locally.",
-    )
-    enable_logging: bool = Field(
-        default=False,
-        description="If True, enable logging for the Flock instance.",
     )
     show_flock_banner: bool = Field(
         default=True,
@@ -183,7 +179,6 @@ class Flock(BaseModel, Serializable):
         description: str | None = None,
         show_flock_banner: bool = True,
         enable_temporal: bool = False,
-        enable_logging: bool | list[str] = False,
         agents: list[FlockAgent] | None = None,
         servers: list[FlockMCPServerBase] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
@@ -200,7 +195,6 @@ class Flock(BaseModel, Serializable):
             model=model,
             description=description,
             enable_temporal=enable_temporal,
-            enable_logging=bool(enable_logging), # Store as bool, specific loggers handled by _configure
             show_flock_banner=show_flock_banner,
             temporal_config=temporal_config,
             temporal_start_in_process_worker=temporal_start_in_process_worker,
@@ -214,8 +208,6 @@ class Flock(BaseModel, Serializable):
         self._start_input = {}
         self._mgr = FlockServerManager()
 
-        # Set up logging based on the enable_logging flag
-        self._configure_logging(enable_logging) # Pass original value to _configure_logging
 
         # Register passed servers
         # (need to be registered first so that agents can retrieve them from the registry)
@@ -307,35 +299,6 @@ class Flock(BaseModel, Serializable):
 
         return run
 
-    def _configure_logging(self, enable_logging_config: bool | list[str]):
-        """Configure logging levels based on the enable_logging flag."""
-        is_enabled_globally = False
-        specific_loggers_to_enable = []
-
-        if isinstance(enable_logging_config, bool):
-            is_enabled_globally = enable_logging_config
-        elif isinstance(enable_logging_config, list):
-            is_enabled_globally = bool(enable_logging_config) # True if list is not empty
-            specific_loggers_to_enable = enable_logging_config
-
-        # Configure core loggers
-        for log_name in LOGGERS: # Assuming LOGGERS is a list of known logger names
-            log_instance = get_logger(log_name)
-            if is_enabled_globally or log_name in specific_loggers_to_enable:
-                log_instance.enable_logging = True
-            else:
-                log_instance.enable_logging = False
-
-        # Configure module loggers (existing ones)
-        module_loggers = get_module_loggers() # Assuming this returns list of FlockLogger instances
-        for mod_log in module_loggers:
-            if is_enabled_globally or mod_log.name in specific_loggers_to_enable:
-                mod_log.enable_logging = True
-            else:
-                mod_log.enable_logging = False
-
-        # Update the instance's Pydantic field
-        self.enable_logging = is_enabled_globally or bool(specific_loggers_to_enable)
 
 
     def _set_temporal_debug_flag(self):

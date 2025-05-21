@@ -10,7 +10,9 @@ Key points:
   - Outside workflows, we use Loguru with rich formatting.
 """
 
+import logging
 import sys
+from typing import Literal
 
 from opentelemetry import trace
 
@@ -19,6 +21,19 @@ from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
     from loguru import logger as loguru_logger
+
+# ENABLED_FLOCK_LOGGER_LEVELS constant removed
+
+# Mapping from level names to numeric values
+LOG_LEVELS: dict[str, int] = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "SUCCESS": 35,  # Custom success level
+    "NO_LOGS": 100,  # Special level to disable logging
+}
 
 
 def in_workflow_context() -> bool:
@@ -85,6 +100,7 @@ COLOR_MAP = {
 
 LOGGERS = [
     "flock",  # Core Flock orchestration
+    "flock.api", # Flock API specific logs
     "agent",  # General agent operations
     "context",  # Context management
     "registry",  # Unified registry operations (new)
@@ -238,6 +254,50 @@ loguru_logger.add(
 # loguru_logger.add("logs/flock.log", rotation="100 MB", retention="30 days", level="DEBUG")
 
 
+def get_default_severity(level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NO_LOGS", "SUCCESS"] | int) -> int:
+    """Get the default severity for a given level."""
+    if isinstance(level, str):
+        level_str = level.upper()
+        return LOG_LEVELS.get(level_str, LOG_LEVELS["ERROR"])
+    return level
+
+
+def configure_logging(flock_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NO_LOGS", "SUCCESS"] | int,
+                      external_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NO_LOGS", "SUCCESS"] | int,
+                      specific_levels: dict[str, Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "NO_LOGS", "SUCCESS"] | int] | None = None) -> None:
+    """Configure both external and internal Flock logging systems.
+
+    Args:
+        flock_level (str | int): The default logging level (e.g., "INFO", "ERROR", "DEBUG") or numeric level for Flock logging.
+        external_level (str | int): The default logging level (e.g., "INFO", "ERROR", "DEBUG") or numeric level for external logging.
+        specific_levels (dict[str, str | int] | None, optional): A dictionary mapping
+            logger names to their specific logging levels. Defaults to None.
+    """
+    # Get default severity
+
+    external_severity = get_default_severity(external_level)
+    logging.basicConfig(level=external_severity)
+
+
+    flock_severity = get_default_severity(flock_level)
+
+    specific_severities = {}
+    if specific_levels:
+        for name, logger_level in specific_levels.items():
+            severity = get_default_severity(logger_level)
+            specific_severities[name] = severity
+
+    # Apply to all cached loggers
+    for logger_name, log_instance in _LOGGER_CACHE.items():
+        target_severity = flock_severity
+        if logger_name in specific_severities:
+            target_severity = specific_severities[logger_name]
+
+        log_instance.min_level_severity = target_severity
+
+
+
+
 # Define a dummy logger that does nothing
 class DummyLogger:
     """A dummy logger that does nothing when called."""
@@ -276,19 +336,17 @@ class FlockLogger:
     - Otherwise, it uses Loguru.
     """
 
-    def __init__(self, name: str, enable_logging: bool = False):
+    def __init__(self, name: str, initial_min_level_severity: int):
         """Initialize the FlockLogger.
 
         Args:
             name (str): The name of the logger.
-            enable_logging (bool, optional): Whether to enable logging. Defaults to False.
+            initial_min_level_severity (int): The minimum severity level for messages to be logged.
         """
         self.name = name
-        self.enable_logging = enable_logging
+        self.min_level_severity = initial_min_level_severity
 
     def _get_logger(self):
-        if not self.enable_logging:
-            return dummy_logger
         if in_workflow_context():
             # Use Temporal's workflow.logger inside a workflow context.
             return workflow.logger
@@ -316,6 +374,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["DEBUG"]
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Debug a message.
 
         Args:
@@ -334,6 +396,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["INFO"]
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Info a message.
 
         Args:
@@ -352,6 +418,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["WARNING"]
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Warning a message.
 
         Args:
@@ -370,6 +440,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["ERROR"]
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Error a message.
 
         Args:
@@ -388,6 +462,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["ERROR"] # Exception implies ERROR level
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Exception a message.
 
         Args:
@@ -406,6 +484,10 @@ class FlockLogger:
         max_length: int = MAX_LENGTH,
         **kwargs,
     ) -> None:
+        current_method_severity = LOG_LEVELS["SUCCESS"]
+        if self.min_level_severity == LOG_LEVELS["NO_LOGS"] or \
+           current_method_severity < self.min_level_severity:
+            return
         """Success a message.
 
         Args:
@@ -420,16 +502,21 @@ class FlockLogger:
 _LOGGER_CACHE: dict[str, FlockLogger] = {}
 
 
-def get_logger(name: str = "flock", enable_logging: bool = True) -> FlockLogger:
+def get_logger(name: str = "flock") -> FlockLogger:
     """Return a cached FlockLogger instance for the given name.
 
-    If the logger doesn't exist, create it.
-    If it does exist, update 'enable_logging' if a new value is passed.
+    If the logger doesn't exist, it is created with 'enable_logging' set to False
+    by default (i.e., errors-only mode). Its state can then be changed by calling
+    the `configure_logging()` function.
+    If a logger with the given name already exists in the cache, its 'min_level_severity'
+    state is NOT modified by this function; it's simply returned.
     """
     if name not in _LOGGER_CACHE:
-        _LOGGER_CACHE[name] = FlockLogger(name, enable_logging)
-    else:
-        _LOGGER_CACHE[name].enable_logging = enable_logging
+        # New loggers default to errors-only (min_level_severity = ERROR_SEVERITY)
+        # until explicitly configured by configure_logging()
+        _LOGGER_CACHE[name] = FlockLogger(name, LOG_LEVELS["NO_LOGS"])
+    # The min_level_severity state of existing or newly created loggers
+    # should be managed by the configure_logging() function.
     return _LOGGER_CACHE[name]
 
 

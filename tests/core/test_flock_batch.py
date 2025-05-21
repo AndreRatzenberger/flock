@@ -12,7 +12,7 @@ from flock.evaluators.test.test_case_evaluator import TestCaseEvaluator, TestCas
 @pytest.fixture
 def basic_flock() -> Flock:
     """Fixture for a basic Flock instance."""
-    return Flock(name="test_basic_flock", model="test-model", enable_logging=False, show_flock_banner=False)
+    return Flock(name="test_basic_flock", model="test-model", show_flock_banner=False)
 
 @pytest.fixture
 def simple_agent() -> FlockAgent:

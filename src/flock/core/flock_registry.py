@@ -392,7 +392,7 @@ class FlockRegistry:
         else:
             # Consider adding dynamic import attempts for types if needed,
             # but explicit registration is generally safer for types.
-            logger.error(f"Type '{type_name}' not found in registry.")
+            logger.warning(f"Type '{type_name}' not found in registry. Will attempt to build it from builtins.")
             raise KeyError(
                 f"Type '{type_name}' not found. Ensure it is registered."
             )
