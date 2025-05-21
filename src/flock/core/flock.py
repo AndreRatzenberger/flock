@@ -602,18 +602,18 @@ class Flock(BaseModel, Serializable):
                         enable_temporal=self.enable_temporal,
                     )
 
-                # Execute workflow
-                if not self.enable_temporal:
-                    result = await run_local_workflow(
-                        run_context, box_result=False # Boxing handled below
-                    )
-                else:
-                    result = await run_temporal_workflow(
-                        self, # Pass the Flock instance
-                        run_context,
-                        box_result=False, # Boxing handled below
-                        memo=memo,
-                    )
+                    # Execute workflow
+                    if not self.enable_temporal:
+                        result = await run_local_workflow(
+                            run_context, box_result=False # Boxing handled below
+                        )
+                    else:
+                        result = await run_temporal_workflow(
+                            self, # Pass the Flock instance
+                            run_context,
+                            box_result=False, # Boxing handled below
+                            memo=memo,
+                        )
 
                     span.set_attribute("result.type", str(type(result)))
                     result_str = str(result)
@@ -635,8 +635,8 @@ class Flock(BaseModel, Serializable):
                     else:
                         return result
 
-                    # The context of self._mgr ends here, meaning, that servers will
-                    # be cleaned up and shut down.
+                        # The context of self._mgr ends here, meaning, that servers will
+                        # be cleaned up and shut down.
 
             except Exception as e:
                 logger.error(
