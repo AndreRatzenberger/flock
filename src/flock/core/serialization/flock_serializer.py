@@ -17,7 +17,8 @@ from pydantic import BaseModel, create_model
 from flock.core.flock_registry import get_registry
 from flock.core.logging.logging import get_logger
 from flock.core.serialization.serialization_utils import (
-    extract_pydantic_models_from_type_string,  # Assuming this handles basic serialization needs
+    # Assuming this handles basic serialization needs
+    extract_pydantic_models_from_type_string,
 )
 
 if TYPE_CHECKING:
@@ -52,8 +53,39 @@ class FlockSerializer:
         )
 
         data["agents"] = {}
+        data["mcp_servers"] = {}
         custom_types = {}
         components = {}
+
+        for name, server_instance in flock_instance._servers.items():
+            try:
+                # Servers handle their own serialization via their to_dict method
+                server_data = server_instance.to_dict(path_type=path_type)
+                data["mcp_servers"][name] = server_data
+
+                # --- Extract Component Information ---
+
+                # Modules
+                if "modules" in server_data:
+                    for module_name, module_data in server_data[
+                        "modules"
+                    ].items():
+                        if module_data and "type" in module_data:
+                            component_type = module_data["type"]
+                            if component_type not in components:
+                                logger.debug(
+                                    f"Adding module component '{component_type}' from module '{module_name}' in server '{name}'"
+                                )
+                                components[component_type] = (
+                                    FlockSerializer._get_component_definition(
+                                        component_type, path_type
+                                    )
+                                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to serialize server '{name}' within Flock: {e}",
+                    exc_info=True,
+                )
 
         for name, agent_instance in flock_instance._agents.items():
             try:
@@ -260,6 +292,9 @@ class FlockSerializer:
         # Import concrete types needed for instantiation
         from flock.core.flock import Flock  # Import the actual class
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockMCPServer,
+        )
 
         logger.debug(
             f"Deserializing Flock from dict. Provided keys: {list(data.keys())}"
@@ -290,6 +325,8 @@ class FlockSerializer:
             FlockSerializer._check_dependencies(data.pop("dependencies"))
 
         agents_data = data.pop("agents", {})
+        server_data = data.pop("mcp_servers", {})
+        logger.info(f"Found {len(server_data)} servers to deserialize")
         logger.info(f"Found {len(agents_data)} agents to deserialize")
 
         try:
@@ -308,6 +345,20 @@ class FlockSerializer:
             raise ValueError(
                 f"Failed to initialize Flock from dict: {e}"
             ) from e
+
+        # Deserialize and add server AFTER Flock instance exists and BEFORE Agents have been added
+        for name, server_data in server_data.items():
+            try:
+                logger.debug(f"Deserializing server '{name}'")
+                server_data.setdefault("name", name)
+                server_instance = ConcreteFlockMCPServer.from_dict(server_data)
+                flock_instance.add_server(server_instance)
+                logger.debug(f"Successfully added server '{name}' to Flock")
+            except Exception as e:
+                logger.error(
+                    f"Failed to deserialize/add server '{name}': {e}",
+                    exc_info=True,
+                )
 
         # Deserialize and add agents AFTER Flock instance exists
         for name, agent_data in agents_data.items():

@@ -16,7 +16,7 @@
     "terminal.integrated.fontFamily": "'Jetbrains Mono', 'FiraCode Nerd Font', 'Hack Nerd Font', 'monospace'",
     "editor.renderWhitespace": "none",
     //"terminal.integrated.lineHeight": 1.5,
-    "editor.fontSize": 15.5,
+    "editor.fontSize": 12,
     "editor.fontLigatures": true,
     "editor.lineHeight": 1.5,
     "editor.minimap.enabled": false,
@@ -90,5 +90,6 @@
         "tag:yaml.org,2002:python/name:pymdownx.superfences.fence_code_format",
         "tag:yaml.org,2002:python/object/apply:pymdownx.slugs.slugify mapping"
     ],
-    "editor.guides.indentation": false
+    "editor.guides.indentation": false,
+    "python.REPL.enableREPLSmartSend": false
 }

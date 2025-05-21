@@ -12,7 +12,7 @@
         },
         {
             "name": "Attach to debugpy",
-            "type": "python",
+            "type": "debugpy",
             "subProcess": true,
             "request": "attach",
             "connect": {

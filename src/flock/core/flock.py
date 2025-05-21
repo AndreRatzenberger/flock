@@ -22,6 +22,9 @@ _R = TypeVar("_R")
 from box import Box
 from temporalio import workflow
 
+from flock.core.flock_server_manager import FlockServerManager
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+
 with workflow.unsafe.imports_passed_through():
     from datasets import Dataset  # type: ignore
 
@@ -135,7 +138,14 @@ class Flock(BaseModel, Serializable):
     # Marked with underscore to indicate it's managed internally and accessed via property
     _agents: dict[str, FlockAgent]
     _start_agent_name: str | None = None  # For potential pre-configuration
-    _start_input: dict = {}  # Instance attribute overwritten in __init__; kept for typing clarity
+    _start_input: dict = {}  # For potential pre-configuration
+
+    # Internal server storage - not part of the Pydantic model for direct serialization
+    _servers: dict[str, FlockMCPServerBase]
+
+    # Async context-manager for startup and teardown of servers
+    # Not part of the pydantic model
+    _mgr: FlockServerManager
 
     # Pydantic v2 model config
     model_config = {
@@ -175,6 +185,7 @@ class Flock(BaseModel, Serializable):
         enable_temporal: bool = False,
         enable_logging: bool | list[str] = False,
         agents: list[FlockAgent] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
         temporal_start_in_process_worker: bool = True,
         **kwargs,
@@ -198,11 +209,30 @@ class Flock(BaseModel, Serializable):
 
         # Initialize runtime attributes AFTER super().__init__()
         self._agents = {}
+        self._servers = {}
         self._start_agent_name = None
         self._start_input = {}
+        self._mgr = FlockServerManager()
 
         # Set up logging based on the enable_logging flag
         self._configure_logging(enable_logging) # Pass original value to _configure_logging
+
+        # Register passed servers
+        # (need to be registered first so that agents can retrieve them from the registry)
+        # This will also add them to the managed list of self._mgr
+        if servers:
+            from flock.core.mcp.flock_mcp_server import (
+                FlockMCPServerBase as ConcreteFlockMCPServer,
+            )
+
+            for server in servers:
+                if isinstance(server, ConcreteFlockMCPServer):
+                    self.add_server(server)
+                else:
+                    logger.warning(
+                        f"Item provided in 'servers' list is not a FlockMCPServer: {type(server)}"
+                    )
+
 
         # Register passed agents
         if agents:
@@ -330,11 +360,47 @@ class Flock(BaseModel, Serializable):
             set_baggage("session_id", session_id)
             logger.debug(f"Generated new session_id: {session_id}")
 
-    def add_agent(self, agent: FlockAgent) -> FlockAgent:
-        """Adds an agent instance to this Flock configuration and registry."""
-        from flock.core.flock_agent import (
-            FlockAgent as ConcreteFlockAgent,  # Local import
+    def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
+        """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by self._mgr."""
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockMCPServer,
         )
+
+        if not isinstance(server, ConcreteFlockMCPServer):
+            raise TypeError("Provided object is not a FlockMCPServer instance.")
+        if not server.config.name:
+            raise ValueError("Server must have a name.")
+
+        if server.config.name in self.servers:
+            raise ValueError(
+                f"Server with this name already exists. Name: '{server.config.name}'"
+            )
+
+        self._servers[server.config.name] = server
+        FlockRegistry.register_server(server)  # Register globally.
+
+        # Make sure that the server is also added to
+        # the server_list managed by FlockServerManager
+        if not self._mgr:
+            self._mgr = FlockServerManager()
+
+        # Prepare server to be managed by the FlockServerManager
+        logger.info(f"Adding server '{server.config.name}' to managed list.")
+        self._mgr.add_server_sync(server=server)
+        logger.info(f"Server '{server.config.name}' is now on managed list.")
+
+        logger.info(
+            f"Server '{server.config.name}' added to Flock '{self.name}'"
+        )
+        return server
+
+    def add_agent(self, agent: FlockAgent) -> FlockAgent:
+        """Adds an agent instance to this Flock configuration and registry.
+
+        This also registers all servers attached to the agent, if they have not been registered
+        beforehand.
+        """
+        from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
 
         if not isinstance(agent, ConcreteFlockAgent):
             raise TypeError("Provided object is not a FlockAgent instance.")
@@ -372,6 +438,11 @@ class Flock(BaseModel, Serializable):
         """Returns the dictionary of agents managed by this Flock instance."""
         return self._agents
 
+    @property
+    def servers(self) -> dict[str, FlockMCPServerBase]:
+        """Returns the dictionary of servers managed by this Flock instance."""
+        return self._servers
+
     def run(
         self,
         start_agent: FlockAgent | str | None = None,
@@ -380,6 +451,7 @@ class Flock(BaseModel, Serializable):
         run_id: str = "",
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
         memo: dict[str, Any] | None = None
     ) -> Box | dict:
         return self._run_sync(
@@ -390,6 +462,7 @@ class Flock(BaseModel, Serializable):
                 run_id=run_id,
                 box_result=box_result,
                 agents=agents,
+                servers=servers,
                 memo=memo,
             )
         )
@@ -403,15 +476,28 @@ class Flock(BaseModel, Serializable):
         run_id: str = "",
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
+        servers: list[FlockMCPServerBase] | None = None,
         memo: dict[str, Any] | None = None,
     ) -> Box | dict:
         """Entry point for running an agent system asynchronously."""
-        from flock.core.flock_agent import (
-            FlockAgent as ConcreteFlockAgent,  # Local import
+        # Import here to allow forward reference resolution
+        from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
+        from flock.core.mcp.flock_mcp_server import (
+            FlockMCPServerBase as ConcreteFlockServer,
         )
 
         with tracer.start_as_current_span("flock.run_async") as span:
-            # Add passed agents first
+            # Add passed servers so that agents have access to them.
+            if servers:
+                for server_obj in servers:
+                    if isinstance(server_obj, ConcreteFlockServer):
+                        self.add_server(server=server_obj)
+                    else:
+                        logger.warning(
+                            f"Item in 'servers' list is not a FlockMCPServer: {type(server_obj)}"
+                        )
+
+            # Add passed agents
             if agents:
                 for agent_obj in agents:
                     if isinstance(agent_obj, ConcreteFlockAgent):
@@ -434,7 +520,7 @@ class Flock(BaseModel, Serializable):
 
             # Default to first agent if only one exists and none specified
             if not start_agent_name and len(self._agents) == 1:
-                start_agent_name = list(self._agents.keys())[0]
+                start_agent_name = next(iter(self._agents.keys()))
             elif not start_agent_name:
                 raise ValueError(
                     "No start_agent specified and multiple/no agents exist in the Flock instance."
@@ -497,44 +583,60 @@ class Flock(BaseModel, Serializable):
                         self.temporal_config.model_dump(mode="json"),
                     )
 
-                logger.info(
-                    "Starting agent execution",
-                    agent=start_agent_name,
-                    enable_temporal=self.enable_temporal,
-                )
-
-                # Execute workflow
-                if not self.enable_temporal:
-                    result = await run_local_workflow(
-                        run_context, box_result=False # Boxing handled below
-                    )
-                else:
-                    result = await run_temporal_workflow(
-                        self, # Pass the Flock instance
-                        run_context,
-                        box_result=False, # Boxing handled below
-                        memo=memo,
+                # At this point, initial setup is done
+                # and flock is ready to execute it's agent_workflow.
+                # Befor that happens, the ServerManager needs to
+                # get the Servers up and running (Populate pools, build connections, start scripts, etc.)
+                async with self._mgr:
+                    # Enter the manager's async context,
+                    # running it's __aenter__ method and starting all registered servers
+                    # after this block ends, self._mgr's __aexit__ will be called
+                    # all servers will be torn down.
+                    logger.info(
+                        f"Entering managed server context. Servers starting up."
                     )
 
-                span.set_attribute("result.type", str(type(result)))
-                result_str = str(result)
-                span.set_attribute(
-                    "result.preview",
-                    result_str[:1000]
-                    + ("..." if len(result_str) > 1000 else ""),
-                )
+                    logger.info(
+                        "Starting agent execution",
+                        agent=start_agent_name,
+                        enable_temporal=self.enable_temporal,
+                    )
 
-                if box_result:
-                    try:
-                        logger.debug("Boxing final result.")
-                        return Box(result)
-                    except ImportError: # Should not happen as Box is a direct dependency
-                        logger.warning(
-                            "Box library not installed (should be direct dependency), returning raw dict."
+                    # Execute workflow
+                    if not self.enable_temporal:
+                        result = await run_local_workflow(
+                            run_context, box_result=False # Boxing handled below
                         )
+                    else:
+                        result = await run_temporal_workflow(
+                            self, # Pass the Flock instance
+                            run_context,
+                            box_result=False, # Boxing handled below
+                            memo=memo,
+                        )
+
+                    span.set_attribute("result.type", str(type(result)))
+                    result_str = str(result)
+                    span.set_attribute(
+                        "result.preview",
+                        result_str[:1000]
+                        + ("..." if len(result_str) > 1000 else ""),
+                    )
+
+                    if box_result:
+                        try:
+                            logger.debug("Boxing final result.")
+                            return Box(result)
+                        except ImportError:
+                            logger.warning(
+                                "Box library not installed, returning raw dict."
+                            )
+                            return result
+                    else:
                         return result
-                else:
-                    return result
+
+                        # The context of self._mgr ends here, meaning, that servers will
+                        # be cleaned up and shut down.
 
             except Exception as e:
                 logger.error(

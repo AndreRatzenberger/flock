@@ -4,11 +4,13 @@
 import asyncio
 import json
 import os
+import uuid
 from abc import ABC
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -59,7 +61,13 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     Inherits from Pydantic BaseModel, ABC, DSPyIntegrationMixin, and Serializable.
     """
 
+    agent_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Internal, Unique UUID4 for this agent instance. No need to set it manually. Used for MCP features.",
+    )
+
     name: str = Field(..., description="Unique identifier for the agent.")
+
     model: str | None = Field(
         None,
         description="The model identifier to use (e.g., 'openai/gpt-4o'). If None, uses Flock's default.",
@@ -88,6 +96,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             description="List of callable tools the agent can use. These must be registered.",
         )
     )
+    servers: list[str | FlockMCPServerBase] | None = Field(
+        default=None,
+        description="List of MCP Servers the agent can use to enhance its capabilities. These must be registered.",
+    )
+
     write_to_file: bool = Field(
         default=False,
         description="Write the agent's output to a file.",
@@ -132,9 +145,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
+        servers: list[str | FlockMCPServerBase] | None = None,
         evaluator: "FlockEvaluator | None" = None,
         handoff_router: "FlockRouter | None" = None,
-        modules: dict[str, "FlockModule"] | None = None,  # Use dict for modules
+        # Use dict for modules
+        modules: dict[str, "FlockModule"] | None = None,
         write_to_file: bool = False,
         wait_for_input: bool = False,
         temporal_activity_config: TemporalActivityConfig | None = None,
@@ -147,6 +162,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             input=input,  # Store the raw input spec
             output=output,  # Store the raw output spec
             tools=tools,
+            servers=servers,
             write_to_file=write_to_file,
             wait_for_input=wait_for_input,
             evaluator=evaluator,
@@ -335,6 +351,37 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                     # For now, assume evaluator handles tool resolution if necessary
                     registered_tools = self.tools
 
+                # Retrieve available mcp_tools if the evaluator needs them
+                mcp_tools = []
+                if self.servers:
+                    from flock.core.flock_registry import get_registry
+
+                    FlockRegistry = get_registry()  # Get the registry
+                    for server in self.servers:
+                        registered_server: FlockMCPServerBase | None = None
+                        server_tools = []
+                        if isinstance(server, FlockMCPServerBase):
+                            # check if registered
+                            server_name = server.config.name
+                            registered_server = FlockRegistry.get_server(
+                                server_name
+                            )
+                        else:
+                            # servers must be registered.
+                            registered_server = FlockRegistry.get_server(
+                                name=server
+                            )
+                        if registered_server:
+                            server_tools = await registered_server.get_tools(
+                                agent_id=self.agent_id,
+                                run_id=self.context.run_id,
+                            )
+                        else:
+                            logger.warning(
+                                f"No Server with name '{server}' registered! Skipping."
+                            )
+                        mcp_tools = mcp_tools + server_tools
+
                 # --------------------------------------------------
                 # Optional DI middleware pipeline
                 # --------------------------------------------------
@@ -391,7 +438,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 else:
                     # No DI container – standard execution
                     result = await self.evaluator.evaluate(
-                        self, current_inputs, registered_tools
+                        self,
+                    current_inputs,
+                    registered_tools,
+                    mcp_tools=mcp_tools,
                     )
             except Exception as eval_error:
                 logger.error(
@@ -662,7 +712,14 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         FlockRegistry = get_registry()
 
-        exclude = ["context", "evaluator", "modules", "handoff_router", "tools"]
+        exclude = [
+            "context",
+            "evaluator",
+            "modules",
+            "handoff_router",
+            "tools",
+            "servers",
+        ]
 
         is_descrition_callable = False
         is_input_callable = False
@@ -754,6 +811,25 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             logger.debug(
                 f"Added {len(serialized_modules)} modules to agent '{self.name}'"
             )
+
+        # --- Serialize Servers ---
+        if self.servers:
+            logger.debug(
+                f"Serializing {len(self.servers)} servers for agent '{self.name}'"
+            )
+            serialized_servers = []
+            for server in self.servers:
+                if isinstance(server, FlockMCPServerBase):
+                    serialized_servers.append(server.config.name)
+                else:
+                    # Write it down as a list of server names.
+                    serialized_servers.append(server)
+
+            if serialized_servers:
+                data["mcp_servers"] = serialized_servers
+                logger.debug(
+                    f"Added {len(serialized_servers)} servers to agent '{self.name}'"
+                )
 
         # --- Serialize Tools (Callables) ---
         if self.tools:
@@ -848,6 +924,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         component_configs = {}
         callable_configs = {}
         tool_config = []
+        servers_config = []
         agent_data = {}
 
         component_keys = [
@@ -863,6 +940,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         ]
         tool_key = "tools"
 
+        servers_key = "mcp_servers"
+
         for key, value in data.items():
             if key in component_keys and value is not None:
                 component_configs[key] = value
@@ -870,8 +949,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 callable_configs[key] = value
             elif key == tool_key and value is not None:
                 tool_config = value  # Expecting a list of names
+            elif key == servers_key and value is not None:
+                servers_config = value  # Expecting a list of names
             elif key not in component_keys + callable_keys + [
-                tool_key
+                tool_key,
+                servers_key,
             ]:  # Avoid double adding
                 agent_data[key] = value
             # else: ignore keys that are None or already handled
@@ -986,6 +1068,37 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                         f"Unexpected error resolving tool '{tool_name_or_path}' for agent '{agent.name}': {e}. Skipping.",
                         exc_info=True,
                     )
+
+        # --- Deserialize Servers ---
+        agent.servers = []  # Initialize Servers list.
+        if servers_config:
+            logger.debug(
+                f"Deserializing {len(servers_config)} servers for '{agent.name}'"
+            )
+            # Agents keep track of server by getting a list of server names.
+            # The server instances will be retrieved during runtime from the registry. (default behavior)
+
+            for server_name in servers_config:
+                if isinstance(server_name, str):
+                    # Case 1 (default behavior): A server name is passe.
+                    agent.servers.append(server_name)
+                elif isinstance(server_name, FlockMCPServerBase):
+                    # Case 2 (highly unlikely): If someone somehow manages to pass
+                    # an instance of a server during the deserialization step (however that might be achieved)
+                    # check the registry, if the server is already registered, if not, register it
+                    # and store the name in the servers list
+                    FlockRegistry = get_registry()
+                    server_exists = (
+                        FlockRegistry.get_server(server_name.config.name)
+                        is not None
+                    )
+                    if server_exists:
+                        agent.servers.append(server_name.config.name)
+                    else:
+                        FlockRegistry.register_server(
+                            server=server_name
+                        )  # register it.
+                        agent.servers.append(server_name.config.name)
 
         # --- Deserialize Callables ---
         logger.debug(f"Deserializing callable fields for '{agent.name}'")

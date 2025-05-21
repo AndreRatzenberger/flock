@@ -1,9 +1,12 @@
 # src/flock/core/mixin/dspy_integration.py
 """Mixin class for integrating with the dspy library."""
 
+import ast
 import re  # Import re for parsing
 import typing
 from typing import Any, Literal
+
+from dspy import Tool
 
 from flock.core.logging.logging import get_logger
 from flock.core.util.spliter import split_top_level
@@ -68,12 +71,15 @@ def _resolve_type_string(type_str: str) -> type:
             # Special handling for Literal
             if BaseType is typing.Literal:
                 # Split literal values, remove quotes, strip whitespace
-                literal_args_raw = split_top_level(args_str)
-                literal_args = tuple(
-                    s.strip().strip("'\"") for s in literal_args_raw
-                )
+                def parse_literal_args(args_str: str) -> tuple[str, ...]:
+                    try:
+                        return tuple(ast.literal_eval(f"[{args_str}]"))
+                    except (SyntaxError, ValueError) as exc:
+                        raise ValueError(f"Cannot parse {args_str!r} as literals") from exc
+
+                literal_args = parse_literal_args(args_str)
                 logger.debug(
-                    f"Parsing Literal arguments: {literal_args_raw} -> {literal_args}"
+                    f"Parsing Literal arguments: {args_str} -> {literal_args}"
                 )
                 resolved_type = typing.Literal[literal_args]  # type: ignore
                 logger.debug(f"Constructed Literal type: {resolved_type}")
@@ -95,7 +101,8 @@ def _resolve_type_string(type_str: str) -> type:
             if BaseType is typing.Optional:
                 if len(resolved_arg_types) != 1:
                     raise ValueError("Optional requires exactly one argument.")
-                resolved_type = typing.Union[resolved_arg_types[0], type(None)]  # type: ignore
+                # type: ignore
+                resolved_type = typing.Union[resolved_arg_types[0], type(None)]
                 logger.debug(
                     f"Constructed Optional type as Union: {resolved_type}"
                 )
@@ -103,7 +110,8 @@ def _resolve_type_string(type_str: str) -> type:
             elif BaseType is typing.Union:
                 if not resolved_arg_types:
                     raise ValueError("Union requires at least one argument.")
-                resolved_type = typing.Union[resolved_arg_types]  # type: ignore
+                # type: ignore
+                resolved_type = typing.Union[resolved_arg_types]
                 logger.debug(f"Constructed Union type: {resolved_type}")
                 return resolved_type
             elif hasattr(
@@ -242,7 +250,8 @@ class DSPyIntegrationMixin:
                 f"Failed to create dynamic type 'dspy_{agent_name}': {e}",
                 exc_info=True,
             )
-            raise TypeError(f"Could not create DSPy signature type: {e}") from e
+            raise TypeError(
+                f"Could not create DSPy signature type: {e}") from e
 
     def _configure_language_model(
         self,
@@ -292,12 +301,15 @@ class DSPyIntegrationMixin:
                 f"Failed to configure DSPy language model '{model}': {e}",
                 exc_info=True,
             )
+            # We need to raise this exception, otherwise Flock will trundle on until it needs dspy.settings.lm and can't find it.
+            raise
 
     def _select_task(
         self,
         signature: Any,
         override_evaluator_type: AgentType,
         tools: list[Any] | None = None,
+        mcp_tools: list[Any] | None = None,
         kwargs: dict[str, Any] = {},
     ) -> Any:
         """Select and instantiate the appropriate DSPy Program/Module."""
@@ -320,18 +332,38 @@ class DSPyIntegrationMixin:
                         f"Item '{tool}' in tools list is not callable, skipping."
                     )
 
+        processed_mcp_tools = []
+        if mcp_tools:
+            for mcp_tool in mcp_tools:
+                if isinstance(mcp_tool, Tool):  # Basic check
+                    processed_mcp_tools.append(mcp_tool)
+                else:
+                    logger.warning(
+                        f"Item '{mcp_tool}' is not a dspy.primitives.Tool, skipping."
+                    )
+
         dspy_program = None
         selected_type = override_evaluator_type
 
         # Determine type if not overridden
         if not selected_type:
             selected_type = (
-                "ReAct" if processed_tools else "Predict"
+                "ReAct" if processed_tools or processed_mcp_tools else "Predict"
             )  # Default logic
 
         logger.debug(
-            f"Selecting DSPy program type: {selected_type} (Tools provided: {bool(processed_tools)})"
+            f"Selecting DSPy program type: {selected_type} (Tools provided: {bool(processed_tools)}) (MCP Tools: {bool(processed_mcp_tools)}"
         )
+
+        # Merge list of native tools and processed tools.
+        # This makes mcp tools appear as native code functions to the llm of the agent.
+        merged_tools = []
+
+        if processed_tools:
+            merged_tools = merged_tools + processed_tools
+
+        if processed_mcp_tools:
+            merged_tools = merged_tools + processed_mcp_tools
 
         try:
             if selected_type == "ChainOfThought":
@@ -340,7 +372,7 @@ class DSPyIntegrationMixin:
                 if not kwargs:
                     kwargs = {"max_iters": 10}
                 dspy_program = dspy.ReAct(
-                    signature, tools=processed_tools or [], **kwargs
+                    signature, tools=merged_tools or [], **kwargs
                 )
             elif selected_type == "Predict":  # Default or explicitly Completion
                 dspy_program = dspy.Predict(signature)
@@ -395,7 +427,8 @@ class DSPyIntegrationMixin:
             final_result = {**inputs, **output_dict}
 
             lm = dspy.settings.get("lm")
-            cost = sum([x["cost"] for x in lm.history if x["cost"] is not None])
+            cost = sum([x["cost"]
+                       for x in lm.history if x["cost"] is not None])
             lm_history = lm.history
 
             return final_result, cost, lm_history

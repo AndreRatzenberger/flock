@@ -120,7 +120,7 @@ class TelemetryConfig:
                 )
 
                 otlp_exporter = OTLPSpanExporter(
-                    collector_endpoint=self.otlp_endpoint,
+                    endpoint=self.otlp_endpoint,
                 )
             else:
                 raise ValueError(

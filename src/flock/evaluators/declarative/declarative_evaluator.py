@@ -52,7 +52,7 @@ class DeclarativeEvaluator(
     _lm_history: list = PrivateAttr(default_factory=list)
 
     async def evaluate(
-        self, agent: FlockAgent, inputs: dict[str, Any], tools: list[Any]
+        self, agent: FlockAgent, inputs: dict[str, Any], tools: list[Any], mcp_tools: list[Any] | None = None
     ) -> dict[str, Any]:
         """Evaluate using DSPy, with optional asynchronous streaming."""
         # --- Setup Signature and LM ---
@@ -84,6 +84,7 @@ class DeclarativeEvaluator(
                 _dspy_signature,
                 override_evaluator_type=self.config.override_evaluator_type,
                 tools=tools,
+                mcp_tools=mcp_tools,
                 kwargs=self.config.kwargs,
             )
         except Exception as setup_error:
@@ -106,7 +107,7 @@ class DeclarativeEvaluator(
                     "DSPy task could not be created or is not callable."
                 )
 
-            streaming_task = dspy.streamify(agent_task)
+            streaming_task = dspy.streamify(agent_task, is_async_program=True)
             stream_generator: Generator = streaming_task(**inputs)
             delta_content = ""
 
@@ -139,7 +140,7 @@ class DeclarativeEvaluator(
             logger.info(f"Evaluating agent '{agent.name}' without streaming.")
             try:
                 # Ensure the call is awaited if the underlying task is async
-                result_obj = agent_task(**inputs)
+                result_obj = await agent_task.acall(**inputs)
                 result_dict, cost, lm_history = self._process_result(
                     result_obj, inputs
                 )

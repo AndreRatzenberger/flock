@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from flock.core.flock_evaluator import FlockEvaluator
     from flock.core.flock_module import FlockModule
     from flock.core.flock_router import FlockRouter
+    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
     COMPONENT_BASE_TYPES = (FlockModule, FlockEvaluator, FlockRouter)
 
@@ -43,7 +44,6 @@ else:
     IS_COMPONENT_CHECK_ENABLED = False
 
 # Fallback if core types aren't available during setup
-
 from flock.core.flock_module import FlockModuleConfig
 from flock.core.logging.logging import get_logger
 
@@ -56,7 +56,7 @@ _COMPONENT_CONFIG_MAP: dict[type[BaseModel], type[any]] = {}
 
 
 class FlockRegistry:
-    """Singleton registry for Agents, Callables (functions/methods).
+    """Singleton registry for Agents, Callables (functions/methods) and MCP Servers.
 
     Types (Pydantic/Dataclasses used in signatures), and Component Classes
     (Modules, Evaluators, Routers).
@@ -65,6 +65,7 @@ class FlockRegistry:
     _instance = None
 
     _agents: dict[str, FlockAgent]
+    _servers: dict[str, FlockMCPServerBase]
     _callables: dict[str, Callable]
     _types: dict[str, type]
     _components: dict[str, type]  # For Module, Evaluator, Router classes
@@ -79,6 +80,7 @@ class FlockRegistry:
     def _initialize(self):
         """Initialize the internal dictionaries."""
         self._agents = {}
+        self._servers = {}
         self._callables = {}
         self._types = {}
         self._components = {}
@@ -169,6 +171,35 @@ class FlockRegistry:
         except AttributeError:
             logger.warning(f"Could not determine module/name for object: {obj}")
             return None
+
+    # --- Server Registration ---
+    def register_server(self, server: FlockMCPServerBase) -> None:
+        """Registers a flock mcp server by its name."""
+        if not hasattr(server.config, "name") or not server.config.name:
+            logger.error(
+                "Attempted to register a server without a valid 'name' attribute."
+            )
+            return
+        if (
+            server.config.name in self._servers
+            and self._servers[server.config.name] != server
+        ):
+            logger.warning(
+                f"Server '{server.config.name}' already registered. Overwriting."
+            )
+        self._servers[server.config.name] = server
+        logger.debug(f"Registered server: {server.config.name}")
+
+    def get_server(self, name: str) -> FlockMCPServerBase | None:
+        """Retrieves a registered FlockMCPServer instance by name."""
+        server = self._servers.get(name)
+        if not server:
+            logger.warning(f"Server '{name}' not found in registry.")
+        return server
+
+    def get_all_server_names(self) -> list[str]:
+        """Returns a list of names for all registered servers."""
+        return list(self._servers.keys())
 
     # --- Agent Registration ---
     def register_agent(self, agent: FlockAgent, *, force: bool = False) -> None:
@@ -499,6 +530,8 @@ def get_registry() -> FlockRegistry:
 # Type hinting for decorators to preserve signature
 @overload
 def flock_component(cls: ClassType) -> ClassType: ...  # Basic registration
+
+
 @overload
 def flock_component(
     *, name: str | None = None, config_class: type[ConfigType] | None = None
@@ -542,6 +575,8 @@ def flock_component(
 # Type hinting for decorators
 @overload
 def flock_tool(func: FuncType) -> FuncType: ...
+
+
 @overload
 def flock_tool(
     *, name: str | None = None
@@ -581,6 +616,8 @@ flock_callable = flock_tool
 
 @overload
 def flock_type(cls: ClassType) -> ClassType: ...
+
+
 @overload
 def flock_type(
     *, name: str | None = None

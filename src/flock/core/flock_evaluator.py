@@ -47,7 +47,7 @@ class FlockEvaluator(ABC, BaseModel):
 
     @abstractmethod
     async def evaluate(
-        self, agent: Any, inputs: dict[str, Any], tools: list[Any]
+        self, agent: Any, inputs: dict[str, Any], tools: list[Any], mcp_tools: list[Any] | None = None
     ) -> dict[str, Any]:
         """Evaluate inputs to produce outputs."""
         pass
