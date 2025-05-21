@@ -13,11 +13,7 @@
 <a href="https://bsky.app/profile/whiteduck-gmbh.bsky.social" target="_blank"><img alt="Bluesky" src="https://img.shields.io/badge/bluesky-Follow-blue?style=for-the-badge&logo=bluesky&logoColor=%23fff&color=%23333&labelColor=%230285FF&label=whiteduck-gmbh"></a>
 </p>
 
-🐤 Flock 0.4.0 currently in beta - use `pip install flock-core==0.4.0b5` 🐤
 
-🐤 `pip install flock-core` will install the latest non-beta version 🐤
-
-🐤  Expected Release for 0.4.0 `Magpie`: End of April 2025 🐤
 
 ---
 
@@ -174,71 +170,299 @@ if __name__ == "__main__":
 ```
 
 ## 🐤 New in Flock 0.4.0 `Magpie` 🐤
+<p align="center">
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/34c2fe2f-6dd2-498c-a826-1687cb158755" />
+</p>
 
-Version 0.4.0 brings significant enhancements focused on usability, deployment, and robustness:
 
 
-### 🚀 REST API - Deploy Flock Agents as REST API Endpoints
+### 🚀 REST API – Deploy Flock Agents as REST API Endpoints
 
 Easily deploy your Flock agents as scalable REST API endpoints. Interact with your agent workflows via standard HTTP requests.
 
---------------------------------
+The all-in-one `flock.serve()` method turns your Flock into a proper REST API!
 
-### 🖥️ Web UI - Test Flock Agents in the Browser
+<img width="1135" alt="image" src="https://github.com/user-attachments/assets/95a58e96-d866-4fd1-aca3-c7635843503c" />
 
-Test and interact with your Flock agents directly in your browser through an integrated web interface.
-
---------------------------------
-
-### ⌨️ CLI Tool - Manage Flock Agents via the Command Line
-
-Manage Flock configurations, run agents, and inspect results directly from your command line.
-
---------------------------------
-
-### 💾 Enhanced Serialization - Share, Deploy, and Run Flock Agents by human readable yaml files
-
-Define and share entire Flock configurations, including agents and components, using human-readable YAML files. Load flocks directly from these files for easy deployment and versioning.
-
---------------------------------
-
-### 💾 New execution flows
-
-Run Flock in batch mode to process multiple inputs at once or in evaluation mode to test agents with different inputs.
-
---------------------------------
-
-### ⏱️ Robust Temporal Integration
-
-Flock 0.4.0 introduces first-class support for Temporal.io, enabling you to build truly production-grade, reliable, and scalable agent workflows. Move beyond simple local execution and leverage Temporal's power for:
-
-*   **Fault Tolerance:** Workflows automatically resume from the last successful step after failures.
-*   **Retries:** Configure automatic retries for activities (like LLM calls or tool usage) with exponential backoff.
-*   **Scalability:** Distribute workflow and activity execution across multiple worker processes using Task Queues.
-*   **Observability:** Gain deep insights into workflow execution history via the Temporal UI.
-
-Flock makes this easy with:
-
-*   **Declarative Configuration:** Define Temporal timeouts, retry policies, and task queues directly within your `Flock` and `FlockAgent` configurations (YAML or Python).
-*   **Correct Patterns:** Uses Temporal's recommended granular activity execution for better control and visibility.
-*   **Clear Worker Separation:** Provides guidance and flags for running dedicated Temporal workers, separating development convenience from production best practices.
-  
-Visit the [Temporal Documentation](https://learn.temporal.io/python/workflows/) for more information on how to use Temporal.
-
-Or check out the [Flock Showcase](https://github.com/whiteducksoftware/flock-showcase) for a complete example of a Flock that uses Temporal or our [docs](https://whiteducksoftware.github.io/flock/guides/temporal-configuration/) for more information.
-
-Here's an example of how to configure a Flock to use Temporal:
+Need custom endpoints to wrap abstract agent logic or add business logic? We've got you.
+Define them. Declaratively.
 
 ```python
-from flock.core import Flock, FlockFactory
-
-from flock.workflow.temporal_config import (
-    TemporalActivityConfig,
-    TemporalRetryPolicyConfig,
-    TemporalWorkflowConfig,
+word_count_route = FlockEndpoint(
+    path="/api/word_count",
+    methods=["GET"],
+    callback=word_count,
+    query_model=WordCountParams,
+    response_model=WordCountResponse,
+    summary="Counts words in a text",
+    description="Takes a text and returns the number of words in it.",
 )
 
-# Flock-scoped temporal config
+flock.serve(custom_endpoints=[img_url_route, word_count_route, yoda_route])
+```
+
+<img width="1135" alt="image" src="https://github.com/user-attachments/assets/d9315648-ac10-4129-aca4-1cb4c8835672" />
+
+Want chat and UI too? Just turn them on.
+
+```python
+flock.serve(ui=True, chat=True)
+```
+
+---
+
+### 🖥️ Web UI – Test Flock Agents in the Browser
+
+Test and interact with your Flock agents directly in your browser using an integrated web interface.
+
+![image](https://github.com/user-attachments/assets/5746ae82-757b-43a3-931d-56d19d39371a)
+
+Highlights of this feature-rich interface:
+
+* Run all your agents and agent flows
+* Chat with your agents
+* Create sharable links – these freeze agent config so testers can focus on evaluation
+* Send direct feedback – includes everything needed to reproduce issues
+* Switch modes – like standalone chat mode, which hides all but the chat
+
+<img width="1135" alt="image" src="https://github.com/user-attachments/assets/398337ee-e56e-4bce-8bd8-d258c261cb64" />
+
+And much, much more... All features are based on real-world client feedback and serve actual business needs.
+
+---
+
+### ⌨️ CLI Tool – Manage Flock Agents via Command Line
+
+Manage configurations, run agents, and inspect results – all from your terminal. A quick way to test and validate serialized flocks.
+
+![image](https://github.com/user-attachments/assets/9370e7e8-94c3-4e26-8c7e-46ff2edd667a)
+
+---
+
+### 💾 Enhanced Serialization – Share, Deploy, and Run Flocks from YAML
+
+Define and share entire Flock configurations using readable YAML files. Perfect for versioning, deployment, and portability.
+
+Take note how even custom types like `FantasyCharacter` are serialized so the target system doesn't even need your code! Everything portable!
+
+```yaml
+name: pydantic_example
+model: openai/gpt-4o
+enable_temporal: false
+enable_logging: false
+show_flock_banner: false
+temporal_start_in_process_worker: true
+agents:
+  character_agent:
+    name: character_agent
+    model: openai/gpt-4o
+    description: Generates fantasy RPG character profiles for a specified number of
+      characters.
+    input: 'number_of_characters: int | The number of fantasy character profiles to
+      generate.'
+    output: 'character_list: list[FantasyCharacter] | A list containing the generated
+      character profiles.'
+    write_to_file: false
+    wait_for_input: false
+    evaluator:
+      name: default
+      config:
+        model: openai/gpt-4o
+        use_cache: true
+        temperature: 0.8
+        max_tokens: 8192
+        stream: false
+        include_thought_process: false
+        kwargs: {}
+      type: DeclarativeEvaluator
+    modules:
+      output:
+        name: output
+        config:
+          enabled: true
+          theme: abernathy
+          render_table: false
+          max_length: 1000
+          truncate_long_values: true
+          show_metadata: true
+          format_code_blocks: true
+          custom_formatters: {}
+          no_output: false
+          print_context: false
+        type: OutputModule
+      metrics:
+        name: metrics
+        config:
+          enabled: true
+          collect_timing: true
+          collect_memory: true
+          collect_token_usage: true
+          collect_cpu: true
+          storage_type: json
+          metrics_dir: metrics/
+          aggregation_interval: 1h
+          retention_days: 30
+          alert_on_high_latency: true
+          latency_threshold_ms: 30000
+        type: MetricsModule
+types:
+  FantasyCharacter:
+    module_path: __main__
+    type: pydantic.BaseModel
+    schema:
+      description: 'Data model for fantasy RPG character information.
+
+        Docstrings and Field descriptions can help guide the LLM.'
+      properties:
+        name:
+          description: A creative fantasy character name.
+          title: Name
+          type: string
+        race:
+          description: The character's race.
+          enum:
+          - human
+          - elf
+          - dwarf
+          - orc
+          - halfling
+          title: Race
+          type: string
+        class_type:
+          description: The character's class.
+          enum:
+          - warrior
+          - mage
+          - rogue
+          - cleric
+          - ranger
+          title: Class Type
+          type: string
+        level:
+          description: Character level
+          title: Level
+          type: integer
+        strength:
+          description: Strength stat
+          title: Strength
+          type: integer
+        dexterity:
+          description: Dexterity stat
+          title: Dexterity
+          type: integer
+        constitution:
+          description: Constitution stat
+          title: Constitution
+          type: integer
+        intelligence:
+          description: Intelligence stat
+          title: Intelligence
+          type: integer
+        wisdom:
+          description: Wisdom stat
+          title: Wisdom
+          type: integer
+        charisma:
+          description: Charisma stat
+          title: Charisma
+          type: integer
+        weapons:
+          description: A list of weapons the character carries.
+          items:
+            type: string
+          title: Weapons
+          type: array
+        backstory:
+          description: A brief, engaging backstory (2-3 sentences).
+          title: Backstory
+          type: string
+        motivation:
+          description: The character's motivation for their adventuring.
+          title: Motivation
+          type: string
+        alignment:
+          description: Character's moral alignment
+          title: Alignment
+          type: string
+      required:
+      - name
+      - race
+      - class_type
+      - level
+      - strength
+      - dexterity
+      - constitution
+      - intelligence
+      - wisdom
+      - charisma
+      - weapons
+      - backstory
+      - motivation
+      - alignment
+      type: object
+components:
+  DeclarativeEvaluator:
+    type: flock_component
+    module_path: flock.evaluators.declarative.declarative_evaluator
+    file_path: src\\flock\\evaluators\\declarative\\declarative_evaluator.py
+    description: Evaluator that uses DSPy for generation.
+  OutputModule:
+    type: flock_component
+    module_path: flock.modules.output.output_module
+    file_path: src\\flock\\modules\\output\\output_module.py
+    description: Module that handles output formatting and display.
+  MetricsModule:
+    type: flock_component
+    module_path: flock.modules.performance.metrics_module
+    file_path: src\\flock\\modules\\performance\\metrics_module.py
+    description: Module for collecting and analyzing agent performance metrics.
+dependencies:
+- pydantic>=2.0.0
+- flock-core>=0.4.0
+metadata:
+  path_type: relative
+  flock_version: 0.4.0
+
+```
+
+Why is text-based serialization cool? Because agents can manipulate their own config – go wild with meta agents and experiments.
+
+---
+
+### 🌀 New Execution Flows – Batch and Evaluation Modes
+
+Run Flock in batch mode to process multiple inputs or in evaluation mode to benchmark agents against question/answer pairs.
+
+```python
+batch_data = [
+    {"topic": "Robot Kittens", "audience": "Tech Enthusiasts"},
+    {"topic": "AI in Gardening", "audience": "Homeowners"},
+    ...
+]
+
+static_data = {"number_of_slides": 6}
+
+silent_results = flock.run_batch(
+    start_agent=presentation_agent,
+    batch_inputs=batch_data,
+    static_inputs=static_data,
+    parallel=True,
+    max_workers=5,
+    silent_mode=True,
+    return_errors=True,
+    write_to_csv=".flock/batch_results.csv",
+)
+```
+
+Supports CSV in and out. Combine with `.evaluate()` to benchmark Flock with known Q/A sets.
+
+---
+
+### ⏱️ First-Class Temporal Integration
+
+Flock 0.4.0 brings seamless integration with Temporal.io. Build production-grade, reliable, and scalable agent workflows.
+
+```python
 flock = Flock(
     enable_temporal=True,
     temporal_config=TemporalWorkflowConfig(
@@ -249,55 +473,39 @@ flock = Flock(
         ),
     ),
 )
-
-# Agent-scoped temporal config
-content_agent = FlockFactory.create_default_agent(
-    name="content_agent",
-    input="funny_title, funny_slide_headers",
-    output="funny_slide_content",
-    temporal_activity_config=TemporalActivityConfig(
-        start_to_close_timeout=timedelta(minutes=1),
-        retry_policy=TemporalRetryPolicyConfig(
-            maximum_attempts=4,
-            initial_interval=timedelta(seconds=2),
-            non_retryable_error_types=["ValueError"],
-        ),
-    ),
-)
 ```
 
---------------------------------
+Just set a flag. Add your constraints. Now you've got retry policies, timeout control, and error handling baked in.
 
-### ✨ Utility: @flockclass Hydrator
+---
 
-Flock also provides conveniences. The @flockclass decorator allows you to easily populate Pydantic models using an LLM:
+### ✨ Utility – @flockclass Hydrator
+
+Flock also adds conveniences. With `@flockclass`, you can turn any Pydantic model into a self-hydrating agent.
 
 ```python
 from pydantic import BaseModel
-from flock.util.hydrator import flockclass # Assuming hydrator utility exists
-import asyncio
+from flock.util.hydrator import flockclass
 
-@flockclass(model="openai/gpt-4o") # Decorate your Pydantic model
+@flockclass(model="openai/gpt-4o")
 class CharacterIdea(BaseModel):
     name: str
     char_class: str
     race: str
-    backstory_hook: str | None = None # Field to be filled by hydrate
-    personality_trait: str | None = None # Field to be filled by hydrate
+    backstory_hook: str | None = None
+    personality_trait: str | None = None
 
 async def create_character():
-    # Create with minimal data
     char = CharacterIdea(name="Gorok", char_class="Barbarian", race="Orc")
     print(f"Before Hydration: {char}")
 
-    # Call hydrate to fill in the None fields using the LLM
     hydrated_char = await char.hydrate()
 
     print(f"\nAfter Hydration: {hydrated_char}")
     print(f"Backstory Hook: {hydrated_char.backstory_hook}")
-
-# asyncio.run(create_character())
 ```
+
+
 
 --------------------------------
 

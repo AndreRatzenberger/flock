@@ -1,48 +1,82 @@
+# src/flock/webapp/app/api/execution.py
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Request
+import markdown2  # Import markdown2
+from fastapi import (  # Ensure Form and HTTPException are imported
+    APIRouter,
+    Depends,
+    Form,
+    Request,
+)
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from flock.core.util.spliter import parse_schema
-from flock.webapp.app.services.flock_service import (
-    get_current_flock_instance,
-    run_current_flock_service,
+if TYPE_CHECKING:
+    from flock.core.flock import Flock
+
+
+from flock.core.logging.logging import (
+    get_logger as get_flock_logger,  # For logging within the new endpoint
 )
-from flock.webapp.app.utils import pydantic_to_dict
+from flock.core.util.spliter import parse_schema
+
+# Import the dependency to get the current Flock instance
+from flock.webapp.app.dependencies import (
+    get_flock_instance,
+    get_optional_flock_instance,
+    get_shared_link_store,
+)
+
+# Service function now takes app_state
+from flock.webapp.app.services.flock_service import (
+    run_current_flock_service,
+    # get_current_flock_instance IS NO LONGER IMPORTED
+)
+from flock.webapp.app.services.sharing_store import SharedLinkStoreInterface
 
 router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+# Add markdown2 filter to Jinja2 environment for this router
+def markdown_filter(text):
+    return markdown2.markdown(text, extras=["tables", "fenced-code-blocks"])
 
-# RENAMED this endpoint to avoid clash and for clarity
+templates.env.filters['markdown'] = markdown_filter
+
+
 @router.get("/htmx/execution-form-content", response_class=HTMLResponse)
-async def htmx_get_execution_form_content(request: Request):  # Renamed function
-    flock = get_current_flock_instance()
+async def htmx_get_execution_form_content(
+    request: Request,
+    current_flock: "Flock | None" = Depends(get_optional_flock_instance) # Use optional if form can show 'no flock'
+):
+    # flock instance is injected
     return templates.TemplateResponse(
         "partials/_execution_form.html",
         {
             "request": request,
-            "flock": flock,
+            "flock": current_flock, # Pass the injected flock instance
             "input_fields": [],
-            "selected_agent_name": None,
+            "selected_agent_name": None, # Form starts with no agent selected
         },
     )
 
 
 @router.get("/htmx/agents/{agent_name}/input-form", response_class=HTMLResponse)
-async def htmx_get_agent_input_form(request: Request, agent_name: str):
-    # ... (same as before) ...
-    flock = get_current_flock_instance()
-    if not flock:
-        return HTMLResponse("")
-    agent = flock.agents.get(agent_name)
+async def htmx_get_agent_input_form(
+    request: Request,
+    agent_name: str,
+    current_flock: "Flock" = Depends(get_flock_instance) # Expect flock to be loaded
+):
+    # flock instance is injected
+    agent = current_flock.agents.get(agent_name)
     if not agent:
         return HTMLResponse(
-            f"<p class='error'>Agent '{agent_name}' not found.</p>"
+            f"<p class='error'>Agent '{agent_name}' not found in the current Flock.</p>"
         )
+
     input_fields = []
     if agent.input and isinstance(agent.input, str):
         try:
@@ -53,21 +87,12 @@ async def htmx_get_agent_input_form(request: Request, agent_name: str):
                     "type": type_str.lower(),
                     "description": description or "",
                 }
-                if "bool" in field_info["type"]:
-                    field_info["html_type"] = "checkbox"
-                elif (
-                    "int" in field_info["type"] or "float" in field_info["type"]
-                ):
-                    field_info["html_type"] = "number"
-                elif (
-                    "list" in field_info["type"] or "dict" in field_info["type"]
-                ):
+                if "bool" in field_info["type"]: field_info["html_type"] = "checkbox"
+                elif "int" in field_info["type"] or "float" in field_info["type"]: field_info["html_type"] = "number"
+                elif "list" in field_info["type"] or "dict" in field_info["type"]:
                     field_info["html_type"] = "textarea"
-                    field_info["placeholder"] = (
-                        f"Enter JSON for {field_info['type']}"
-                    )
-                else:
-                    field_info["html_type"] = "text"
+                    field_info["placeholder"] = f"Enter JSON for {field_info['type']}"
+                else: field_info["html_type"] = "text"
                 input_fields.append(field_info)
         except Exception as e:
             return HTMLResponse(
@@ -80,20 +105,30 @@ async def htmx_get_agent_input_form(request: Request, agent_name: str):
 
 
 @router.post("/htmx/run", response_class=HTMLResponse)
-async def htmx_run_flock(request: Request):
-    # ... (same as before, ensure it uses the correct _results_display.html) ...
-    flock = get_current_flock_instance()
-    if not flock:
+async def htmx_run_flock(
+    request: Request,
+):
+    current_flock_from_state: Flock | None = getattr(request.app.state, 'flock_instance', None)
+    logger = get_flock_logger("webapp.execution.regular_run")
+
+    if not current_flock_from_state:
+        logger.error("HTMX Run (Regular): No Flock loaded in app_state.")
         return HTMLResponse("<p class='error'>No Flock loaded to run.</p>")
+
     form_data = await request.form()
     start_agent_name = form_data.get("start_agent_name")
+
     if not start_agent_name:
+        logger.warning("HTMX Run (Regular): Starting agent not selected.")
         return HTMLResponse("<p class='error'>Starting agent not selected.</p>")
-    agent = flock.agents.get(start_agent_name)
+
+    agent = current_flock_from_state.agents.get(start_agent_name)
     if not agent:
+        logger.error(f"HTMX Run (Regular): Agent '{start_agent_name}' not found in Flock '{current_flock_from_state.name}'.")
         return HTMLResponse(
-            f"<p class='error'>Agent '{start_agent_name}' not found.</p>"
+            f"<p class='error'>Agent '{start_agent_name}' not found in the current Flock.</p>"
         )
+
     inputs = {}
     if agent.input and isinstance(agent.input, str):
         try:
@@ -101,73 +136,164 @@ async def htmx_run_flock(request: Request):
             for name, type_str, _ in parsed_spec:
                 form_field_name = f"agent_input_{name}"
                 raw_value = form_data.get(form_field_name)
-                if raw_value is None and "bool" in type_str.lower():
-                    inputs[name] = False
-                    continue
-                if raw_value is None:
-                    inputs[name] = None
-                    continue
-                if "int" in type_str.lower():
-                    try:
-                        inputs[name] = int(raw_value)
-                    except ValueError:
-                        return HTMLResponse(
-                            f"<p class='error'>Invalid integer for '{name}'.</p>"
-                        )
-                elif "float" in type_str.lower():
-                    try:
-                        inputs[name] = float(raw_value)
-                    except ValueError:
-                        return HTMLResponse(
-                            f"<p class='error'>Invalid float for '{name}'.</p>"
-                        )
-                elif "bool" in type_str.lower():
-                    inputs[name] = raw_value.lower() in [
-                        "true",
-                        "on",
-                        "1",
-                        "yes",
-                    ]
-                elif "list" in type_str.lower() or "dict" in type_str.lower():
-                    try:
-                        inputs[name] = json.loads(raw_value)
-                    except json.JSONDecodeError:
-                        return HTMLResponse(
-                            f"<p class='error'>Invalid JSON for '{name}'.</p>"
-                        )
-                else:
-                    inputs[name] = raw_value
-        except Exception as e:
-            return HTMLResponse(
-                f"<p class='error'>Error processing inputs for {start_agent_name}: {e}</p>"
-            )
+                if raw_value is None and "bool" in type_str.lower(): inputs[name] = False; continue
+                if raw_value is None: inputs[name] = None; continue
+                if "int" in type_str.lower(): inputs[name] = int(raw_value)
+                elif "float" in type_str.lower(): inputs[name] = float(raw_value)
+                elif "bool" in type_str.lower(): inputs[name] = raw_value.lower() in ["true", "on", "1", "yes"]
+                elif "list" in type_str.lower() or "dict" in type_str.lower(): inputs[name] = json.loads(raw_value)
+                else: inputs[name] = raw_value
+        except ValueError as ve:
+            logger.error(f"HTMX Run (Regular): Input parsing error for agent '{start_agent_name}': {ve}", exc_info=True)
+            return HTMLResponse(f"<p class='error'>Invalid input format: {ve!s}</p>")
+        except Exception as e_parse:
+            logger.error(f"HTMX Run (Regular): Error processing inputs for '{start_agent_name}': {e_parse}", exc_info=True)
+            return HTMLResponse(f"<p class='error'>Error processing inputs for {start_agent_name}: {e_parse}</p>")
 
+    result_data = await run_current_flock_service(start_agent_name, inputs, request.app.state)
+    raw_json_for_template = json.dumps(result_data, indent=2)
+    # Unescape newlines for proper display in HTML <pre> tag
+    result_data_raw_json_str = raw_json_for_template.replace('\\n', '\n')
+
+    return templates.TemplateResponse(
+        "partials/_results_display.html",
+        {
+            "request": request,
+            "result": result_data,
+            "result_raw_json": result_data_raw_json_str,
+            "feedback_endpoint": "/ui/api/flock/htmx/feedback",
+            "share_id": None,
+            "flock_name": current_flock_from_state.name,
+            "agent_name": start_agent_name,
+            "flock_definition": current_flock_from_state.to_yaml(),
+        }
+    )
+
+
+# --- NEW ENDPOINT FOR SHARED RUNS ---
+@router.post("/htmx/run-shared", response_class=HTMLResponse)
+async def htmx_run_shared_flock(
+    request: Request,
+    share_id: str = Form(...),
+):
+    shared_logger = get_flock_logger("webapp.execution.shared_run_stateful")
+    form_data = await request.form()
+    start_agent_name = form_data.get("start_agent_name")
+
+    if not start_agent_name:
+        shared_logger.warning("HTMX Run Shared: Starting agent not selected.")
+        return HTMLResponse("<p class='error'>Starting agent not selected for shared run.</p>")
+
+    inputs: dict[str, Any] = {}
     try:
-        # Run the flock service and get the result
-        result_data = await run_current_flock_service(start_agent_name, inputs)
+        shared_flocks_store = getattr(request.app.state, 'shared_flocks', {})
+        temp_flock = shared_flocks_store.get(share_id)
 
-        # Detect Pydantic models and convert to dictionaries
-        try:
-            # Convert Pydantic models to dictionaries for JSON serialization
-            result_data = pydantic_to_dict(result_data)
+        if not temp_flock:
+            shared_logger.error(f"HTMX Run Shared: Flock instance for share_id '{share_id}' not found in app.state.")
+            return HTMLResponse(f"<p class='error'>Shared session not found or expired. Please try accessing the shared link again.</p>")
 
-            # Test JSON serialization to catch any remaining issues
-            try:
-                json.dumps(result_data)
-            except (TypeError, ValueError) as e:
-                # If JSON serialization fails, convert to a string representation
-                result_data = f"Error: Result contains non-serializable data: {e!s}\nOriginal result: {result_data!s}"
+        shared_logger.info(f"HTMX Run Shared: Successfully retrieved pre-loaded Flock '{temp_flock.name}' for agent '{start_agent_name}' (share_id: {share_id}).")
 
-        except Exception as e:
-            result_data = f"Error: Failed to process result data: {e!s}"
+        agent = temp_flock.agents.get(start_agent_name)
+        if not agent:
+            shared_logger.error(f"HTMX Run Shared: Agent '{start_agent_name}' not found in shared Flock '{temp_flock.name}'.")
+            return HTMLResponse(f"<p class='error'>Agent '{start_agent_name}' not found in the provided shared Flock definition.</p>")
 
-        return templates.TemplateResponse(
-            "partials/_results_display.html",
-            {"request": request, "result_data": result_data},
-        )
+        if agent.input and isinstance(agent.input, str):
+            parsed_spec = parse_schema(agent.input)
+            for name, type_str, _ in parsed_spec:
+                form_field_name = f"agent_input_{name}"
+                raw_value = form_data.get(form_field_name)
+                if raw_value is None and "bool" in type_str.lower(): inputs[name] = False; continue
+                if raw_value is None: inputs[name] = None; continue
+                if "int" in type_str.lower(): inputs[name] = int(raw_value)
+                elif "float" in type_str.lower(): inputs[name] = float(raw_value)
+                elif "bool" in type_str.lower(): inputs[name] = raw_value.lower() in ["true", "on", "1", "yes"]
+                elif "list" in type_str.lower() or "dict" in type_str.lower(): inputs[name] = json.loads(raw_value)
+                else: inputs[name] = raw_value
+
+        shared_logger.info(f"HTMX Run Shared: Executing agent '{start_agent_name}' in pre-loaded Flock '{temp_flock.name}'. Inputs: {list(inputs.keys())}")
+        result_data = await temp_flock.run_async(start_agent=start_agent_name, input=inputs, box_result=False)
+        raw_json_for_template = json.dumps(result_data, indent=2)
+        # Unescape newlines for proper display in HTML <pre> tag
+        result_data_raw_json_str = raw_json_for_template.replace('\\n', '\n')
+        shared_logger.info(f"HTMX Run Shared: Agent '{start_agent_name}' executed. Result keys: {list(result_data.keys()) if isinstance(result_data, dict) else 'N/A'}")
+
+    except ValueError as ve:
+        shared_logger.error(f"HTMX Run Shared: Input parsing error for '{start_agent_name}' (share_id: {share_id}): {ve}", exc_info=True)
+        return HTMLResponse(f"<p class='error'>Invalid input format: {ve!s}</p>")
     except Exception as e:
-        error_message = f"Error during execution: {e!s}"
-        return templates.TemplateResponse(
-            "partials/_results_display.html",
-            {"request": request, "result_data": error_message},
-        )
+        shared_logger.error(f"HTMX Run Shared: Error during execution for '{start_agent_name}' (share_id: {share_id}): {e}", exc_info=True)
+        return HTMLResponse(f"<p class='error'>An unexpected error occurred: {e!s}</p>")
+
+    return templates.TemplateResponse(
+        "partials/_results_display.html",
+        {
+            "request": request,
+            "result": result_data,
+            "result_raw_json": result_data_raw_json_str,
+            "feedback_endpoint": "/ui/api/flock/htmx/feedback-shared",
+            "share_id": share_id,
+            "flock_name": temp_flock.name,
+            "agent_name": start_agent_name,
+            "flock_definition": temp_flock.to_yaml(),
+        }
+    )
+
+# --- Feedback endpoints ---
+@router.post("/htmx/feedback", response_class=HTMLResponse)
+async def htmx_submit_feedback(
+    request: Request,
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_name: str | None = Form(None),
+    agent_name: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store),
+):
+    from uuid import uuid4
+
+    from flock.webapp.app.services.sharing_models import FeedbackRecord
+
+    record = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=None,
+        context_type="agent_run",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_name=flock_name,
+        agent_name=agent_name,
+        flock_definition=flock_definition,
+    )
+    await store.save_feedback(record)
+    return HTMLResponse("<p>🙏 Feedback received – thank you!</p>")
+
+
+@router.post("/htmx/feedback-shared", response_class=HTMLResponse)
+async def htmx_submit_feedback_shared(
+    request: Request,
+    share_id: str = Form(...),
+    reason: str = Form(...),
+    expected_response: str | None = Form(None),
+    actual_response: str | None = Form(None),
+    flock_definition: str | None = Form(None),
+    store: SharedLinkStoreInterface = Depends(get_shared_link_store),
+):
+    from uuid import uuid4
+
+    from flock.webapp.app.services.sharing_models import FeedbackRecord
+
+    record = FeedbackRecord(
+        feedback_id=uuid4().hex,
+        share_id=share_id,
+        context_type="agent_run",
+        reason=reason,
+        expected_response=expected_response,
+        actual_response=actual_response,
+        flock_definition=flock_definition,
+    )
+    await store.save_feedback(record)
+    return HTMLResponse("<p>🙏 Feedback received for shared run – thank you!</p>")

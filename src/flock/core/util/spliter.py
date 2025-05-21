@@ -185,6 +185,9 @@ if __name__ == "__main__":
     #     'Arbitrarily complex structure')
 
     SAMPLE_17 = "münze: str | Deutsche Münzbezeichnung, engl. 'coin'"
+
+
+    SAMPLE_18 = "ticket_info : str, reasoning : str, search_queries : list[str], relevant_documents: dict[str, float] | dict of pdf_ids as keys and scores as values"
     # ➜ [('münze', 'str', "Deutsche Münzbezeichnung, engl. 'coin'")]
 
     for title, spec in [
@@ -205,6 +208,7 @@ if __name__ == "__main__":
         ("Sample-15", SAMPLE_15),
         ("Sample-16", SAMPLE_16),
         ("Sample-17", SAMPLE_17),
+        ("Sample-18", SAMPLE_18),
     ]:
         print(f"\n{title}")
         for row in parse_schema(spec):

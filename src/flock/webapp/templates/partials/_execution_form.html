@@ -1,9 +1,9 @@
 <article id="execution-form-content">
     <header>
-        <h4>Run Flock</h4>
+        <h2>Run Flock</h2>
     </header>
     {% if flock and flock.agents %}
-    <form hx-post="/api/flocks/htmx/run" 
+    <form hx-post="/ui/api/flock/htmx/run" 
           hx-target="#results-display" 
           hx-swap="innerHTML" 
           hx-indicator="#run-loading-indicator"
@@ -16,7 +16,7 @@
                 x-model="selectedAgentForInput"
                 @change="
                     if ($event.target.value) {
-                        htmx.ajax('GET', '/api/flocks/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
+                        htmx.ajax('GET', '/ui/api/flock/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
                     } else {
                         document.getElementById('dynamic-input-form-fields').innerHTML = '<p><small>Select an agent to see its input fields.</small></p>';
                     }
@@ -36,6 +36,20 @@
         </div>
 
         <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>
+
+        <div id="share-agent-link-container" style="margin-top: 0.5rem;">
+            <a href="#" 
+               id="shareAgentHtmxLink"
+               hx-post="/ui/htmx/share/generate-link" 
+               hx-target="#shareLinkDisplayArea" 
+               hx-swap="innerHTML"
+               hx-indicator="#share-loading-indicator"
+               hx-include="#start_agent_name_select"
+               style="text-decoration: underline; cursor: pointer; color: var(--pico-primary);">
+                Create shareable link...
+            </a>
+        </div>
+
         <span id="run-loading-indicator" class="htmx-indicator">
             <progress indeterminate></progress> Running...
         </span>
@@ -45,4 +59,17 @@
     {% else %}
     <p>Load or create a Flock to enable execution.</p>
     {% endif %}
+
+    <div id="shareLinkDisplayArea" style="margin-top: 1rem;">
+        <!-- Content will be loaded here by HTMX -->
+    </div>
+
 </article>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // All previous JavaScript for toggling share link visibility is removed.
+        // If there are other unrelated JavaScript functions in this script block,
+        // they would remain.
+    });
+</script>

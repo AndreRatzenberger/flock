@@ -192,3 +192,23 @@ class FlockContext(Serializable, BaseModel):
 
         converted = convert(data)
         return cls(**converted)
+
+    def resolve(self, svc_type):
+        """Resolve a service from the request-scoped DI container if present.
+
+        The bootstrap code is expected to store the active `ServiceProvider` from
+        `wd.di` in the context variable key ``di.container``.  This helper
+        provides a convenient façade so that Flock components can simply call
+        ``context.resolve(SomeType)`` regardless of whether a container is
+        available.  When the container is missing or the service cannot be
+        resolved, ``None`` is returned instead of raising to keep backward
+        compatibility.
+        """
+        container = self.get_variable("di.container")
+        if container is None:
+            return None
+        try:
+            return container.get_service(svc_type)
+        except Exception:
+            # Service not registered or other resolution error – fall back to None
+            return None

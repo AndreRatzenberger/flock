@@ -24,6 +24,11 @@ class ZepModuleConfig(FlockModuleConfig):
     )
     enable_read: bool = True
     enable_write: bool = False
+    top_k: int = Field(default=10, description="Number of memories to retrieve")
+    user_id: str = Field(default="flock", description="User ID the memories will be associated with")
+    agent_id: str = Field(default="flock", description="Agent ID the memories will be associated with")
+    memory_input_key: str | None = Field(default=None, description="Input key to use for memory, if none the description of the agent will be used")
+
 
 
 @flock_component(config_class=ZepModuleConfig)

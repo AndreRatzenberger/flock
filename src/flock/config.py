@@ -22,7 +22,7 @@ GITHUB_USERNAME = config("GITHUB_USERNAME", "")
 # -- Debugging and Logging Configurations --
 LOCAL_DEBUG = config("LOCAL_DEBUG", True)
 LOG_LEVEL = config("LOG_LEVEL", "DEBUG")
-LOGGING_DIR = config("LOGGING_DIR", "logs")
+LOGGING_DIR = config("LOGGING_DIR", ".flock/logs")
 
 OTEL_SERVICE_NAME = config("OTL_SERVICE_NAME", "otel-flock")
 JAEGER_ENDPOINT = config(
@@ -36,7 +36,9 @@ OTEL_FILE_NAME = config("OTEL_FILE_NAME", "flock_events.jsonl")
 OTEL_ENABLE_SQL: bool = config("OTEL_ENABLE_SQL", True) == "True"
 OTEL_ENABLE_FILE: bool = config("OTEL_ENABLE_FILE", True) == "True"
 OTEL_ENABLE_JAEGER: bool = config("OTEL_ENABLE_JAEGER", False) == "True"
-
+OTEL_ENABLE_OTLP: bool = config("OTEL_ENABLE_OTLP", False) == "True"
+OTEL_EXPORTER_OTLP_PROTOCOL: str = config("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
+OTEL_EXPORTER_OTLP_ENDPOINT: str = config("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 TELEMETRY = TelemetryConfig(
     OTEL_SERVICE_NAME,
@@ -48,4 +50,7 @@ TELEMETRY = TelemetryConfig(
     OTEL_ENABLE_JAEGER,
     OTEL_ENABLE_FILE,
     OTEL_ENABLE_SQL,
+    OTEL_ENABLE_OTLP,
+    OTEL_EXPORTER_OTLP_PROTOCOL,
+    OTEL_EXPORTER_OTLP_ENDPOINT,
 )

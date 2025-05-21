@@ -1,6 +1,7 @@
 """Flock package initialization."""
 
 import argparse
+import os
 import sys
 
 
@@ -15,13 +16,85 @@ def main():
         action="store_true",
         help="Start the web interface instead of the CLI",
     )
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Start a chat interface. If --web is also used, enables chat within the web app; otherwise, starts standalone chat.",
+    )
+    parser.add_argument(
+        "--theme",
+        type=str,
+        default=None,
+        help="Specify the theme name for the web interface (if --web is used).",
+    )
     args = parser.parse_args()
 
     # If --web flag is provided, start the web server
     if args.web:
-        from flock.webapp.run import main as run_webapp
+        try:
+            # Set environment variable for theme if provided
+            if args.theme:
+                print(
+                    f"INFO: Setting FLOCK_WEB_THEME environment variable to: {args.theme}"
+                )
+                os.environ["FLOCK_WEB_THEME"] = args.theme
+            else:
+                # Ensure it's not set if no theme arg is passed
+                if "FLOCK_WEB_THEME" in os.environ:
+                    del os.environ["FLOCK_WEB_THEME"]
 
-        run_webapp()
+            if args.chat: # --web --chat
+                print("INFO: Starting web application with chat feature enabled.")
+                os.environ["FLOCK_CHAT_ENABLED"] = "true"
+            else: # Just --web
+                print("INFO: Starting web application.")
+                if "FLOCK_CHAT_ENABLED" in os.environ:
+                    del os.environ["FLOCK_CHAT_ENABLED"]
+
+            # Ensure standalone chat mode is not active
+            if "FLOCK_START_MODE" in os.environ:
+                 del os.environ["FLOCK_START_MODE"]
+
+            # Import and run the standalone webapp main function
+            from flock.webapp.run import main as run_webapp_main
+            run_webapp_main()
+
+        except ImportError:
+            print(
+                "Error: Could not import webapp components. Ensure web dependencies are installed.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting webapp: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    elif args.chat: # Standalone chat mode (args.web is false)
+        try:
+            print("INFO: Starting standalone chat application.")
+            os.environ["FLOCK_START_MODE"] = "chat"
+
+            # Clear web-specific env vars that might conflict or not apply
+            if "FLOCK_WEB_THEME" in os.environ:
+                del os.environ["FLOCK_WEB_THEME"]
+            if "FLOCK_CHAT_ENABLED" in os.environ:
+                del os.environ["FLOCK_CHAT_ENABLED"]
+
+            # Handle --theme if passed with --chat only
+            if args.theme:
+                 print(f"INFO: Standalone chat mode started with --theme '{args.theme}'. FLOCK_WEB_THEME will be set.")
+                 os.environ["FLOCK_WEB_THEME"] = args.theme
+
+            from flock.webapp.run import main as run_webapp_main
+            run_webapp_main() # The webapp main needs to interpret FLOCK_START_MODE="chat"
+
+        except ImportError:
+            print("Error: Could not import webapp components for chat. Ensure web dependencies are installed.", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting standalone chat application: {e}", file=sys.stderr)
+            sys.exit(1)
         return
 
     # Otherwise, run the CLI interface
@@ -53,8 +126,6 @@ def main():
     console = Console()
 
     # Show a welcome message on first run with the new tool serialization format
-    import os
-
     cfg_file = os.path.expanduser(f"~/.flock/{CLI_CFG_FILE}")
     if not os.path.exists(cfg_file):
         # Create the directory if it doesn't exist
@@ -137,12 +208,6 @@ def main():
             manage_registry()
         elif result == CLI_SETTINGS:
             settings_editor()
-        elif result == CLI_START_WEB_SERVER:
-            # Start the web server
-            from flock.webapp.run import main as run_webapp
-
-            run_webapp()
-            break
         elif result == CLI_NOTES:
             load_release_notes()
         elif result == CLI_EXIT:

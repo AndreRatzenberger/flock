@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures  # For real parallelism via threads
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -184,52 +185,77 @@ class BatchProcessor:
             )
             progress.start()
 
-        results = [None] * len(
-            prepared_batch_inputs
-        )  # Pre-allocate results list
+        results = [None] * len(prepared_batch_inputs)  # Pre-allocate results list
+
+        # --- Worker Definitions ---
+        # We implement two flavours:
+        #   * async_worker: used for Temporal or sequential runs (keeps the original behaviour)
+        #   * thread_worker: executes the run in a dedicated thread via ThreadPoolExecutor for true parallelism.
+
+        async def async_worker(index: int, item_inputs: dict[str, Any]):
+            """Original coroutine worker used for non-threaded execution paths."""
+            full_input = {**(static_inputs or {}), **item_inputs}
+            context = FlockContext()
+            context.set_variable(FLOCK_BATCH_SILENT_MODE, silent_mode)
+
+            run_desc = f"Batch item {index + 1}"
+            logger.debug(f"{run_desc} started (async).")
+            try:
+                result = await self.flock.run_async(
+                    start_agent,
+                    full_input,
+                    box_result=box_results,
+                    context=context,
+                )
+                results[index] = result
+                logger.debug(f"{run_desc} finished successfully.")
+            except Exception as e:
+                logger.error(f"{run_desc} failed: {e}", exc_info=not return_errors)
+                if return_errors:
+                    results[index] = e
+                else:
+                    raise  # Propagate to calling gather
+            finally:
+                if progress_context:
+                    progress.update(progress_task_id, advance=1)
+
+        # ThreadPool worker for real parallelism (suitable for blocking I/O)
+        def _thread_worker(index: int, item_inputs: dict[str, Any]):
+            """Synchronous helper executed inside a worker thread."""
+            full_input = {**(static_inputs or {}), **item_inputs}
+            run_desc = f"Batch item {index + 1}"
+            logger.debug(f"{run_desc} started (thread).")
+            try:
+                # Use the synchronous wrapper to avoid nested event-loop issues inside threads
+                result = self.flock.run(
+                    start_agent=start_agent,
+                    input=full_input,
+                    box_result=box_results,
+                )
+                logger.debug(f"{run_desc} finished successfully.")
+                return index, result, None
+            except Exception as e:
+                logger.error(f"{run_desc} failed: {e}")
+                return index, None, e
+
+        async def thread_worker(executor, index: int, item_inputs: dict[str, Any]):
+            """Coroutine wrapper that submits _thread_worker to the specified executor."""
+            loop = asyncio.get_running_loop()
+            idx, res, err = await loop.run_in_executor(
+                executor, _thread_worker, index, item_inputs
+            )
+            # Handle result / error on the asyncio side
+            if err:
+                if return_errors:
+                    results[idx] = err
+                else:
+                    raise err
+            else:
+                results[idx] = res
+            if progress_context:
+                progress.update(progress_task_id, advance=1)
+
         tasks = []
-        semaphore = asyncio.Semaphore(
-            max_workers if parallel and not effective_use_temporal else 1
-        )  # Semaphore for parallel local
-
-        async def worker(index, item_inputs):
-            async with semaphore:
-                full_input = {**(static_inputs or {}), **item_inputs}
-                context = FlockContext()
-                context.set_variable(FLOCK_BATCH_SILENT_MODE, silent_mode)
-
-                run_desc = f"Batch item {index + 1}"
-                logger.debug(f"{run_desc} started.")
-                try:
-                    result = await self.flock.run_async(
-                        start_agent,
-                        full_input,
-                        box_result=box_results,
-                        context=context,
-                    )
-                    results[index] = result
-                    logger.debug(f"{run_desc} finished successfully.")
-                except Exception as e:
-                    logger.error(
-                        f"{run_desc} failed: {e}", exc_info=not return_errors
-                    )
-                    if return_errors:
-                        results[index] = e
-                    else:
-                        # If not returning errors, ensure the exception propagates
-                        # to stop asyncio.gather if running in parallel.
-                        if parallel and not effective_use_temporal:
-                            raise  # Re-raise to stop gather
-                        else:
-                            # For sequential, we just store None or the exception if return_errors=True
-                            # For Temporal, error handling happens within the workflow/activity usually
-                            results[index] = e if return_errors else None
-                finally:
-                    if progress_context:
-                        progress.update(
-                            progress_task_id, advance=1
-                        )  # Update progress
-
         try:
             if effective_use_temporal:
                 # Temporal Batching (Simplified: sequential execution for this example)
@@ -238,25 +264,32 @@ class BatchProcessor:
                     "Running batch using Temporal (executing sequentially for now)..."
                 )
                 for i, item_data in enumerate(prepared_batch_inputs):
-                    await worker(i, item_data)  # Run sequentially for demo
+                    await async_worker(i, item_data)  # Run sequentially for demo
                 # TODO: Implement true parallel Temporal workflow execution if needed
 
             elif parallel:
+                # --- Real parallelism using ThreadPoolExecutor ---
                 logger.info(
-                    f"Running batch in parallel with max_workers={max_workers}..."
+                    f"Running batch in parallel (threads) with max_workers={max_workers}..."
                 )
-                for i, item_data in enumerate(prepared_batch_inputs):
-                    tasks.append(asyncio.create_task(worker(i, item_data)))
-                await asyncio.gather(
-                    *tasks
-                )  # gather handles exceptions based on return_errors logic in worker
+                loop = asyncio.get_running_loop()
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=max_workers, thread_name_prefix="flock-batch"
+                ) as executor:
+                    for i, item_data in enumerate(prepared_batch_inputs):
+                        tasks.append(
+                            asyncio.create_task(
+                                thread_worker(executor, i, item_data)
+                            )
+                        )
+
+                    # Wait for all tasks allowing exceptions to propagate as needed
+                    await asyncio.gather(*tasks)
 
             else:  # Sequential Local
                 logger.info("Running batch sequentially...")
                 for i, item_data in enumerate(prepared_batch_inputs):
-                    await worker(
-                        i, item_data
-                    )  # Already handles errors internally based on return_errors
+                    await async_worker(i, item_data)  # Already handles errors internally based on return_errors
 
             logger.info("Batch execution finished.")
 

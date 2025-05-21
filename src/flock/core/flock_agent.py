@@ -211,6 +211,37 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Get a list of currently enabled modules attached to this agent."""
         return [m for m in self.modules.values() if m.config.enabled]
 
+    @property
+    def resolved_description(self) -> str | None:
+        """Returns the resolved agent description.
+        If the description is a callable, it attempts to call it.
+        Returns None if the description is None or a callable that fails.
+        """
+        if callable(self.description):
+            try:
+                # Attempt to call without context first.
+                # If callables consistently need context, this might need adjustment
+                # or the template-facing property might need to be simpler,
+                # relying on prior resolution via resolve_callables.
+                return self.description()
+            except TypeError:
+                # Log a warning that context might be needed?
+                # For now, treat as unresolvable in this simple property.
+                logger.warning(
+                    f"Callable description for agent '{self.name}' could not be resolved "
+                    f"without context via the simple 'resolved_description' property. "
+                    f"Consider calling 'agent.resolve_callables(context)' beforehand if context is required."
+                )
+                return None # Or a placeholder like "[Callable Description]"
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable description for agent '{self.name}': {e}"
+                )
+                return None
+        elif isinstance(self.description, str):
+            return self.description
+        return None
+
     # --- Lifecycle Hooks (Keep as they were) ---
     async def initialize(self, inputs: dict[str, Any]) -> None:
         """Initialize agent and run module initializers."""
@@ -351,12 +382,67 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                             )
                         mcp_tools = mcp_tools + server_tools
 
-                result = await self.evaluator.evaluate(
-                    self,
+                # --------------------------------------------------
+                # Optional DI middleware pipeline
+                # --------------------------------------------------
+                container = None
+                if self.context is not None:
+                    container = self.context.get_variable("di.container")
+
+                # If a MiddlewarePipeline is registered in DI, wrap the evaluator
+                result: dict[str, Any] | None = None
+
+                if container is not None:
+                    try:
+                        from wd.di.middleware import (
+                            MiddlewarePipeline,
+                        )
+
+                        pipeline: MiddlewarePipeline | None = None
+                        try:
+                            pipeline = container.get_service(MiddlewarePipeline)
+                        except Exception:
+                            pipeline = None
+
+                        if pipeline is not None:
+                            # Build execution chain where the evaluator is the terminal handler
+
+                            async def _final_handler():
+                                return await self.evaluator.evaluate(
+                                    self, current_inputs, registered_tools
+                                )
+
+                            idx = 0
+
+                            async def _invoke_next():
+                                nonlocal idx
+
+                                if idx < len(pipeline._middleware):
+                                    mw = pipeline._middleware[idx]
+                                    idx += 1
+                                    return await mw(self.context, _invoke_next)  # type: ignore[arg-type]
+                                return await _final_handler()
+
+                            # Execute pipeline
+                            result = await _invoke_next()
+                        else:
+                            # No pipeline registered, direct evaluation
+                            result = await self.evaluator.evaluate(
+                                self, current_inputs, registered_tools
+                            )
+                    except ImportError:
+                        # wd.di not installed – fall back
+                        result = await self.evaluator.evaluate(
+                            self, current_inputs, registered_tools
+                        )
+                else:
+                    # No DI container – standard execution
+                    result = await self.evaluator.evaluate(
+                        self,
                     current_inputs,
                     registered_tools,
                     mcp_tools=mcp_tools,
-                )
+                    )
             except Exception as eval_error:
                 logger.error(
                     "Error during evaluate",

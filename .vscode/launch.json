@@ -6,12 +6,14 @@
             "type": "debugpy",
             "request": "launch",
             "justMyCode": false,
+            "subProcess": true,
             "program": "${file}",
             "console": "integratedTerminal"
         },
         {
             "name": "Attach to debugpy",
             "type": "debugpy",
+            "subProcess": true,
             "request": "attach",
             "connect": {
                 "host": "localhost",

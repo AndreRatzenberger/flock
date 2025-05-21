@@ -49,7 +49,7 @@ class MetricsModuleConfig(FlockModuleConfig):
         default="json", description="Where to store metrics"
     )
     metrics_dir: str = Field(
-        default="metrics/", description="Directory for metrics storage"
+        default=".flock/metrics/", description="Directory for metrics storage"
     )
 
     # Aggregation settings
@@ -78,6 +78,9 @@ class MetricsModuleConfig(FlockModuleConfig):
 class MetricsModule(FlockModule):
     """Module for collecting and analyzing agent performance metrics."""
 
+    # --- Singleton holder for convenient static access ---
+    _INSTANCE: "MetricsModule | None" = None
+
     name: str = "performance_metrics"
     config: MetricsModuleConfig = Field(
         default_factory=MetricsModuleConfig,
@@ -86,6 +89,8 @@ class MetricsModule(FlockModule):
 
     def __init__(self, name, config):
         super().__init__(name=name, config=config)
+        # Register singleton for static helpers
+        MetricsModule._INSTANCE = self
         self._metrics = defaultdict(list)
         self._start_time: float | None = None
         self._server_start_time: float | None = None
@@ -499,6 +504,24 @@ class MetricsModule(FlockModule):
             1,
             {"agent": agent.name, "error_type": type(error).__name__},
         )
+
+    # --------------------------------------------------
+    # Public helper for external modules
+    # --------------------------------------------------
+    @classmethod
+    def record(cls, name: str, value: int | float | str, tags: dict[str, str] | None = None):
+        """Record a metric from anywhere in the codebase.
+
+        Example:
+            MetricsModule.record("custom_latency", 123, {"stage": "inference"})
+        The call will forward to the *first* instantiated MetricsModule.  If no
+        instance exists in the current run the call is a no-op so that importing
+        this helper never crashes test-code.
+        """
+        instance = cls._INSTANCE
+        if instance is None:
+            return  # silently ignore if module isn't active
+        instance._record_metric(name, value, tags or {})
 
     # --- MCP Server Lifecycle Hooks ---
     async def on_server_error(

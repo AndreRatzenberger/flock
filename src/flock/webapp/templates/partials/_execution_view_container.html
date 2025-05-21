@@ -1,19 +1,20 @@
-<article id="execution-view-container-content">
-    {# The Execution Form will be loaded here #}
-    <div id="execution-form-wrapper"
-         hx-get="/api/flocks/htmx/execution-form-content" {# New endpoint for just the form #}
-         hx-trigger="load"
-         hx-swap="innerHTML">
-        <p>Loading execution form...</p><progress indeterminate></progress>
-    </div>
+<article class="two-pane-flex-container">
+    <section id="execution-left-pane" style="flex: 1; min-width: 300px;">
+        {# The Execution Form will be loaded here #}
+        <div id="execution-form-wrapper" hx-get="/ui/api/flock/htmx/execution-form-content" {# New endpoint for just the
+            form #} hx-trigger="load" hx-swap="innerHTML">
+            <p>Loading execution form...</p><progress indeterminate></progress>
+        </div>
+    </section>
 
-    {# The Results Display area, always present when this container is loaded #}
-    <section id="results-display-container" style="margin-top: 1.5rem;">
-        <header>
+    <section id="execution-right-pane" class="right-pane-framed"
+        style="flex: 2; border-left: 1px solid var(--pico-muted-border-color); padding-left: 1.5rem;">
+        {# The Results Display area, always present when this container is loaded #}
+        <header style=" border-bottom: 1px solid var(--pico-muted-border-color); margin-bottom: 1rem;">
             <h5>Execution Results</h5>
         </header>
         <div id="results-display">
-            <p><small>Results will appear here after running the Flock.</small></p>
+            <p><code>Results will appear here after running the Flock.</code></p>
         </div>
     </section>
 </article>

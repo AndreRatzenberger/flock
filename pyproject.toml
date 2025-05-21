@@ -1,6 +1,6 @@
 [project]
 name = "flock-core"
-version = "0.4.0b-35"
+version = "0.4.3"
 description = "Declarative LLM Orchestration at Scale"
 readme = "README.md"
 authors = [
@@ -13,25 +13,20 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "azure-search-documents>=11.5.2",
     "chromadb>=0.6.3",
     "cloudpickle>=3.1.1",
     "datasets>=3.2.0",
     "devtools>=0.12.2",
-    "docling>=2.21.0",
     "dspy==2.6.23",
-    "duckduckgo-search>=7.3.2",
     "fastapi>=0.115.8",
     "httpx>=0.28.1",
     "inspect-ai>=0.3.88",
-    "langdetect>=1.0.9",
-    "litellm==1.63.7",
+    "litellm==1.69.3",
     "loguru>=0.7.3",
     "markdownify>=0.14.1",
     "matplotlib>=3.10.0",
     "mcp>=1.7.1",
     "msgpack>=1.1.0",
-    "nltk>=3.9.1",
     "notion-client>=2.3.0",
     "opentelemetry-api>=1.30.0",
     "opentelemetry-exporter-jaeger>=1.21.0",
@@ -39,6 +34,7 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.30.0",
     "opentelemetry-instrumentation-logging>=0.51b0",
     "opentelemetry-sdk>=1.30.0",
+    "openai==1.75.0",
     "pandas>=2.2.3",
     "pillow>=10.4.0",
     "prometheus-client>=0.21.1",
@@ -61,13 +57,38 @@ dependencies = [
     "toml>=0.10.2",
     "tqdm>=4.67.1",
     "uvicorn>=0.34.0",
+    "mem0ai[graph]>=0.1.101",
+    "aiosqlite>=0.21.0",
+    "markdown2>=2.5.3",
+    "wd-di>=0.2.14",
     "zep-python>=2.0.2",
 ]
 
 [project.optional-dependencies]
-all = ["docling>=2.18.0", "tavily-python>=0.5.0", "markdownify>=0.14.1"]
-tools = ["tavily-python>=0.5.0", "markdownify>=0.14.1"]
-
+basic-tools = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+]
+azure-tools = [
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+]
+llm-tools = [
+    "nltk>=3.9.1",
+]
+all-tools = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+    "nltk>=3.9.1",
+]
 
 [dependency-groups]
 dev = [
