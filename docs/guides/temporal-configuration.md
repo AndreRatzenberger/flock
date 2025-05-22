@@ -152,7 +152,7 @@ async def main():
     )
 
     # 2. Create Flock with Temporal Config
-    configure_global_logging("ERROR")  # show only errors
+    configure_logging("ERROR")  # show only errors
     flock = Flock(
         enable_temporal=True, # MUST be True to use Temporal config
         temporal_config=workflow_config
