@@ -38,5 +38,15 @@ jobs:
       - name: Build the project
         run: uv build
 
+      - name: Check if should skip
+        id: skip-check
+        run: |
+          if echo "${{ github.event.head_commit.message }}" | grep -iq "\[skip publish\]"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to pypi
-        run: uv publish --token  ${{ secrets.PYPI_API_TOKEN }}
+        if: steps.skip-check.outputs.skip != 'true'
+        run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}
