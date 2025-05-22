@@ -14,52 +14,80 @@
 </p>
 
 
-
 ---
 
-**Tired of wrestling with paragraphs of prompt text just to get your AI agent to perform a specific, structured task?** 😫
 
-Enter **Flock**, the agent framework that lets you ditch the prompt-palaver and focus on **what** you want your agents to achieve through a **declarative approach**. Define your agent's inputs, outputs, and available tools using clear Python structures (including type hints!), and let Flock handle the complex LLM interactions and orchestration.
+## The Problem You Know Too Well
 
-Built with real-world deployment in mind, Flock integrates seamlessly with tools like **Temporal** (optional) for building robust, fault-tolerant, and scalable agent systems right out of the box.
+🤯 **Prompt Hell**: Brittle 500-line prompts that break with every model update.  
+💥 **System Failures**: One bad LLM response crashes your entire workflow  
+🧪 **Testing Nightmares**: "How do I unit test a prompt?" (You don't.)  
+🧪 **Measuring Quality**: "How do I know my prompts are close to optimal?" (You also don't.)  
+📄 **Output Chaos**: Parsing unstructured LLM responses into reliable data  
+⛓️ **Orchestration Limits**: Moving beyond simple chains and DAGs? Good luck  
+🚀 **Production Gap**: Jupyter notebooks don't scale to enterprise systems  
 
-**Looking for examples and tutorials?** Check out the dedicated [**👉 flock-showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)!
+*After building dozens of AI systems for enterprise clients, we realized the tooling was fundamentally broken.*
 
-## ✨ Why Join the Flock?
 
-Flock offers a different way to build agentic systems:
+**Build with agents, not against them.**
 
-| Traditional Agent Frameworks 😟        | Flock Framework 🐤🐧🐓🦆                   |
-| :------------------------------------ | :------------------------------------- |
-| 🤯 **Prompt Nightmare**                | ✅ **Declarative Simplicity**           |
-| *Long, brittle, hard-to-tune prompts* | *Clear input/output specs (typed!)*    |
-| 💥 **Fragile & Unpredictable**         | ⚡ **Robust & Production-Ready**        |
-| *Single errors can halt everything*   | *Fault-tolerant via Temporal option*   |
-| 🧩 **Monolithic & Rigid**              | 🔧 **Modular & Flexible**               |
-| *Hard to extend or modify logic*      | *Pluggable Evaluators, Modules, Tools* |
-| ⛓️ **Basic Chaining**                  | 🚀 **Advanced Orchestration**           |
-| *Often just linear workflows*         | *Dynamic Routing, Batch Processing*    |
-| 🧪 **Difficult Testing**               | ✅ **Testable Components**              |
-| *Hard to unit test prompt logic*      | *Clear I/O contracts aid testing*      |
-| 📄 **Unstructured Output**             | ✨ **Structured Data Handling**         |
-| *Parsing unreliable LLM text output*  | *Native Pydantic/Typed Dict support*   |
 
+## The Flock Solution
+
+**What if you could just skip that 'prompt engineering' step?**
+
+Flock is an agent framework for declarative AI workflows. You define what goes in and what should come out, the how is handled by the agent.   
+No brittle prompts. No guesswork. Just reliable, testable AI agents.
+
+
+✅ **Declarative Contracts**: Define inputs/outputs with Pydantic models. Flock handles the LLM complexity.  
+⚡ **Built-in Resilience**: Automatic retries, state persistence, and workflow resumption via Temporal.io  
+🧪 **Actually Testable**: Clear contracts make agents unit-testable like any other code  
+🧪 **Optimal Quality**: Agents posses multiple self-optimization algorithms based on latest research  
+🚀 **Dynamic Workflows**: Self-correcting loops, conditional routing, and intelligent decision-making  
+🔧 **Zero-Config Production**: Deploy as REST APIs with one command. Scale without rewriting.
+
+**Ready to see it in action?**
+
+## ⚡ Quick Start
+
+```python
+from flock.core import Flock, FlockFactory
+
+# 1. Create the main orchestrator
+my_flock = Flock(model="openai/gpt-4o")
+
+# 2. Declaratively define an agent
+brainstorm_agent = FlockFactory.create_default_agent(
+    name="idea_generator",
+    input="topic",
+    output="catchy_title, key_points"
+)
+
+# 3. Add the agent to the Flock
+my_flock.add_agent(brainstorm_agent)
+
+# 4. Run the agent!
+input_data = {"topic": "The future of AI agents"}
+result = my_flock.run(start_agent="idea_generator", input=input_data)
+
+# The result is a Box object (dot-accessible dict)
+print(f"Generated Title: {result.catchy_title}")
+print(f"Key Points: {result.key_points}")
+```
+
+**No 20-line prompt fiddling. Just structured output, every time.**
+
+![image](https://github.com/user-attachments/assets/37a897cb-910f-49fc-89d4-510a780ad775)
+
+**Explore more examples →** [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
 
 ## 📹 Video Demo
 
 https://github.com/user-attachments/assets/bdab4786-d532-459f-806a-024727164dcc
 
-## 💡 Core Concepts
 
-Flock's power comes from a few key ideas (Learn more in the [Full Documentation](https://whiteducksoftware.github.io/flock/)):
-
-1. **Declarative Agents:** Define agents by *what* they do (inputs/outputs), not *how*. Flock uses **Evaluators** (like the default `DeclarativeEvaluator` powered by DSPy) to handle the underlying logic.
-2. **Typed Signatures:** Specify agent inputs and outputs using Python type hints and optional descriptions (e.g., `"query: str | User request, context: Optional[List[MyType]]"`).
-3. **Modular Components:** Extend agent capabilities with pluggable **Modules** (e.g., for memory, metrics, output formatting) that hook into the agent's lifecycle.
-4. **Intelligent Workflows:** Chain agents explicitly or use **Routers** (LLM-based, Agent-based, or custom) for dynamic decision-making.
-5. **Reliable Execution:** Run locally for easy debugging or seamlessly switch to **Temporal** (optional) for production-grade fault tolerance, retries, and state management.
-6. **Tool Integration:** Equip agents with standard or custom Python functions (`@flock_tool`) registered via the `FlockRegistry`.
-7. **Registry:** A central place (`@flock_component`, `@flock_type`, `@flock_tool`) to register your custom classes, types, and functions, enabling robust serialization and dynamic loading.
 
 ## 💾 Installation - Use Flock in your project
 
@@ -77,10 +105,10 @@ Extras: Install optional dependencies for specific features:
 
 ```bash
 # Common tools (Tavily, Markdownify)
-uv pip install flock-core[tools]
+uv pip install flock-core[all-tools]
 
 # All optional dependencies (including tools, docling, etc.)
-uv pip install flock-core[all]
+uv sync --all-extras
 ```
 
 ## 🔑 Installation - Develop Flock
@@ -130,51 +158,13 @@ DEFAULT_MODEL="openai/gpt-4o" # Default LLM if agent doesn't specify
 
 Be sure that the .env file is added to your .gitignore!
 
-## ⚡ Quick Start Syntax
-
-While detailed examples and tutorials now live in the flock-showcase repository, here's a minimal example to illustrate the core syntax:
-
-```python
-from flock.core import Flock, FlockFactory
-
-# 1. Create the main orchestrator
-# Uses DEFAULT_MODEL from .env or defaults to "openai/gpt-4o" if not set
-my_flock = Flock(name="SimpleFlock")
-
-# 2. Declaratively define an agent using the Factory
-# Input: a topic (string)
-# Output: a title (string) and bullet points (list of strings)
-brainstorm_agent = FlockFactory.create_default_agent(
-    name="idea_generator",
-    description="Generates titles and key points for a given topic.",
-    input="topic: str | The subject to brainstorm about",
-    output="catchy_title: str, key_points: list[str] | 3-5 main bullet points"
-)
-
-# 3. Add the agent to the Flock
-my_flock.add_agent(brainstorm_agent)
-
-# 4. Run the agent!
-if __name__ == "__main__":
-    input_data = {"topic": "The future of AI agents"}
-    try:
-        # The result is a Box object (dot-accessible dict)
-        result = my_flock.run(start_agent="idea_generator", input=input_data)
-        print(f"Generated Title: {result.catchy_title}")
-        print("Key Points:")
-        for point in result.key_points:
-            print(f"- {point}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print("Ensure your LLM API key (e.g., OPENAI_API_KEY) is set in your .env file!")
-```
 
 ## 🐤 New in Flock 0.4.0 `Magpie` 🐤
 <p align="center">
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/34c2fe2f-6dd2-498c-a826-1687cb158755" />
 </p>
 
-### MCP Support - Declaratively connect to 1000s of different tools!
+### 0.4.5 - MCP Support - Declaratively connect to 1000s of different tools!
 
 Create a server
 
