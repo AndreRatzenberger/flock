@@ -36,7 +36,9 @@
 
 ## The Flock Solution
 
-**What if you could define agents by what they do, not how they prompt?**
+**What if you could just skip that 'prompt engineering' step?**
+
+Flock lets you define what agents receive and what they should produce. The *how?* Flock figures it out.
 
 ✅ **Declarative Contracts**: Define inputs/outputs with Pydantic models. Flock handles the LLM complexity.  
 ⚡ **Built-in Resilience**: Automatic retries, state persistence, and workflow resumption via Temporal.io  
@@ -48,6 +50,33 @@
 **Ready to see it in action?** → [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
 
 
+## ⚡ Quick Start
+
+
+```python
+from flock.core import Flock, FlockFactory
+
+# 1. Create the main orchestrator
+my_flock = Flock(model="openai/gpt-4o")
+
+# 2. Declaratively define an agent
+brainstorm_agent = FlockFactory.create_default_agent(
+    name="idea_generator",
+    input="topic",
+    output="catchy_title, key_points"
+)
+
+# 3. Add the agent to the Flock
+my_flock.add_agent(brainstorm_agent)
+
+# 4. Run the agent!
+input_data = {"topic": "The future of AI agents"}
+result = my_flock.run(start_agent="idea_generator", input=input_data)
+
+# The result is a Box object (dot-accessible dict)
+print(f"Generated Title: {result.catchy_title}")
+print(f"Key Points: {result.key_points}")
+```
 
 ## 📹 Video Demo
 
@@ -124,39 +153,6 @@ DEFAULT_MODEL="openai/gpt-4o" # Default LLM if agent doesn't specify
 
 Be sure that the .env file is added to your .gitignore!
 
-## ⚡ Quick Start Syntax
-
-While detailed examples and tutorials now live in the flock-showcase repository, here's a minimal example to illustrate the core syntax:
-
-```python
-from flock.core import Flock, FlockFactory
-
-# 1. Create the main orchestrator
-my_flock = Flock(name="SimpleFlock",model="openai/gpt-4o")
-
-# 2. Declaratively define an agent
-# Input: a topic (string)
-# Output: a title (string) and bullet points (list of strings)
-brainstorm_agent = FlockFactory.create_default_agent(
-    name="idea_generator",
-    description="Generates titles and key points for a given topic.",
-    input="topic: str | The subject to brainstorm about",
-    output="catchy_title: str, key_points: list[str] | 3-5 main bullet points"
-)
-
-# 3. Add the agent to the Flock
-my_flock.add_agent(brainstorm_agent)
-
-# 4. Run the agent!
-input_data = {"topic": "The future of AI agents"}
-result = my_flock.run(start_agent="idea_generator", input=input_data)
-
-# The result is a Box object (dot-accessible dict)
-print(f"Generated Title: {result.catchy_title}")
-print("Key Points:")
-for point in result.key_points:
-    print(f"- {point}")
-```
 
 ## 🐤 New in Flock 0.4.0 `Magpie` 🐤
 <p align="center">
