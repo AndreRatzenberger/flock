@@ -1209,7 +1209,7 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.506"
+version = "0.4.507"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -1221,7 +1221,6 @@ dependencies = [
     { name = "litellm" },
     { name = "loguru" },
     { name = "markdown2" },
-    { name = "matplotlib" },
     { name = "mcp" },
     { name = "msgpack" },
     { name = "openai" },
@@ -1285,6 +1284,7 @@ llm-tools = [
 ]
 memory = [
     { name = "chromadb" },
+    { name = "matplotlib" },
     { name = "mem0ai", extra = ["graph"] },
     { name = "zep-python" },
 ]
@@ -1332,7 +1332,7 @@ requires-dist = [
     { name = "markdown2", specifier = ">=2.5.3" },
     { name = "markdownify", marker = "extra == 'all-tools'", specifier = ">=0.14.1" },
     { name = "markdownify", marker = "extra == 'basic-tools'", specifier = ">=0.14.1" },
-    { name = "matplotlib", specifier = ">=3.10.0" },
+    { name = "matplotlib", marker = "extra == 'memory'", specifier = ">=3.10.0" },
     { name = "mcp", specifier = ">=1.7.1" },
     { name = "mem0ai", extras = ["graph"], marker = "extra == 'memory'", specifier = ">=0.1.101" },
     { name = "msgpack", specifier = ">=1.1.0" },

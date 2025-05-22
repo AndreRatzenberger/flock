@@ -691,8 +691,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{agent_name}_output_{timestamp}.json"
-        filepath = os.path.join("output/", filename)
-        os.makedirs("output/", exist_ok=True)
+        filepath = os.path.join(".flock/output/", filename)
+        os.makedirs(".flock/output/", exist_ok=True)
 
         output_data = {
             "agent": agent_name,
