@@ -51,6 +51,7 @@ dependencies = [
     "markdown2>=2.5.3",
     "wd-di>=0.2.14",
     "websockets>=15.0.1",
+    "opik>=1.7.26",
 ]
 
 [project.optional-dependencies]

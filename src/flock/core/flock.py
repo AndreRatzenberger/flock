@@ -17,6 +17,9 @@ from typing import (
     TypeVar,
 )
 
+import litellm
+from litellm.integrations.opik.opik import OpikLogger
+
 _R = TypeVar("_R")
 # Third-party imports
 from box import Box
@@ -32,8 +35,10 @@ with workflow.unsafe.imports_passed_through():
     from flock.core.execution.local_executor import (
         run_local_workflow,
     )
+import dspy
 from opentelemetry import trace
 from opentelemetry.baggage import get_baggage, set_baggage
+from opik.integrations.dspy.callback import OpikCallback
 from pandas import DataFrame  # type: ignore
 from pydantic import BaseModel, Field
 
@@ -79,6 +84,9 @@ FlockRegistry = get_registry()  # Get the registry instance
 T = TypeVar("T", bound="Flock")
 
 
+import opik
+
+
 class Flock(BaseModel, Serializable):
     """Orchestrator for managing and executing agent systems.
 
@@ -102,6 +110,10 @@ class Flock(BaseModel, Serializable):
     enable_temporal: bool = Field(
         default=False,
         description="If True, execute workflows via Temporal; otherwise, run locally.",
+    )
+    enable_opik: bool = Field(
+        default=False,
+        description="If True, enable Opik for cost tracking and model management.",
     )
     show_flock_banner: bool = Field(
         default=True,
@@ -179,6 +191,7 @@ class Flock(BaseModel, Serializable):
         description: str | None = None,
         show_flock_banner: bool = True,
         enable_temporal: bool = False,
+        enable_opik: bool = False,
         agents: list[FlockAgent] | None = None,
         servers: list[FlockMCPServerBase] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
@@ -195,6 +208,7 @@ class Flock(BaseModel, Serializable):
             model=model,
             description=description,
             enable_temporal=enable_temporal,
+            enable_opik=enable_opik,
             show_flock_banner=show_flock_banner,
             temporal_config=temporal_config,
             temporal_start_in_process_worker=temporal_start_in_process_worker,
@@ -251,6 +265,16 @@ class Flock(BaseModel, Serializable):
         self._ensure_session_id()
 
         FlockRegistry.discover_and_register_components()
+
+        if self.enable_opik:
+            opik.configure(use_local=True, automatic_approvals=True)
+            opik_callback = OpikCallback(project_name=self.name, log_graph=True)
+            dspy.settings.configure(
+                callbacks=[opik_callback],
+            )
+            opik_logger = OpikLogger()
+            litellm.callbacks = [opik_logger]
+
 
         logger.info(
             "Flock instance initialized",

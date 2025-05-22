@@ -8,6 +8,7 @@ from typing import Any, Union
 import pandas as pd
 from box import Box
 from datasets import get_dataset_config_names, load_dataset
+from opik import Opik
 
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_evaluator import FlockEvaluator
@@ -31,8 +32,20 @@ def load_and_merge_all_configs(dataset_name: str) -> pd.DataFrame:
             all_dfs.append(df)
 
     merged_df = pd.concat(all_dfs, ignore_index=True)
+    logger_helpers.info(f"merged_df.head(): {merged_df.head()}")
     return merged_df
 
+def import_hf_dataset_to_opik(dataset_name: str) -> pd.DataFrame:
+    df = load_and_merge_all_configs(dataset_name)
+    logger_helpers.info(f"type(df): {type(df)}")        # ➜ <class 'pandas.core.frame.DataFrame'>
+    logger_helpers.info(f"df.shape: {df.shape}")        # e.g. (123456, N_COLUMNS+2)
+    logger_helpers.info(f"df['split'].value_counts(): {df['split'].value_counts()}")
+    logger_helpers.info(f"df['config'].unique(): {df['config'].unique()}")
+    client = Opik()
+    dataset = client.get_or_create_dataset(name=dataset_name)
+
+    dataset.insert_from_pandas(dataframe=df, ignore_keys=["source"])
+    return df
 
 def normalize_dataset(dataset: Any) -> pd.DataFrame:
     """Converts various dataset formats into a pandas DataFrame."""
