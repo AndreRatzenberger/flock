@@ -30,14 +30,16 @@
 *After building dozens of AI systems for enterprise clients, we realized the tooling was fundamentally broken.*
 
 
-**Stop fighting your AI agents. Start building with them.**
+**Build with agents, not against them.**
 
 
 ## The Flock Solution
 
 **What if you could just skip that 'prompt engineering' step?**
 
-Flock lets you define what agents receive and what they should produce. The *how?* Flock figures it out.
+Flock is an agent framework for declarative AI workflows. You define what goes in and what should come out, the how is handled by the agent.   
+No brittle prompts. No guesswork. Just reliable, testable AI agents.
+
 
 ✅ **Declarative Contracts**: Define inputs/outputs with Pydantic models. Flock handles the LLM complexity.  
 ⚡ **Built-in Resilience**: Automatic retries, state persistence, and workflow resumption via Temporal.io  
@@ -75,11 +77,11 @@ print(f"Generated Title: {result.catchy_title}")
 print(f"Key Points: {result.key_points}")
 ```
 
-**No wasted time prompting, but still enjoying high quality structured output!**
+**No 20-line prompt fiddling. Just structured output, every time.**
 
 ![image](https://github.com/user-attachments/assets/37a897cb-910f-49fc-89d4-510a780ad775)
 
-**Check out the Showcase for more →** [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
+**Explore more examples →** [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
 
 ## 📹 Video Demo
 
