@@ -53,17 +53,7 @@
 
 https://github.com/user-attachments/assets/bdab4786-d532-459f-806a-024727164dcc
 
-## 💡 Core Concepts
 
-Flock's power comes from a few key ideas (Learn more in the [Full Documentation](https://whiteducksoftware.github.io/flock/)):
-
-1. **Declarative Agents:** Define agents by *what* they do (inputs/outputs), not *how*. Flock uses **Evaluators** (like the default `DeclarativeEvaluator` powered by DSPy) to handle the underlying logic.
-2. **Typed Signatures:** Specify agent inputs and outputs using Python type hints and optional descriptions (e.g., `"query: str | User request, context: Optional[List[MyType]]"`).
-3. **Modular Components:** Extend agent capabilities with pluggable **Modules** (e.g., for memory, metrics, output formatting) that hook into the agent's lifecycle.
-4. **Intelligent Workflows:** Chain agents explicitly or use **Routers** (LLM-based, Agent-based, or custom) for dynamic decision-making.
-5. **Reliable Execution:** Run locally for easy debugging or seamlessly switch to **Temporal** (optional) for production-grade fault tolerance, retries, and state management.
-6. **Tool Integration:** Equip agents with standard or custom Python functions (`@flock_tool`) registered via the `FlockRegistry`.
-7. **Registry:** A central place (`@flock_component`, `@flock_type`, `@flock_tool`) to register your custom classes, types, and functions, enabling robust serialization and dynamic loading.
 
 ## 💾 Installation - Use Flock in your project
 
@@ -81,10 +71,10 @@ Extras: Install optional dependencies for specific features:
 
 ```bash
 # Common tools (Tavily, Markdownify)
-uv pip install flock-core[tools]
+uv pip install flock-core[all-tools]
 
 # All optional dependencies (including tools, docling, etc.)
-uv pip install flock-core[all]
+uv sync --all-extras
 ```
 
 ## 🔑 Installation - Develop Flock
@@ -142,10 +132,9 @@ While detailed examples and tutorials now live in the flock-showcase repository,
 from flock.core import Flock, FlockFactory
 
 # 1. Create the main orchestrator
-# Uses DEFAULT_MODEL from .env or defaults to "openai/gpt-4o" if not set
-my_flock = Flock(name="SimpleFlock")
+my_flock = Flock(name="SimpleFlock",model="openai/gpt-4o")
 
-# 2. Declaratively define an agent using the Factory
+# 2. Declaratively define an agent
 # Input: a topic (string)
 # Output: a title (string) and bullet points (list of strings)
 brainstorm_agent = FlockFactory.create_default_agent(
@@ -159,18 +148,14 @@ brainstorm_agent = FlockFactory.create_default_agent(
 my_flock.add_agent(brainstorm_agent)
 
 # 4. Run the agent!
-if __name__ == "__main__":
-    input_data = {"topic": "The future of AI agents"}
-    try:
-        # The result is a Box object (dot-accessible dict)
-        result = my_flock.run(start_agent="idea_generator", input=input_data)
-        print(f"Generated Title: {result.catchy_title}")
-        print("Key Points:")
-        for point in result.key_points:
-            print(f"- {point}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        print("Ensure your LLM API key (e.g., OPENAI_API_KEY) is set in your .env file!")
+input_data = {"topic": "The future of AI agents"}
+result = my_flock.run(start_agent="idea_generator", input=input_data)
+
+# The result is a Box object (dot-accessible dict)
+print(f"Generated Title: {result.catchy_title}")
+print("Key Points:")
+for point in result.key_points:
+    print(f"- {point}")
 ```
 
 ## 🐤 New in Flock 0.4.0 `Magpie` 🐤
@@ -178,7 +163,7 @@ if __name__ == "__main__":
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/34c2fe2f-6dd2-498c-a826-1687cb158755" />
 </p>
 
-### MCP Support - Declaratively connect to 1000s of different tools!
+### 0.4.5 - MCP Support - Declaratively connect to 1000s of different tools!
 
 Create a server
 
