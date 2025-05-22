@@ -34,10 +34,11 @@
             </div>
 
             <!-- Feedback form (initially hidden, toggled by 👎 link) -->
-            <div x-show="showForm" style="width:800px;">
+            <div x-show="showForm" style="width: 800px;">
                 <form
                     hx-post="{% if share_id %}/chat/htmx/feedback-shared{% else %}/chat/htmx/feedback{% endif %}"
-                    hx-swap="outerHTML"
+                    hx-target="closest .bubble"
+                    hx-swap="innerHTML"
                     x-on:htmx:afterRequest="showForm=false"
                     style="display:block; width:800px;">
                     {% if share_id %}<input type="hidden" name="share_id" value="{{ share_id }}">{% endif %}
