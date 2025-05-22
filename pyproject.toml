@@ -89,6 +89,23 @@ all-tools = [
     "azure-search-documents>=11.5.2",
     "nltk>=3.9.1",
 ]
+all = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+    "nltk>=3.9.1",
+    "datasets>=3.2.0",
+    "rouge-score>=0.1.2",
+    "sentence-transformers>=3.4.1",
+    "zep-python>=2.0.2",
+    "mem0ai[graph]>=0.1.101",
+    "chromadb>=0.6.3",
+    "matplotlib>=3.10.0",
+]
 
 [dependency-groups]
 dev = [
