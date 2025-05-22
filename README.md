@@ -14,35 +14,39 @@
 </p>
 
 
-
 ---
 
-**Tired of wrestling with paragraphs of prompt text just to get your AI agent to perform a specific, structured task?** 😫
 
-Enter **Flock**, the agent framework that lets you ditch the prompt-palaver and focus on **what** you want your agents to achieve through a **declarative approach**. Define your agent's inputs, outputs, and available tools using clear Python structures (including type hints!), and let Flock handle the complex LLM interactions and orchestration.
+## The Problem You Know Too Well
 
-Built with real-world deployment in mind, Flock integrates seamlessly with tools like **Temporal** (optional) for building robust, fault-tolerant, and scalable agent systems right out of the box.
+🤯 **Prompt Hell**: Brittle 500-line prompts that break with every model update.  
+💥 **System Failures**: One bad LLM response crashes your entire workflow  
+🧪 **Testing Nightmares**: "How do I unit test a prompt?" (You don't.)  
+🧪 **Measuring Quality**: "How do I know my prompts are close to optimal?" (You also don't.)  
+📄 **Output Chaos**: Parsing unstructured LLM responses into reliable data  
+⛓️ **Orchestration Limits**: Moving beyond simple chains and DAGs? Good luck  
+🚀 **Production Gap**: Jupyter notebooks don't scale to enterprise systems  
 
-**Looking for examples and tutorials?** Check out the dedicated [**👉 flock-showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)!
+*After building dozens of AI systems for enterprise clients, we realized the tooling was fundamentally broken.*
 
-## ✨ Why Join the Flock?
 
-Flock offers a different way to build agentic systems:
 
-| Traditional Agent Frameworks 😟        | Flock Framework 🐤🐧🐓🦆                   |
-| :------------------------------------ | :------------------------------------- |
-| 🤯 **Prompt Nightmare**                | ✅ **Declarative Simplicity**           |
-| *Long, brittle, hard-to-tune prompts* | *Clear input/output specs (typed!)*    |
-| 💥 **Fragile & Unpredictable**         | ⚡ **Robust & Production-Ready**        |
-| *Single errors can halt everything*   | *Fault-tolerant via Temporal option*   |
-| 🧩 **Monolithic & Rigid**              | 🔧 **Modular & Flexible**               |
-| *Hard to extend or modify logic*      | *Pluggable Evaluators, Modules, Tools* |
-| ⛓️ **Basic Chaining**                  | 🚀 **Advanced Orchestration**           |
-| *Often just linear workflows*         | *Dynamic Routing, Batch Processing*    |
-| 🧪 **Difficult Testing**               | ✅ **Testable Components**              |
-| *Hard to unit test prompt logic*      | *Clear I/O contracts aid testing*      |
-| 📄 **Unstructured Output**             | ✨ **Structured Data Handling**         |
-| *Parsing unreliable LLM text output*  | *Native Pydantic/Typed Dict support*   |
+**Stop fighting your AI agents. Start building with them.**
+
+
+## The Flock Solution
+
+**What if you could define agents by what they do, not how they prompt?**
+
+✅ **Declarative Contracts**: Define inputs/outputs with Pydantic models. Flock handles the LLM complexity.  
+⚡ **Built-in Resilience**: Automatic retries, state persistence, and workflow resumption via Temporal.io  
+🧪 **Actually Testable**: Clear contracts make agents unit-testable like any other code  
+🧪 **Optimal Quality**: Agents posses multiple self-optimization algorithms based on latest research  
+🚀 **Dynamic Workflows**: Self-correcting loops, conditional routing, and intelligent decision-making  
+🔧 **Zero-Config Production**: Deploy as REST APIs with one command. Scale without rewriting.
+
+**Ready to see it in action?** → [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
+
 
 
 ## 📹 Video Demo
