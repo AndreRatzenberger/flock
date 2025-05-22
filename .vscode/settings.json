@@ -16,7 +16,7 @@
     "terminal.integrated.fontFamily": "'Jetbrains Mono', 'FiraCode Nerd Font', 'Hack Nerd Font', 'monospace'",
     "editor.renderWhitespace": "none",
     //"terminal.integrated.lineHeight": 1.5,
-    "editor.fontSize": 12,
+    "editor.fontSize": 15,
     "editor.fontLigatures": true,
     "editor.lineHeight": 1.5,
     "editor.minimap.enabled": false,
