@@ -30,7 +30,6 @@
 *After building dozens of AI systems for enterprise clients, we realized the tooling was fundamentally broken.*
 
 
-
 **Stop fighting your AI agents. Start building with them.**
 
 
@@ -47,11 +46,9 @@ Flock lets you define what agents receive and what they should produce. The *how
 🚀 **Dynamic Workflows**: Self-correcting loops, conditional routing, and intelligent decision-making  
 🔧 **Zero-Config Production**: Deploy as REST APIs with one command. Scale without rewriting.
 
-**Ready to see it in action?** → [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
-
+**Ready to see it in action?**
 
 ## ⚡ Quick Start
-
 
 ```python
 from flock.core import Flock, FlockFactory
@@ -77,6 +74,12 @@ result = my_flock.run(start_agent="idea_generator", input=input_data)
 print(f"Generated Title: {result.catchy_title}")
 print(f"Key Points: {result.key_points}")
 ```
+
+**No wasted time prompting, but still enjoying high quality structured output!**
+
+![image](https://github.com/user-attachments/assets/37a897cb-910f-49fc-89d4-510a780ad775)
+
+**Check out the Showcase for more →** [**Flock Showcase Repository**](https://github.com/whiteducksoftware/flock-showcase)
 
 ## 📹 Video Demo
 
