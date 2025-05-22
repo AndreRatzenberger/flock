@@ -250,6 +250,7 @@ loguru_logger.add(
     colorize=True,
     format=custom_format,
 )
+logging.basicConfig(level=LOG_LEVELS["NO_LOGS"])
 # Optionally add a file handler, e.g.:
 # loguru_logger.add("logs/flock.log", rotation="100 MB", retention="30 days", level="DEBUG")
 
