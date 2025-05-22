@@ -80,10 +80,10 @@ You can also override or set configurations directly when creating Flock or Floc
 ### Configure Flock instance
 ```python
 from flock.core import Flock, FlockAgent, FlockFactory
-from flock.core.logging.logging import configure_global_logging
+from flock.core.logging.logging import configure_logging
 
 # Only show error logs
-configure_global_logging("ERROR")
+configure_logging("ERROR")
 
 my_flock = Flock(
     name="ConfiguredFlock",

@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from flock.core.flock import Flock
-from flock.core.logging.logging import configure_global_logging
+from flock.core.logging.logging import configure_logging
 from flock.core.util.cli_helper import init_console
 
 # Create console instance
@@ -119,7 +119,7 @@ def execute_flock(flock: Flock):
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             default="ERROR",
         ).ask()
-        configure_global_logging(log_level)
+        configure_logging(flock_level=log_level, external_level=log_level)
 
     # Preview input
     console.print("\n[bold]Input Preview:[/]")
@@ -523,7 +523,7 @@ def execute_flock_batch(flock: Flock):
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             default="ERROR",
         ).ask()
-        configure_global_logging(log_level)
+        configure_logging(log_level)
 
     # Preview configuration
     console.print("\n[bold]Batch Configuration Preview:[/]")
