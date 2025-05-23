@@ -1,6 +1,6 @@
 [project]
 name = "flock-core"
-version = "0.4.507"
+version = "0.4.508"
 description = "Declarative LLM Orchestration at Scale"
 readme = "README.md"
 authors = [
@@ -66,9 +66,7 @@ azure-tools = [
     "azure-storage-blob>=12.25.1",
     "azure-search-documents>=11.5.2",
 ]
-llm-tools = [
-    "nltk>=3.9.1",
-]
+llm-tools = ["nltk>=3.9.1"]
 memory = [
     "zep-python>=2.0.2",
     "mem0ai[graph]>=0.1.101",
