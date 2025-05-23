@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from typing import Any
 
 from flock.core.api.endpoints import create_api_router
 from flock.core.api.run_store import RunStore
@@ -147,23 +148,30 @@ async def lifespan(app: FastAPI):
         set_global_shared_link_store(shared_link_store)
         logger.info("SharedLinkStore initialized and set globally.")
     except Exception as e:
-        logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)
-
-    # Configure chat features based on environment variables
-    # These are typically set by __init__.py when launching with --chat or --web --chat
-    flock_start_mode = os.environ.get("FLOCK_START_MODE")
-    flock_chat_enabled_env = os.environ.get("FLOCK_CHAT_ENABLED", "false").lower() == "true"
-
-    should_enable_chat_routes = False
-    if flock_start_mode == "chat":
+        logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)    # Configure chat features with clear precedence:
+    # 1. Value set by start_unified_server (programmatic)
+    # 2. Environment variables (standalone mode)
+    programmatic_chat_enabled = getattr(app.state, "chat_enabled", None)
+    env_start_mode = os.environ.get("FLOCK_START_MODE")
+    env_chat_enabled = os.environ.get("FLOCK_CHAT_ENABLED", "false").lower() == "true"
+    
+    if programmatic_chat_enabled is not None:
+        # Programmatic setting takes precedence (from start_unified_server)
+        should_enable_chat_routes = programmatic_chat_enabled
+        logger.info(f"Using programmatic chat_enabled setting: {should_enable_chat_routes}")
+    elif env_start_mode == "chat":
         should_enable_chat_routes = True
-        app.state.initial_redirect_to_chat = True # Signal dashboard to redirect
-        logger.info("FLOCK_START_MODE='chat'. Chat routes will be enabled and initial redirect to chat is set.")
-    elif flock_chat_enabled_env:
+        app.state.initial_redirect_to_chat = True
+        app.state.chat_enabled = True
+        logger.info("FLOCK_START_MODE='chat'. Enabling chat routes and setting redirect.")
+    elif env_chat_enabled:
         should_enable_chat_routes = True
-        logger.info("FLOCK_CHAT_ENABLED='true'. Chat routes will be enabled.")
-
-    app.state.chat_enabled = should_enable_chat_routes # For context in templates
+        app.state.chat_enabled = True
+        logger.info("FLOCK_CHAT_ENABLED='true'. Enabling chat routes.")
+    else:
+        should_enable_chat_routes = False
+        app.state.chat_enabled = False
+        logger.info("Chat routes disabled (no programmatic or environment setting).")
 
     if should_enable_chat_routes:
         try:
@@ -171,10 +179,8 @@ async def lifespan(app: FastAPI):
             app.include_router(chat_router, tags=["Chat"])
             logger.info("Chat routes included in the application.")
         except Exception as e:
-            logger.error(f"Failed to include chat routes during lifespan startup: {e}", exc_info=True)
-
-    # If in standalone chat mode, strip non-essential UI routes
-    if flock_start_mode == "chat":
+            logger.error(f"Failed to include chat routes during lifespan startup: {e}", exc_info=True)    # If in standalone chat mode, strip non-essential UI routes
+    if env_start_mode == "chat":
         from fastapi.routing import APIRoute
         logger.info("FLOCK_START_MODE='chat'. Stripping non-chat UI routes.")
 
