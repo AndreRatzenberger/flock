@@ -26,6 +26,8 @@ class DeclarativeEvaluatorConfig(FlockEvaluatorConfig):
     use_cache: bool = True
     temperature: float = 0.0
     max_tokens: int = 4096
+    max_retries: int = 3
+    max_tool_calls: int = 10
     stream: bool = Field(
         default=False,
         description="Enable streaming output from the underlying DSPy program.",
@@ -76,6 +78,7 @@ class DeclarativeEvaluator(
                 cache=self.config.use_cache,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
+                num_retries=self.config.max_retries,
             )
         ):
             try:
@@ -100,6 +103,7 @@ class DeclarativeEvaluator(
                     _dspy_signature,
                     override_evaluator_type=self.config.override_evaluator_type,
                     tools=tools,
+                    max_tool_calls=self.config.max_tool_calls,
                     mcp_tools=mcp_tools,
                     kwargs=self.config.kwargs,
                 )
