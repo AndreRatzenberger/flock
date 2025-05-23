@@ -321,6 +321,8 @@ class FlockFactory:
         wait_for_input: bool = False,
         temperature: float = 0.0,
         max_tokens: int = 8192,
+        max_tool_calls: int = 10,
+        max_retries: int = 3,
         alert_latency_threshold_ms: int = 30000,
         no_output: bool = False,
         print_context: bool = False,
@@ -343,6 +345,8 @@ class FlockFactory:
             use_cache=use_cache,
             max_tokens=max_tokens,
             temperature=temperature,
+            max_tool_calls=max_tool_calls,
+            max_retries=max_retries,
             stream=stream,
             include_thought_process=include_thought_process,
         )

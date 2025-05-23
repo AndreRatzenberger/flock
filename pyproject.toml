@@ -1,6 +1,6 @@
 [project]
 name = "flock-core"
-version = "0.4.506"
+version = "0.4.508"
 description = "Declarative LLM Orchestration at Scale"
 readme = "README.md"
 authors = [
@@ -13,17 +13,13 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "chromadb>=0.6.3",
     "cloudpickle>=3.1.1",
-    "datasets>=3.2.0",
     "devtools>=0.12.2",
     "dspy==2.6.23",
     "fastapi>=0.115.8",
     "httpx>=0.28.1",
-    "inspect-ai>=0.3.88",
     "litellm==1.69.3",
     "loguru>=0.7.3",
-    "matplotlib>=3.10.0",
     "mcp>=1.7.1",
     "msgpack>=1.1.0",
     "opentelemetry-api>=1.30.0",
@@ -42,23 +38,20 @@ dependencies = [
     "python-box>=7.3.2",
     "python-decouple>=3.8",
     "python-dotenv>=1.0.1",
-    "python-fasthtml>=0.12.6",
     "pyyaml>=6.0",
     "questionary>=2.1.0",
     "rich>=13.9.4",
-    "rouge-score>=0.1.2",
-    "sentence-transformers>=3.4.1",
     "temporalio>=1.9.0",
     "thefuzz>=0.22.1",
     "tiktoken>=0.8.0",
     "toml>=0.10.2",
     "tqdm>=4.67.1",
     "uvicorn>=0.34.0",
-    "mem0ai[graph]>=0.1.101",
     "aiosqlite>=0.21.0",
     "markdown2>=2.5.3",
     "wd-di>=0.2.14",
-    "zep-python>=2.0.2",
+    "websockets>=15.0.1",
+    "opik>=1.7.26",
 ]
 
 [project.optional-dependencies]
@@ -73,8 +66,17 @@ azure-tools = [
     "azure-storage-blob>=12.25.1",
     "azure-search-documents>=11.5.2",
 ]
-llm-tools = [
-    "nltk>=3.9.1",
+llm-tools = ["nltk>=3.9.1"]
+memory = [
+    "zep-python>=2.0.2",
+    "mem0ai[graph]>=0.1.101",
+    "chromadb>=0.6.3",
+    "matplotlib>=3.10.0",
+]
+evaluation = [
+    "datasets>=3.2.0",
+    "rouge-score>=0.1.2",
+    "sentence-transformers>=3.4.1",
 ]
 all-tools = [
     "docling>=2.18.0",
@@ -85,6 +87,23 @@ all-tools = [
     "azure-storage-blob>=12.25.1",
     "azure-search-documents>=11.5.2",
     "nltk>=3.9.1",
+]
+all = [
+    "docling>=2.18.0",
+    "tavily-python>=0.5.0",
+    "markdownify>=0.14.1",
+    "duckduckgo-search>=7.3.2",
+    "azure-identity>=1.23.0",
+    "azure-storage-blob>=12.25.1",
+    "azure-search-documents>=11.5.2",
+    "nltk>=3.9.1",
+    "datasets>=3.2.0",
+    "rouge-score>=0.1.2",
+    "sentence-transformers>=3.4.1",
+    "zep-python>=2.0.2",
+    "mem0ai[graph]>=0.1.101",
+    "chromadb>=0.6.3",
+    "matplotlib>=3.10.0",
 ]
 
 [dependency-groups]

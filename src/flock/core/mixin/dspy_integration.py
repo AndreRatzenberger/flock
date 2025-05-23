@@ -75,7 +75,9 @@ def _resolve_type_string(type_str: str) -> type:
                     try:
                         return tuple(ast.literal_eval(f"[{args_str}]"))
                     except (SyntaxError, ValueError) as exc:
-                        raise ValueError(f"Cannot parse {args_str!r} as literals") from exc
+                        raise ValueError(
+                            f"Cannot parse {args_str!r} as literals"
+                        ) from exc
 
                 literal_args = parse_literal_args(args_str)
                 logger.debug(
@@ -250,8 +252,7 @@ class DSPyIntegrationMixin:
                 f"Failed to create dynamic type 'dspy_{agent_name}': {e}",
                 exc_info=True,
             )
-            raise TypeError(
-                f"Could not create DSPy signature type: {e}") from e
+            raise TypeError(f"Could not create DSPy signature type: {e}") from e
 
     def _configure_language_model(
         self,
@@ -308,6 +309,7 @@ class DSPyIntegrationMixin:
         self,
         signature: Any,
         override_evaluator_type: AgentType,
+        max_tool_calls: int = 10,
         tools: list[Any] | None = None,
         mcp_tools: list[Any] | None = None,
         kwargs: dict[str, Any] = {},
@@ -370,7 +372,7 @@ class DSPyIntegrationMixin:
                 dspy_program = dspy.ChainOfThought(signature, **kwargs)
             elif selected_type == "ReAct":
                 if not kwargs:
-                    kwargs = {"max_iters": 10}
+                    kwargs = {"max_iters": max_tool_calls}
                 dspy_program = dspy.ReAct(
                     signature, tools=merged_tools or [], **kwargs
                 )
@@ -427,8 +429,7 @@ class DSPyIntegrationMixin:
             final_result = {**inputs, **output_dict}
 
             lm = dspy.settings.get("lm")
-            cost = sum([x["cost"]
-                       for x in lm.history if x["cost"] is not None])
+            cost = sum([x["cost"] for x in lm.history if x["cost"] is not None])
             lm_history = lm.history
 
             return final_result, cost, lm_history

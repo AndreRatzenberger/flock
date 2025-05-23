@@ -45,9 +45,16 @@ class FlockEvaluator(ABC, BaseModel):
         description="Evaluator configuration",
     )
 
+    def __init__(self, **data):
+        super().__init__(**data)
+
     @abstractmethod
     async def evaluate(
-        self, agent: Any, inputs: dict[str, Any], tools: list[Any], mcp_tools: list[Any] | None = None
+        self,
+        agent: Any,
+        inputs: dict[str, Any],
+        tools: list[Any],
+        mcp_tools: list[Any] | None = None,
     ) -> dict[str, Any]:
         """Evaluate inputs to produce outputs."""
         pass

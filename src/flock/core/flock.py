@@ -17,7 +17,6 @@ from typing import (
     TypeVar,
 )
 
-_R = TypeVar("_R")
 # Third-party imports
 from box import Box
 from temporalio import workflow
@@ -32,8 +31,11 @@ with workflow.unsafe.imports_passed_through():
     from flock.core.execution.local_executor import (
         run_local_workflow,
     )
+
+import opik
 from opentelemetry import trace
 from opentelemetry.baggage import get_baggage, set_baggage
+from opik.integrations.dspy.callback import OpikCallback
 from pandas import DataFrame  # type: ignore
 from pydantic import BaseModel, Field
 
@@ -67,7 +69,7 @@ try:
 
     PANDAS_AVAILABLE = True
 except ImportError:
-    pd = None # type: ignore
+    pd = None  # type: ignore
     PANDAS_AVAILABLE = False
 
 logger = get_logger("flock.api")
@@ -77,6 +79,7 @@ FlockRegistry = get_registry()  # Get the registry instance
 
 # Define TypeVar for generic class methods like from_dict
 T = TypeVar("T", bound="Flock")
+_R = TypeVar("_R")
 
 
 class Flock(BaseModel, Serializable):
@@ -102,6 +105,10 @@ class Flock(BaseModel, Serializable):
     enable_temporal: bool = Field(
         default=False,
         description="If True, execute workflows via Temporal; otherwise, run locally.",
+    )
+    enable_opik: bool = Field(
+        default=False,
+        description="If True, enable Opik for cost tracking and model management.",
     )
     show_flock_banner: bool = Field(
         default=True,
@@ -159,11 +166,11 @@ class Flock(BaseModel, Serializable):
         """
         try:
             asyncio.get_running_loop()
-        except RuntimeError:                       # no loop → simple
+        except RuntimeError:  # no loop → simple
             return asyncio.run(coro)
 
         # A loop is already running – Jupyter / ASGI / etc.
-        ctx = contextvars.copy_context()           # propagate baggage
+        ctx = contextvars.copy_context()  # propagate baggage
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(ctx.run, asyncio.run, coro)
             try:
@@ -179,6 +186,7 @@ class Flock(BaseModel, Serializable):
         description: str | None = None,
         show_flock_banner: bool = True,
         enable_temporal: bool = False,
+        enable_opik: bool = False,
         agents: list[FlockAgent] | None = None,
         servers: list[FlockMCPServerBase] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
@@ -195,6 +203,7 @@ class Flock(BaseModel, Serializable):
             model=model,
             description=description,
             enable_temporal=enable_temporal,
+            enable_opik=enable_opik,
             show_flock_banner=show_flock_banner,
             temporal_config=temporal_config,
             temporal_start_in_process_worker=temporal_start_in_process_worker,
@@ -207,7 +216,6 @@ class Flock(BaseModel, Serializable):
         self._start_agent_name = None
         self._start_input = {}
         self._mgr = FlockServerManager()
-
 
         # Register passed servers
         # (need to be registered first so that agents can retrieve them from the registry)
@@ -225,7 +233,6 @@ class Flock(BaseModel, Serializable):
                         f"Item provided in 'servers' list is not a FlockMCPServer: {type(server)}"
                     )
 
-
         # Register passed agents
         if agents:
             from flock.core.flock_agent import (
@@ -241,7 +248,7 @@ class Flock(BaseModel, Serializable):
                     )
 
         # Initialize console if needed for banner
-        if self.show_flock_banner: # Check instance attribute
+        if self.show_flock_banner:  # Check instance attribute
             init_console(clear_screen=True, show_banner=self.show_flock_banner)
 
         # Set Temporal debug environment variable
@@ -252,6 +259,15 @@ class Flock(BaseModel, Serializable):
 
         FlockRegistry.discover_and_register_components()
 
+        if self.enable_opik:
+            import dspy
+
+            opik.configure(use_local=True, automatic_approvals=True)
+            opik_callback = OpikCallback(project_name=self.name, log_graph=True)
+            dspy.settings.configure(
+                callbacks=[opik_callback],
+            )
+
         logger.info(
             "Flock instance initialized",
             name=self.name,
@@ -259,47 +275,60 @@ class Flock(BaseModel, Serializable):
             enable_temporal=self.enable_temporal,
         )
 
-    def prepare_benchmark(self, agent: FlockAgent | str | None = None, input_field: str | None = None, eval_field: str | None = None):
+    def prepare_benchmark(
+        self,
+        agent: FlockAgent | str | None = None,
+        input_field: str | None = None,
+        eval_field: str | None = None,
+    ):
         """Prepare a benchmark for the Flock instance."""
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
 
-        logger.info(f"Preparing benchmark for Flock instance '{self.name}' with agent '{agent}'.")
+        logger.info(
+            f"Preparing benchmark for Flock instance '{self.name}' with agent '{agent}'."
+        )
 
         name = agent.name if isinstance(agent, ConcreteFlockAgent) else agent
 
         if self._agents.get(name) is None:
-            raise ValueError(f"Agent '{name}' not found in Flock instance '{self.name}'.")
+            raise ValueError(
+                f"Agent '{name}' not found in Flock instance '{self.name}'."
+            )
 
         self.benchmark_agent_name = name
         self.benchmark_eval_field = eval_field
         self.benchmark_input_field = input_field
 
-
-
     def inspect(self):
         """Inspect the Flock instance."""
-        logger.info(f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'.")
+        logger.info(
+            f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'."
+        )
 
-        async def run(input: dict[str, Any])-> dict[str, Any]:
+        async def run(input: dict[str, Any]) -> dict[str, Any]:
             """Inspect the Flock instance."""
-            logger.info(f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'.")
+            logger.info(
+                f"Inspecting Flock instance '{self.name}' with start agent '{self.benchmark_agent_name}' and input '{input}'."
+            )
             msg_content = input.get("messages")[0].get("content")
 
-            agent_input = {
-                self.benchmark_input_field: msg_content
-            }
+            agent_input = {self.benchmark_input_field: msg_content}
 
-            result = await self.run_async(start_agent=self.benchmark_agent_name, input=agent_input, box_result=False)
+            result = await self.run_async(
+                start_agent=self.benchmark_agent_name,
+                input=agent_input,
+                box_result=False,
+            )
 
-            agent_output = result.get(self.benchmark_eval_field, "No answer found")
+            agent_output = result.get(
+                self.benchmark_eval_field, "No answer found"
+            )
 
             return {
                 "output": agent_output,
             }
 
         return run
-
-
 
     def _set_temporal_debug_flag(self):
         """Set or remove LOCAL_DEBUG env var based on enable_temporal."""
@@ -373,10 +402,14 @@ class Flock(BaseModel, Serializable):
         if agent.name in self._agents:
             # Allow re-adding the same instance, but raise error for different instance with same name
             if self._agents[agent.name] is not agent:
-                raise ValueError(f"Agent with name '{agent.name}' already exists with a different instance.")
+                raise ValueError(
+                    f"Agent with name '{agent.name}' already exists with a different instance."
+                )
             else:
-                logger.debug(f"Agent '{agent.name}' is already added. Skipping.")
-                return agent # Return existing agent
+                logger.debug(
+                    f"Agent '{agent.name}' is already added. Skipping."
+                )
+                return agent  # Return existing agent
 
         self._agents[agent.name] = agent
         FlockRegistry.register_agent(agent)  # Register globally
@@ -415,7 +448,7 @@ class Flock(BaseModel, Serializable):
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
         servers: list[FlockMCPServerBase] | None = None,
-        memo: dict[str, Any] | None = None
+        memo: dict[str, Any] | None = None,
     ) -> Box | dict:
         return self._run_sync(
             self.run_async(
@@ -429,7 +462,6 @@ class Flock(BaseModel, Serializable):
                 memo=memo,
             )
         )
-
 
     async def run_async(
         self,
@@ -474,11 +506,13 @@ class Flock(BaseModel, Serializable):
             start_agent_name: str | None = None
             if isinstance(start_agent, ConcreteFlockAgent):
                 start_agent_name = start_agent.name
-                if start_agent_name not in self._agents: # Add if not already present
+                if (
+                    start_agent_name not in self._agents
+                ):  # Add if not already present
                     self.add_agent(start_agent)
             elif isinstance(start_agent, str):
                 start_agent_name = start_agent
-            else: # start_agent is None
+            else:  # start_agent is None
                 start_agent_name = self._start_agent_name
 
             # Default to first agent if only one exists and none specified
@@ -516,23 +550,27 @@ class Flock(BaseModel, Serializable):
 
             try:
                 resolved_start_agent = self._agents.get(start_agent_name)
-                if not resolved_start_agent: # Should have been handled by now
-                    raise ValueError(f"Start agent '{start_agent_name}' not found after checks.")
+                if not resolved_start_agent:  # Should have been handled by now
+                    raise ValueError(
+                        f"Start agent '{start_agent_name}' not found after checks."
+                    )
 
                 run_context = context if context else FlockContext()
-                set_baggage("run_id", effective_run_id) # Set for OpenTelemetry
+                set_baggage("run_id", effective_run_id)  # Set for OpenTelemetry
 
                 initialize_context(
                     run_context,
                     start_agent_name,
                     run_input,
                     effective_run_id,
-                    not self.enable_temporal, # local_debug is inverse of enable_temporal
+                    not self.enable_temporal,  # local_debug is inverse of enable_temporal
                     self.model or resolved_start_agent.model or DEFAULT_MODEL,
                 )
                 # Add agent definitions to context for routing/serialization within workflow
                 for agent_name_iter, agent_instance_iter in self.agents.items():
-                    agent_dict_repr = agent_instance_iter.to_dict() # Agents handle their own serialization
+                    agent_dict_repr = (
+                        agent_instance_iter.to_dict()
+                    )  # Agents handle their own serialization
                     run_context.add_agent_definition(
                         agent_type=type(agent_instance_iter),
                         agent_name=agent_name_iter,
@@ -568,13 +606,14 @@ class Flock(BaseModel, Serializable):
                     # Execute workflow
                     if not self.enable_temporal:
                         result = await run_local_workflow(
-                            run_context, box_result=False # Boxing handled below
+                            run_context,
+                            box_result=False,  # Boxing handled below
                         )
                     else:
                         result = await run_temporal_workflow(
-                            self, # Pass the Flock instance
+                            self,  # Pass the Flock instance
                             run_context,
-                            box_result=False, # Boxing handled below
+                            box_result=False,  # Boxing handled below
                             memo=memo,
                         )
 
@@ -615,7 +654,6 @@ class Flock(BaseModel, Serializable):
                     "start_agent": start_agent_name,
                 }
                 return Box(error_output) if box_result else error_output
-
 
     # --- Batch Processing (Delegation) ---
     async def run_batch_async(
@@ -689,19 +727,18 @@ class Flock(BaseModel, Serializable):
             )
         )
 
-
     # --- Evaluation (Delegation) ---
     async def evaluate_async(
         self,
-        dataset: str | Path | list[dict[str, Any]] | DataFrame | Dataset, # type: ignore
+        dataset: str | Path | list[dict[str, Any]] | DataFrame | Dataset,  # type: ignore
         start_agent: FlockAgent | str,
         input_mapping: dict[str, str],
         answer_mapping: dict[str, str],
         metrics: list[
             str
             | Callable[[Any, Any], bool | float | dict[str, Any]]
-            | FlockAgent # Type hint only
-            | FlockEvaluator # Type hint only
+            | FlockAgent  # Type hint only
+            | FlockEvaluator  # Type hint only
         ],
         metric_configs: dict[str, dict[str, Any]] | None = None,
         static_inputs: dict[str, Any] | None = None,
@@ -713,7 +750,7 @@ class Flock(BaseModel, Serializable):
         return_dataframe: bool = True,
         silent_mode: bool = False,
         metadata_columns: list[str] | None = None,
-    ) -> DataFrame | list[dict[str, Any]]: # type: ignore
+    ) -> DataFrame | list[dict[str, Any]]:  # type: ignore
         """Evaluates the Flock's performance against a dataset (delegated)."""
         # Import processor locally
         from flock.core.execution.evaluation_executor import (
@@ -741,15 +778,15 @@ class Flock(BaseModel, Serializable):
 
     def evaluate(
         self,
-        dataset: str | Path | list[dict[str, Any]] | DataFrame | Dataset, # type: ignore
+        dataset: str | Path | list[dict[str, Any]] | DataFrame | Dataset,  # type: ignore
         start_agent: FlockAgent | str,
         input_mapping: dict[str, str],
         answer_mapping: dict[str, str],
         metrics: list[
             str
             | Callable[[Any, Any], bool | float | dict[str, Any]]
-            | FlockAgent # Type hint only
-            | FlockEvaluator # Type hint only
+            | FlockAgent  # Type hint only
+            | FlockEvaluator  # Type hint only
         ],
         metric_configs: dict[str, dict[str, Any]] | None = None,
         static_inputs: dict[str, Any] | None = None,
@@ -761,7 +798,7 @@ class Flock(BaseModel, Serializable):
         return_dataframe: bool = True,
         silent_mode: bool = False,
         metadata_columns: list[str] | None = None,
-    ) -> DataFrame | list[dict[str, Any]]: # type: ignore
+    ) -> DataFrame | list[dict[str, Any]]:  # type: ignore
         return self._run_sync(
             self.evaluate_async(
                 dataset=dataset,
@@ -781,18 +818,22 @@ class Flock(BaseModel, Serializable):
                 metadata_columns=metadata_columns,
             )
         )
+
     # --- Server & CLI Starters (Delegation) ---
     def start_api(
         self,
         host: str = "127.0.0.1",
         port: int = 8344,
         server_name: str = "Flock Server",
-        create_ui: bool = True, # Default to True for the integrated experience
+        create_ui: bool = True,  # Default to True for the integrated experience
         ui_theme: str | None = None,
-        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
+        custom_endpoints: Sequence[FlockEndpoint]
+        | dict[tuple[str, list[str] | None], Callable[..., Any]]
+        | None = None,
     ) -> None:
         """Starts a unified REST API server and/or Web UI for this Flock instance."""
         import warnings
+
         warnings.warn(
             "start_api() is deprecated and will be removed in a future release. "
             "Use serve() instead.",
@@ -825,7 +866,9 @@ class Flock(BaseModel, Serializable):
         chat_history_key: str = "history",
         chat_response_key: str = "response",
         ui_theme: str | None = None,
-        custom_endpoints: Sequence[FlockEndpoint] | dict[tuple[str, list[str] | None], Callable[..., Any]] | None = None,
+        custom_endpoints: Sequence[FlockEndpoint]
+        | dict[tuple[str, list[str] | None], Callable[..., Any]]
+        | None = None,
     ) -> None:
         """Launch an HTTP server that exposes the core REST API and, optionally, the
         browser-based UI.
@@ -871,7 +914,9 @@ class Flock(BaseModel, Serializable):
 
     def start_cli(
         self,
-        start_agent: FlockAgent | str | None = None, # Added start_agent to match method signature in file_26
+        start_agent: FlockAgent
+        | str
+        | None = None,  # Added start_agent to match method signature in file_26
         server_name: str = "Flock CLI",
         show_results: bool = False,
         edit_mode: bool = False,
@@ -893,13 +938,12 @@ class Flock(BaseModel, Serializable):
         # If start_agent is crucial here, start_flock_cli needs to handle it.
         logger.info(f"Starting CLI for Flock '{self.name}'...")
         start_flock_cli(
-            flock=self, # Pass the Flock instance
+            flock=self,  # Pass the Flock instance
             # start_agent=start_agent, # This argument is not in the definition of start_flock_cli in file_50
             server_name=server_name,
             show_results=show_results,
-            edit_mode=edit_mode
+            edit_mode=edit_mode,
         )
-
 
     # --- Serialization Delegation Methods ---
     def to_dict(self, path_type: str = "relative") -> dict[str, Any]:
@@ -917,12 +961,14 @@ class Flock(BaseModel, Serializable):
 
     # --- Static Method Loader (Delegates to loader module) ---
     @staticmethod
-    def load_from_file(file_path: str) -> Flock: # Ensure return type is Flock
+    def load_from_file(file_path: str) -> Flock:  # Ensure return type is Flock
         """Load a Flock instance from various file formats (delegates to loader)."""
         from flock.core.util.loader import load_flock_from_file
 
         loaded_flock = load_flock_from_file(file_path)
         # Ensure the loaded object is indeed a Flock instance
         if not isinstance(loaded_flock, Flock):
-            raise TypeError(f"Loaded object from {file_path} is not a Flock instance, but {type(loaded_flock)}")
+            raise TypeError(
+                f"Loaded object from {file_path} is not a Flock instance, but {type(loaded_flock)}"
+            )
         return loaded_flock
