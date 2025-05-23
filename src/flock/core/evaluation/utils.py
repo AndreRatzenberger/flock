@@ -7,9 +7,15 @@ from typing import Any, Union
 
 import pandas as pd
 from box import Box
-from datasets import get_dataset_config_names, load_dataset
+from datasets import (
+    Dataset as HFDataset,
+    get_dataset_config_names,
+    load_dataset,
+)
 from opik import Opik
+from opik.evaluation import evaluate
 
+from flock.core.flock import Flock
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_evaluator import FlockEvaluator
 from flock.core.logging.logging import get_logger
@@ -17,6 +23,64 @@ from flock.core.logging.logging import get_logger
 # Potentially import metrics libraries like rouge_score, nltk, sentence_transformers
 
 logger_helpers = get_logger("util.evaluation")
+
+
+def evaluate_with_opik(
+    dataset: str | Path | list[dict[str, Any]] | pd.DataFrame | HFDataset,
+    dataset_name: str,
+    experiment_name: str,
+    start_agent: FlockAgent | str,
+    input_mapping: dict[str, str],
+    answer_mapping: dict[str, str],
+    metrics: list[
+        str
+        | Callable[[Any, Any], bool | float | dict[str, Any]]
+        | FlockAgent
+        | FlockEvaluator
+    ],
+):
+    df = normalize_dataset(dataset)
+    client = Opik()
+    dataset = client.get_or_create_dataset(name=dataset_name)
+
+    dataset.insert_from_pandas(dataframe=df, ignore_keys=["source"])
+
+    # Create a single Flock instance outside the task function
+    shared_flock = Flock(
+        name="opik_eval", model="azure/gpt-4.1", show_flock_banner=False
+    )
+    shared_flock.add_agent(start_agent)
+
+    def evaluation_task(dataset_item):
+        agent_input = {
+            value: dataset_item[key] for key, value in input_mapping.items()
+        }
+
+        # Use the shared Flock instance instead of creating a new one
+        result_flock = shared_flock.run(
+            start_agent=start_agent, input=agent_input, box_result=False
+        )
+
+        # agent_output = result_flock.get(answer_mapping[key], "No answer found")
+
+        key = next(iter(answer_mapping.keys()))
+        reference = dataset_item[key]
+        answer = result_flock.get(answer_mapping[key], "No answer found")
+
+        result = {
+            "input": agent_input,
+            "output": answer,
+            "reference": reference,
+        }
+
+        return result
+
+    eval_results = evaluate(
+        experiment_name=experiment_name,
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=metrics,
+    )
 
 
 def load_and_merge_all_configs(dataset_name: str) -> pd.DataFrame:
@@ -35,17 +99,23 @@ def load_and_merge_all_configs(dataset_name: str) -> pd.DataFrame:
     logger_helpers.info(f"merged_df.head(): {merged_df.head()}")
     return merged_df
 
+
 def import_hf_dataset_to_opik(dataset_name: str) -> pd.DataFrame:
     df = load_and_merge_all_configs(dataset_name)
-    logger_helpers.info(f"type(df): {type(df)}")        # ➜ <class 'pandas.core.frame.DataFrame'>
-    logger_helpers.info(f"df.shape: {df.shape}")        # e.g. (123456, N_COLUMNS+2)
-    logger_helpers.info(f"df['split'].value_counts(): {df['split'].value_counts()}")
+    logger_helpers.info(
+        f"type(df): {type(df)}"
+    )  # ➜ <class 'pandas.core.frame.DataFrame'>
+    logger_helpers.info(f"df.shape: {df.shape}")  # e.g. (123456, N_COLUMNS+2)
+    logger_helpers.info(
+        f"df['split'].value_counts(): {df['split'].value_counts()}"
+    )
     logger_helpers.info(f"df['config'].unique(): {df['config'].unique()}")
     client = Opik()
     dataset = client.get_or_create_dataset(name=dataset_name)
 
     dataset.insert_from_pandas(dataframe=df, ignore_keys=["source"])
     return df
+
 
 def normalize_dataset(dataset: Any) -> pd.DataFrame:
     """Converts various dataset formats into a pandas DataFrame."""
