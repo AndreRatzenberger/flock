@@ -5,7 +5,7 @@ import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("ZendeskTools", "0.1.0")
+mcp = FastMCP("ZendeskTools")
 
 
 ZENDESK_BEARER_TOKEN = os.getenv("ZENDESK_BEARER_TOKEN")
@@ -143,4 +143,5 @@ def zendesk_search_articles(query: str) -> list[dict]:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    transport = os.getenv("ZENDESK_MCP_TRANSPORT", "stdio")
+    mcp.run(transport=transport)
