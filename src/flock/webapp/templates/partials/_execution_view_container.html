@@ -1,13 +1,13 @@
 <article class="two-pane-flex-container" x-data="{ showLeftPane: true }">
     <!-- Left pane - collapsed state -->
     <div class="left-pane-collapsed" x-show="!showLeftPane" style="display: none;">
-        <a href="#" class="pane-toggle" @click.prevent="showLeftPane = true">Show</a>
+        <a href="#" class="pane-toggle" @click.prevent="showLeftPane = true" aria-label="Expand left pane">Show</a>
     </div>
 
     <!-- Left pane - expanded state -->
     <section id="execution-left-pane" x-show="showLeftPane" style="flex: 1; min-width: 200px; max-width: 500px;">
         <div class="pane-header" style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
-            <a href="#" class="pane-toggle" @click.prevent="showLeftPane = false">Hide</a>
+            <a href="#" class="pane-toggle" @click.prevent="showLeftPane = false" aria-label="Hide left pane">Hide</a>
         </div>
         {# The Execution Form will be loaded here #}
         <div id="execution-form-wrapper" hx-get="/ui/api/flock/htmx/execution-form-content" {# New endpoint for just the
