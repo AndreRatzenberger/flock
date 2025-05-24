@@ -1240,7 +1240,7 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.509"
+version = "0.4.510"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -1282,7 +1282,6 @@ dependencies = [
     { name = "uvicorn" },
     { name = "wd-di" },
     { name = "websockets" },
-    { name = "zenpy" },
 ]
 
 [package.optional-dependencies]
@@ -1434,7 +1433,6 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "wd-di", specifier = ">=0.2.14" },
     { name = "websockets", specifier = ">=15.0.1" },
-    { name = "zenpy", specifier = ">=2.0.56" },
     { name = "zep-python", marker = "extra == 'all'", specifier = ">=2.0.2" },
     { name = "zep-python", marker = "extra == 'memory'", specifier = ">=2.0.2" },
 ]
@@ -7051,22 +7049,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/f7/f0f2500cf0c469beb2050b522c7815c575811627e6d3eb9ec7550ddd0bfe/yarl-1.20.0-cp313-cp313t-win32.whl", hash = "sha256:65a4053580fe88a63e8e4056b427224cd01edfb5f951498bfefca4052f0ce0ac", size = 93816 },
     { url = "https://files.pythonhosted.org/packages/3f/93/f73b61353b2a699d489e782c3f5998b59f974ec3156a2050a52dfd7e8946/yarl-1.20.0-cp313-cp313t-win_amd64.whl", hash = "sha256:53b2da3a6ca0a541c1ae799c349788d480e5144cac47dba0266c7cb6c76151fe", size = 101093 },
     { url = "https://files.pythonhosted.org/packages/ea/1f/70c57b3d7278e94ed22d85e09685d3f0a38ebdd8c5c73b65ba4c0d0fe002/yarl-1.20.0-py3-none-any.whl", hash = "sha256:5d0fe6af927a47a230f31e6004621fd0959eaa915fc62acfafa67ff7229a3124", size = 46124 },
-]
-
-[[package]]
-name = "zenpy"
-version = "2.0.56"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cachetools" },
-    { name = "python-dateutil" },
-    { name = "pytz" },
-    { name = "requests" },
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/85/1b5ebad3c35cdbbeffa46aae52fe04c155732a45317e766d91865691a890/zenpy-2.0.56.tar.gz", hash = "sha256:984cdcd93dde5d70fa0e2d5c1d1878b8700dc26df63ca3414f6b55577423cb1c", size = 87614 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/f1/9f6332b75ef6bc270f063af5101202a6fe1c1ef7ef41e43ca013f7871c07/zenpy-2.0.56-py3-none-any.whl", hash = "sha256:7cd73421f9903034b53fbe32968359574892e29410db1895f999f5bacb4c91db", size = 89201 },
 ]
 
 [[package]]
