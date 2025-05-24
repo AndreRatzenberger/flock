@@ -250,7 +250,7 @@ loguru_logger.add(
     colorize=True,
     format=custom_format,
 )
-logging.basicConfig(level=LOG_LEVELS["NO_LOGS"])
+logging.basicConfig(level=LOG_LEVELS["ERROR"])  # Default to ERROR level for fallback
 # Optionally add a file handler, e.g.:
 # loguru_logger.add("logs/flock.log", rotation="100 MB", retention="30 days", level="DEBUG")
 
@@ -515,7 +515,7 @@ def get_logger(name: str = "flock") -> FlockLogger:
     if name not in _LOGGER_CACHE:
         # New loggers default to errors-only (min_level_severity = ERROR_SEVERITY)
         # until explicitly configured by configure_logging()
-        _LOGGER_CACHE[name] = FlockLogger(name, LOG_LEVELS["NO_LOGS"])
+        _LOGGER_CACHE[name] = FlockLogger(name, LOG_LEVELS["ERROR"])
     # The min_level_severity state of existing or newly created loggers
     # should be managed by the configure_logging() function.
     return _LOGGER_CACHE[name]
