@@ -4,6 +4,7 @@ import copy
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Literal
 
+import httpx
 from anyio.streams.memory import (
     MemoryObjectReceiveStream,
     MemoryObjectSendStream,
@@ -100,8 +101,14 @@ class FlockSSEClient(FlockMCPClientBase):
                     params.url,
                 )
 
+            if "auth" in additional_params and isinstance(
+                additional_params.get("auth"), httpx.Auth
+            ):
+                param_copy.auth = additional_params.get("auth", param_copy.auth)
+
         return sse_client(
             url=param_copy.url,
+            auth=param_copy.auth,
             headers=param_copy.headers,
             timeout=float(param_copy.timeout),
             sse_read_timeout=float(param_copy.sse_read_timeout),

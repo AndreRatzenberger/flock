@@ -152,6 +152,10 @@ class SseServerParameters(ServerParameters):
         description="How long the client will wait before disconnecting from the server.",
     )
 
+    auth: httpx.Auth | None = Field(
+        default=None,
+        description="Httpx Auth Scheme."
+    )
 
 MCPCLientInitFunction = Callable[
     ...,

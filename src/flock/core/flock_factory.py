@@ -162,6 +162,11 @@ class FlockFactory:
             description="How many seconds to wait for server-sent events until closing the connection. (connections will be automatically re-established.)",
         )
 
+        auth: httpx.Auth | None = Field(
+            default=None,
+            description="Httpx Auth Scheme."
+        )
+
     class WebsocketParams(BaseModel):
         """Factory-Params for Websocket Servers."""
 
@@ -316,6 +321,7 @@ class FlockFactory:
                 max_retries=max_retries,
                 connection_parameters=SseServerParameters(
                     url=connection_params.url,
+                    auth=connection_params.auth,
                     headers=connection_params.headers,
                     timeout=connection_params.timeout_seconds,
                     sse_read_timeout=connection_params.sse_read_timeout_seconds,
