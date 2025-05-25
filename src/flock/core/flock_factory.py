@@ -140,6 +140,10 @@ class FlockFactory:
             description="Whether or not to terminate the underlying connection on close."
         )
 
+        model_config = {
+            "arbitrary_types_allowed": True
+        }
+
     class SSEParams(BaseModel):
         """Factory-Params for SSE-Servers."""
 
@@ -166,6 +170,11 @@ class FlockFactory:
             default=None,
             description="Httpx Auth Scheme."
         )
+
+        model_config = {
+            "arbitrary_types_allowed": True
+        }
+
 
     class WebsocketParams(BaseModel):
         """Factory-Params for Websocket Servers."""

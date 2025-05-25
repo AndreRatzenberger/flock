@@ -91,31 +91,31 @@ class FlockStreamableHttpClient(FlockMCPClientBase):
                     param_copy.headers.update(
                         additional_params.get("headers", {})
                     )
-        if "auth" in additional_params and isinstance(
-            additional_params.get("auth"), httpx.Auth
-        ):
-            param_copy.auth = additional_params.get("auth", param_copy.auth)
+            if "auth" in additional_params and isinstance(
+                additional_params.get("auth"), httpx.Auth
+            ):
+                param_copy.auth = additional_params.get("auth", param_copy.auth)
 
-        if "read_timeout_seconds" in additional_params:
-            param_copy.timeout = additional_params.get(
-                "read_timeout_seconds", params.timeout
-            )
+            if "read_timeout_seconds" in additional_params:
+                param_copy.timeout = additional_params.get(
+                    "read_timeout_seconds", params.timeout
+                )
 
-        if "sse_read_timeout" in additional_params:
-            param_copy.sse_read_timeout = additional_params.get(
-                "sse_read_timeout",
-                params.sse_read_timeout,
-            )
-        if "url" in additional_params:
-            param_copy.url = additional_params.get(
-                "url",
-                params.url,
-            )
+            if "sse_read_timeout" in additional_params:
+                param_copy.sse_read_timeout = additional_params.get(
+                    "sse_read_timeout",
+                    params.sse_read_timeout,
+                )
+            if "url" in additional_params:
+                param_copy.url = additional_params.get(
+                    "url",
+                    params.url,
+                )
 
-        if "terminate_on_close" in additional_params:
-          param_copy.terminate_on_close = bool(
-            additional_params.get("terminate_on_close", True)
-          )
+            if "terminate_on_close" in additional_params:
+                param_copy.terminate_on_close = bool(
+                    additional_params.get("terminate_on_close", True)
+                )
 
         timeout_http = timedelta(seconds=param_copy.timeout)
         sse_timeout = timedelta(seconds=param_copy.sse_read_timeout)
