@@ -131,7 +131,7 @@ class FlockMCPConnectionConfigurationBase(BaseModel):
         ..., description="Connection parameters for the server."
     )
 
-    transport_type: Literal["stdio", "websockets", "sse", "custom"] = Field(
+    transport_type: Literal["stdio", "websockets", "sse", "streamable_http", "custom"] = Field(
         ..., description="Type of transport to use."
     )
 

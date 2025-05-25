@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
 
+import httpx
 from anyio.streams.memory import (
     MemoryObjectReceiveStream,
     MemoryObjectSendStream,
@@ -102,6 +103,38 @@ class WebsocketServerParameters(ServerParameters):
 
     url: str | AnyUrl = Field(..., description="Url the server listens at.")
 
+class StreamableHttpServerParameters(ServerParameters):
+    """Base Type for StreamableHttp params."""
+
+    url: str | AnyUrl = Field(
+        ...,
+        description="The url the server listens at."
+    )
+
+    headers: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional headers to pass to the client."
+    )
+
+    timeout: float | int = Field(
+        default=5,
+        description="Http Timeout",
+    )
+
+    sse_read_timeout: float | int = Field(
+        default=60*5,
+        description="How long the client will wait before disconnecting from the server."
+    )
+
+    terminate_on_close: bool = Field(
+        default=True,
+        description="Terminate connection on close"
+    )
+
+    auth: httpx.Auth | None = Field(
+        default=None,
+        description="Httpx Auth Scheme"
+    )
 
 class SseServerParameters(ServerParameters):
     """Base Type for SSE Server params."""

@@ -454,12 +454,16 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             from flock.mcp.servers.stdio.flock_stdio_server import (
                 FlockMCPStdioServer,
             )
+            from flock.mcp.servers.streamable_http.flock_streamable_http_server import (
+                FlockStreamableHttpServer,
+            )
             from flock.mcp.servers.websockets.flock_websocket_server import (
                 FlockWSServer,
             )
 
             builtin_by_transport = {
                 "stdio": FlockMCPStdioServer,
+                "streamable_http": FlockStreamableHttpServer,
                 "sse": FlockSSEServer,
                 "websockets": FlockWSServer,
             }
@@ -570,6 +574,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             from flock.mcp.servers.stdio.flock_stdio_server import (
                 FlockMCPStdioServer,
             )
+            from flock.mcp.servers.streamable_http.flock_streamable_http_server import (
+                FlockStreamableHttpServer,
+            )
             from flock.mcp.servers.websockets.flock_websocket_server import (
                 FlockWSServer,
             )
@@ -577,6 +584,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             builtin_by_transport = {
                 "stdio": FlockMCPStdioServer,
                 "sse": FlockSSEServer,
+                "streamable_http": FlockStreamableHttpServer,
                 "websockets": FlockWSServer,
             }
         except ImportError:
