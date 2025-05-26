@@ -24,9 +24,18 @@ def file_get_anything_as_markdown(url_or_file_path: str):
 
 
 @traced_and_logged
+def file_append_to_file(content: str, filename: str):
+    try:
+        with open(filename, "a", encoding="utf-8") as f:
+            f.write(content)
+    except Exception:
+        raise
+
+
+@traced_and_logged
 def file_save_to_file(content: str, filename: str):
     try:
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             f.write(content)
     except Exception:
         raise
