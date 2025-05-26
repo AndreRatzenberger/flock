@@ -3,7 +3,6 @@ import asyncio
 import json
 import os  # Added import
 import shutil
-import urllib.parse
 
 # Added for share link creation
 import uuid
@@ -709,11 +708,12 @@ def get_base_context_web(
 @app.get("/", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_dashboard(
     request: Request, error: str = None, success: str = None, ui_mode: str = Query(None)
-):
-    # Handle initial redirect if flagged during app startup
+):    # Handle initial redirect if flagged during app startup
     if getattr(request.app.state, "initial_redirect_to_chat", False):
         logger.info("Initial redirect to CHAT page triggered from dashboard (FLOCK_START_MODE='chat').")
-        return RedirectResponse(url="/chat", status_code=307)
+        # Use url_for to respect the root_path setting
+        chat_url = str(request.url_for("page_chat"))
+        return RedirectResponse(url=chat_url, status_code=307)
 
     effective_ui_mode = ui_mode
     flock_is_preloaded = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
@@ -721,7 +721,9 @@ async def page_dashboard(
     if effective_ui_mode is None:
         effective_ui_mode = "scoped" if flock_is_preloaded else "standalone"
         if effective_ui_mode == "scoped":
-             return RedirectResponse(url=f"/?ui_mode=scoped&initial_load=true", status_code=307)
+            # Use url_for to respect the root_path setting
+            redirect_url = str(request.url_for("page_dashboard").include_query_params(ui_mode="scoped", initial_load="true"))
+            return RedirectResponse(url=redirect_url, status_code=307)
 
     if effective_ui_mode == "standalone" and flock_is_preloaded:
         clear_current_flock_service(request.app.state) # Pass app.state
@@ -743,8 +745,10 @@ async def page_editor_section(
     flock_instance_from_state: Flock | None = getattr(request.app.state, "flock_instance", None)
     if not flock_instance_from_state:
         err_msg = "No flock loaded. Please load or create a flock first."
-        redirect_url = f"/?error={urllib.parse.quote(err_msg)}"
-        if ui_mode == "scoped": redirect_url += "&ui_mode=scoped"
+        # Use url_for to respect the root_path setting
+        redirect_url = str(request.url_for("page_dashboard").include_query_params(error=err_msg))
+        if ui_mode == "scoped":
+            redirect_url = str(request.url_for("page_dashboard").include_query_params(error=err_msg, ui_mode="scoped"))
         return RedirectResponse(url=redirect_url, status_code=303)
 
     context = get_base_context_web(request, error, success, ui_mode)
