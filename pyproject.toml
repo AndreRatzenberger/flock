@@ -53,6 +53,7 @@ dependencies = [
     "websockets>=15.0.1",
     "opik>=1.7.26",
     "azure-data-tables>=12.7.0",
+    "croniter>=6.0.0",
 ]
 
 [project.optional-dependencies]

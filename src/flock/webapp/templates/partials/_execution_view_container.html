@@ -9,9 +9,8 @@
         <div class="pane-header" style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
             <a href="#" class="pane-toggle" @click.prevent="showLeftPane = false" aria-label="Hide left pane">Hide</a>
         </div>
-        {# The Execution Form will be loaded here #}
-        <div id="execution-form-wrapper" hx-get="/ui/api/flock/htmx/execution-form-content" {# New endpoint for just the
-            form #} hx-trigger="load" hx-swap="innerHTML">
+        {# The Execution Form will be loaded here #}        <div id="execution-form-wrapper" hx-get="{{ url_for('htmx_get_execution_form_content') }}" 
+            hx-trigger="load" hx-swap="innerHTML">
             <p>Loading execution form...</p><progress indeterminate></progress>
         </div>
     </section>

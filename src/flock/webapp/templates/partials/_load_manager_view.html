@@ -20,12 +20,11 @@
             <header class="grid">
                 <h2>Load Flock</h2> {# Moved title here #}
                 <div style="text-align: right;">
-                    <button role="button" class="outline" hx-get="/ui/htmx/create-flock-form?ui_mode={{ ui_mode }}" hx-target="#flock-properties-or-action-content" hx-swap="innerHTML">Add New Flock</button>
+                    <button role="button" class="outline" hx-get="{{ url_for('htmx_get_create_flock_form') }}?ui_mode={{ ui_mode }}" hx-target="#flock-properties-or-action-content" hx-swap="innerHTML">Add New Flock</button>
                 </div>
             </header>
             {# Content of the left pane now goes into this article #}
-            <div style="padding: var(--pico-block-spacing-vertical) var(--pico-block-spacing-horizontal); flex-grow: 1; display: flex; flex-direction: column;">
-                <div hx-get="/ui/htmx/dashboard-flock-file-list" 
+            <div style="padding: var(--pico-block-spacing-vertical) var(--pico-block-spacing-horizontal); flex-grow: 1; display: flex; flex-direction: column;">                <div hx-get="{{ url_for('htmx_get_dashboard_flock_file_list_partial') }}" 
                      hx-trigger="load, flockFileListChanged from:body" 
                      hx-swap="innerHTML" 
                      id="dashboard-flock-file-list-target"

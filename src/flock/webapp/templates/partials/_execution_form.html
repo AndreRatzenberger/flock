@@ -1,10 +1,14 @@
+<script>
+// Create URL template for agent input forms
+window.agentInputFormUrlTemplate = '{{ url_for("htmx_get_agent_input_form", agent_name="AGENT_PLACEHOLDER") }}';
+</script>
+
 <article id="execution-form-content">
     <header>
         <h2>Run Flock</h2>
     </header>
-    {% if flock and flock.agents %}
-    <form hx-post="/ui/api/flock/htmx/run" 
-          hx-target="#results-display" 
+    {% if flock and flock.agents %}    <form hx-post="{{ url_for('htmx_run_flock') }}" 
+          hx-target="#results-display"
           hx-swap="innerHTML" 
           hx-indicator="#run-loading-indicator"
           x-data="{ selectedAgentForInput: '' }">
@@ -12,11 +16,10 @@
         <label for="start_agent_name_select">Select Start Agent:</label>
         <select id="start_agent_name_select" 
                 name="start_agent_name" 
-                required
-                x-model="selectedAgentForInput"
-                @change="
+                required                x-model="selectedAgentForInput"                @change="
                     if ($event.target.value) {
-                        htmx.ajax('GET', '/ui/api/flock/htmx/agents/' + $event.target.value + '/input-form', {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
+                        const url = window.agentInputFormUrlTemplate.replace('AGENT_PLACEHOLDER', $event.target.value);
+                        htmx.ajax('GET', url, {target: '#dynamic-input-form-fields', swap: 'innerHTML', indicator: '#input-form-loading-indicator'});
                     } else {
                         document.getElementById('dynamic-input-form-fields').innerHTML = '<p><small>Select an agent to see its input fields.</small></p>';
                     }
@@ -37,10 +40,9 @@
 
         <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>
 
-        <div id="share-agent-link-container" style="margin-top: 0.5rem;">
-            <a href="#" 
+        <div id="share-agent-link-container" style="margin-top: 0.5rem;">            <a href="#" 
                id="shareAgentHtmxLink"
-               hx-post="/ui/htmx/share/generate-link" 
+               hx-post="{{ url_for('htmx_generate_share_link') }}" 
                hx-target="#shareLinkDisplayArea" 
                hx-swap="innerHTML"
                hx-indicator="#share-loading-indicator"

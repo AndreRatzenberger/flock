@@ -1,9 +1,9 @@
 <article id="chat-container" class="chat-container">
-    <div id="chat-log" hx-get="/chat/messages" hx-trigger="load" hx-swap="innerHTML">
+    <div id="chat-log" hx-get="{{ url_for('chat_history_partial') }}" hx-trigger="load" hx-swap="innerHTML">
         <p><em>Loading chat…</em></p>
     </div>
     <form id="chat-form-embedded" class="chat-form"
-          hx-post="/chat/send"
+          hx-post="{{ url_for('chat_send') }}"
           hx-target="#chat-log"
           hx-swap="innerHTML"
           hx-disabled-elt="input[name='message'], button[type='submit']"

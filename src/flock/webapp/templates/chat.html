@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flock Chat</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/chat.css') }}">
     {# Prism.js CSS for syntax highlighting (okaidia theme) #}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" referrerpolicy="no-referrer" />
     {# Inject active theme variables #}
@@ -34,25 +34,22 @@
             <hgroup>
                 <h2>Flock Chat</h2>
                 <h3>{{ chat_subtitle }}</h3>
-            </hgroup>
-            {% if not is_shared_chat %}
-            <button class="secondary outline" hx-get="/chat/settings-standalone" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
+            </hgroup>            {% if not is_shared_chat %}
+            <button class="secondary outline" hx-get="{{ url_for('chat_settings_standalone') }}" hx-target="#chat-content-area" hx-swap="innerHTML" style="min-width:auto;">Settings</button>
             {% else %}
             {# Optionally, could show a disabled settings button or some other indicator #}
             <span style="font-size: 0.8rem; color: var(--pico-muted-color);">Settings frozen for shared session.</span>
             {% endif %}
         </div>
 
-        <div id="chat-content-area">
-            <div id="chat-log" 
-                 hx-get="{% if is_shared_chat %}/chat/messages-shared/{{ share_id }}{% else %}/chat/messages{% endif %}" 
+        <div id="chat-content-area">            <div id="chat-log" 
+                 hx-get="{% if is_shared_chat %}{{ url_for('chat_history_shared_partial', share_id=share_id) }}{% else %}{{ url_for('chat_history_partial') }}{% endif %}" 
                  hx-trigger="load" {# Polling removed #}
                  hx-swap="innerHTML">
                 <p><em>Loading chat…</em></p>
             </div>
-            
-            <form id="chat-form-standalone"
-                  hx-post="{% if is_shared_chat %}/chat/send-shared{% else %}/chat/send{% endif %}"
+              <form id="chat-form-standalone"
+                  hx-post="{% if is_shared_chat %}{{ url_for('chat_send_shared') }}{% else %}{{ url_for('chat_send') }}{% endif %}"
                   hx-target="#chat-log"
                   hx-swap="innerHTML"
                   hx-disabled-elt="input[name='message'], button[type='submit']"

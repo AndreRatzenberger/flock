@@ -6,10 +6,10 @@
     <nav>
         <ul role="group">
             <li>
-                <button role="button" class="primary" hx-get="/ui/htmx/settings/env-vars" hx-target="#settings-content-container" hx-indicator="#settings-loading" hx-on:click="setActiveButton(this)">Environment</button>
+                <button role="button" class="primary" hx-get="{{ url_for('htmx_settings_env_vars') }}" hx-target="#settings-content-container" hx-indicator="#settings-loading" hx-on:click="setActiveButton(this)">Environment</button>
             </li>
             <li>
-                <button role="button" class="outline" hx-get="/ui/htmx/settings/theme" hx-target="#settings-content-container" hx-indicator="#settings-loading" hx-on:click="setActiveButton(this)">Theme</button>
+                <button role="button" class="outline" hx-get="{{ url_for('htmx_settings_theme') }}" hx-target="#settings-content-container" hx-indicator="#settings-loading" hx-on:click="setActiveButton(this)">Theme</button>
             </li>
         </ul>
     </nav>

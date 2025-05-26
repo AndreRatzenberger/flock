@@ -5,8 +5,7 @@
     {% endif %}
     {% if flock.agents %}
     <ul class="item-list">
-        {% for agent_name, agent in flock.agents.items() %}
-        <li hx-get="/ui/api/flock/htmx/agents/{{ agent.name }}/details-form" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading" onclick="this.closest('ul').querySelectorAll('li').forEach(li => li.classList.remove('selected-item')); this.classList.add('selected-item');">
+        {% for agent_name, agent in flock.agents.items() %}        <li hx-get="{{ url_for('htmx_get_agent_details_form', agent_name=agent.name) }}" hx-target="#agent-detail-panel" hx-swap="innerHTML" hx-indicator="#agent-detail-loading" onclick="this.closest('ul').querySelectorAll('li').forEach(li => li.classList.remove('selected-item')); this.classList.add('selected-item');">
             <strong>{{ agent.name }}</strong><br>
             <small>{{ agent.resolved_description|truncate(80) if agent.resolved_description else 'No description' }}</small>
         </li>

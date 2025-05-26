@@ -843,6 +843,19 @@ toml = [
 ]
 
 [[package]]
+name = "croniter"
+version = "6.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "pytz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/2f/44d1ae153a0e27be56be43465e5cb39b9650c781e001e7864389deb25090/croniter-6.0.0.tar.gz", hash = "sha256:37c504b313956114a983ece2c2b07790b1f1094fe9d81cc94739214748255577", size = 64481 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/4b/290b4c3efd6417a8b0c284896de19b1d5855e6dbdb97d2a35e68fa42de85/croniter-6.0.0-py2.py3-none-any.whl", hash = "sha256:2f878c3856f17896979b2a4379ba1f09c83e374931ea15cc835c5dd2eee9b368", size = 25468 },
+]
+
+[[package]]
 name = "cryptography"
 version = "45.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1255,12 +1268,13 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.511"
+version = "0.4.512"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
     { name = "azure-data-tables" },
     { name = "cloudpickle" },
+    { name = "croniter" },
     { name = "devtools" },
     { name = "dspy" },
     { name = "fastapi" },
@@ -1388,6 +1402,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'all'", specifier = ">=0.6.3" },
     { name = "chromadb", marker = "extra == 'memory'", specifier = ">=0.6.3" },
     { name = "cloudpickle", specifier = ">=3.1.1" },
+    { name = "croniter", specifier = ">=6.0.0" },
     { name = "datasets", marker = "extra == 'all'", specifier = ">=3.2.0" },
     { name = "datasets", marker = "extra == 'evaluation'", specifier = ">=3.2.0" },
     { name = "devtools", specifier = ">=0.12.2" },
