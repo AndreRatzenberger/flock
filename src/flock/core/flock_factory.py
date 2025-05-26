@@ -5,7 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import AnyUrl, BaseModel, Field, FileUrl
+import httpx
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, FileUrl
 
 from flock.core.config.scheduled_agent_config import ScheduledAgentConfig
 from flock.core.flock_agent import FlockAgent, SignatureType
@@ -24,6 +25,7 @@ from flock.core.mcp.types.types import (
     MCPRoot,
     SseServerParameters,
     StdioServerParameters,
+    StreamableHttpServerParameters,
     WebsocketServerParameters,
 )
 from flock.evaluators.declarative.declarative_evaluator import (
@@ -39,6 +41,11 @@ from flock.mcp.servers.stdio.flock_stdio_server import (
     FlockMCPStdioServer,
     FlockStdioConfig,
     FlockStdioConnectionConfig,
+)
+from flock.mcp.servers.streamable_http.flock_streamable_http_server import (
+    FlockStreamableHttpConfig,
+    FlockStreamableHttpConnectionConfig,
+    FlockStreamableHttpServer,
 )
 from flock.mcp.servers.websockets.flock_websocket_server import (
     FlockWSConfig,
@@ -101,6 +108,44 @@ class FlockFactory:
             description="The text encoding error handler. See https://docs.python.org/3/library/codecs.html#codec-base-classes for explanations of possible values",
         )
 
+    class StreamableHttpParams(BaseModel):
+        """Factory-Params for Streamable Http Servers."""
+
+        url: str | AnyUrl = Field(
+            ...,
+            description="Url the server listens at."
+        )
+
+        headers: dict[str, Any] | None = Field(
+            default=None,
+            description="Additional Headers to pass to the client."
+        )
+
+        auth: httpx.Auth | None = Field(
+            default=None,
+            description="Httpx Auth Schema."
+        )
+
+        timeout_seconds: float | int = Field(
+            default=5,
+            description="Http Timeout in Seconds"
+        )
+
+        sse_read_timeout_seconds: float | int = Field(
+            default=60*5,
+            description="How many seconds to wait for server-sent events until closing the connection."
+        )
+
+        terminate_on_close: bool = Field(
+            default=True,
+            description="Whether or not to terminate the underlying connection on close."
+        )
+
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+            extra="allow",
+        )
+
     class SSEParams(BaseModel):
         """Factory-Params for SSE-Servers."""
 
@@ -123,6 +168,16 @@ class FlockFactory:
             description="How many seconds to wait for server-sent events until closing the connection. (connections will be automatically re-established.)",
         )
 
+        auth: httpx.Auth | None = Field(
+            default=None,
+            description="Httpx Auth Scheme."
+        )
+
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+            extra="allow",
+        )
+
     class WebsocketParams(BaseModel):
         """Factory-Params for Websocket Servers."""
 
@@ -134,7 +189,7 @@ class FlockFactory:
     @staticmethod
     def create_mcp_server(
         name: str,
-        connection_params: SSEParams | StdioParams | WebsocketParams,
+        connection_params: StreamableHttpParams | SSEParams | StdioParams | WebsocketParams,
         max_retries: int = 3,
         mount_points: list[str | MCPRoot] | None = None,
         timeout_seconds: int | float = 10,
@@ -176,6 +231,9 @@ class FlockFactory:
         if isinstance(connection_params, FlockFactory.WebsocketParams):
             server_kind = "websockets"
             concrete_server_cls = FlockWSServer
+        if isinstance(connection_params, FlockFactory.StreamableHttpParams):
+            server_kind = "streamable_http"
+            concrete_server_cls = FlockStreamableHttpServer
 
         # convert mount points.
         mounts: list[MCPRoot] = []
@@ -244,12 +302,37 @@ class FlockFactory:
                 caching_config=caching_config,
                 callback_config=callback_config,
             )
+        elif server_kind == "streamable_http":
+            # build streamable http config
+            connection_config = FlockStreamableHttpConnectionConfig(
+                max_retries=max_retries,
+                connection_parameters=StreamableHttpServerParameters(
+                    url=connection_params.url,
+                    headers=connection_params.headers,
+                    auth=connection_params.auth,
+                    timeout=connection_params.timeout_seconds,
+                    sse_read_timeout=connection_params.sse_read_timeout_seconds,
+                    terminate_on_close=connection_params.terminate_on_close,
+                ),
+                mount_points=mounts,
+                server_logging_level=server_logging_level,
+            )
+
+            server_config = FlockStreamableHttpConfig(
+                name=name,
+                connection_config=connection_config,
+                feature_config=feature_config,
+                caching_config=caching_config,
+                callback_config=callback_config,
+            )
+
         elif server_kind == "sse":
             # build sse config
             connection_config = FlockSSEConnectionConfig(
                 max_retries=max_retries,
                 connection_parameters=SseServerParameters(
                     url=connection_params.url,
+                    auth=connection_params.auth,
                     headers=connection_params.headers,
                     timeout=connection_params.timeout_seconds,
                     sse_read_timeout=connection_params.sse_read_timeout_seconds,

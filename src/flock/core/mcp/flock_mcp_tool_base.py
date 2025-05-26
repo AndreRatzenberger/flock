@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from flock.core.logging.logging import get_logger
 
-logger = get_logger("core.mcp.tool_base")
+logger = get_logger("mcp.tool")
 tracer = trace.get_tracer(__name__)
 
 T = TypeVar("T", bound="FlockMCPToolBase")

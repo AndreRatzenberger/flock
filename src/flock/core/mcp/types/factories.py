@@ -1,6 +1,6 @@
 """Factories for default MCP Callbacks."""
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from mcp.shared.context import RequestContext
 from mcp.types import (
@@ -8,6 +8,12 @@ from mcp.types import (
 )
 
 from flock.core.logging.logging import FlockLogger, get_logger
+from flock.core.mcp.types.callbacks import (
+    default_list_roots_callback,
+    default_logging_callback,
+    default_message_handler,
+    default_sampling_callback,
+)
 from flock.core.mcp.types.types import (
     FlockListRootsMCPCallback,
     FlockLoggingMCPCallback,
@@ -17,18 +23,10 @@ from flock.core.mcp.types.types import (
     ServerNotification,
 )
 
-if TYPE_CHECKING:
-    from flock.core.mcp.types.callbacks import (
-        default_list_roots_callback,
-        default_logging_callback,
-        default_message_handler,
-        default_sampling_callback,
-    )
-
-default_logging_callback_logger = get_logger("core.mcp.callback.logging")
-default_sampling_callback_logger = get_logger("core.mcp.callback.sampling")
-default_list_roots_callback_logger = get_logger("core.mcp.callback.sampling")
-default_message_handler_logger = get_logger("core.mcp.callback.message")
+default_logging_callback_logger = get_logger("mcp.callback.logging")
+default_sampling_callback_logger = get_logger("mcp.callback.sampling")
+default_list_roots_callback_logger = get_logger("mcp.callback.roots")
+default_message_handler_logger = get_logger("mcp.callback.message")
 
 
 def default_flock_mcp_logging_callback_factory(
@@ -88,7 +86,7 @@ def default_flock_mcp_message_handler_callback_factory(
     ) -> None:
         await default_message_handler(
             req=n,
-            logger_to_use=logger_to_use,
+            logger=logger_to_use,
             associated_client=associated_client,
         )
 

@@ -384,7 +384,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                             )
                         else:
                             logger.warning(
-                                f"No Server with name '{server}' registered! Skipping."
+                                f"No Server with name '{server.config.name}' registered! Skipping."
                             )
                         mcp_tools = mcp_tools + server_tools
 

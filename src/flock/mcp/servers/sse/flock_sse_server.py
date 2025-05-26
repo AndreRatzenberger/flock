@@ -4,12 +4,13 @@ import copy
 from contextlib import AbstractAsyncContextManager
 from typing import Any, Literal
 
+import httpx
 from anyio.streams.memory import (
     MemoryObjectReceiveStream,
     MemoryObjectSendStream,
 )
 from mcp.client.sse import sse_client
-from mcp.types import JSONRPCMessage
+from mcp.shared.message import SessionMessage
 from opentelemetry import trace
 from pydantic import Field
 
@@ -63,45 +64,51 @@ class FlockSSEClient(FlockMCPClientBase):
         additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
-            MemoryObjectReceiveStream[JSONRPCMessage | Exception],
-            MemoryObjectSendStream[JSONRPCMessage],
+            MemoryObjectReceiveStream[SessionMessage | Exception],
+            MemoryObjectSendStream[SessionMessage],
         ]
     ]:
         """Return an async context manager whose __aenter__ method yields (read_stream, send_stream)."""
         # avoid modifying the config of the client as a side-effect.
         param_copy = copy.deepcopy(params)
 
-        if self.additional_params:
+        if additional_params:
             override_headers = bool(
-                self.additional_params.get("override_headers", False)
+                additional_params.get("override_headers", False)
             )
-            if "headers" in self.additional_params:
+            if "headers" in additional_params:
                 if override_headers:
-                    param_copy.headers = self.additional_params.get(
+                    param_copy.headers = additional_params.get(
                         "headers", params.headers
                     )
                 else:
                     param_copy.headers.update(
-                        self.additional_params.get("headers", {})
+                        additional_params.get("headers", {})
                     )
-            if "read_timeout_seconds" in self.additional_params:
-                param_copy.timeout = self.additional_params.get(
+            if "read_timeout_seconds" in additional_params:
+                param_copy.timeout =  additional_params.get(
                     "read_timeout_seconds", params.timeout
                 )
 
-            if "sse_read_timeout" in self.additional_params:
-                param_copy.sse_read_timeout = self.additional_params.get(
+            if "sse_read_timeout" in additional_params:
+                param_copy.sse_read_timeout = additional_params.get(
                     "sse_read_timeout",
                     params.sse_read_timeout,
                 )
-            if "url" in self.additional_params:
-                param_copy.url = self.additional_params.get(
+            if "url" in additional_params:
+                param_copy.url = additional_params.get(
                     "url",
                     params.url,
                 )
 
+            if "auth" in additional_params and isinstance(
+                additional_params.get("auth"), httpx.Auth
+            ):
+                param_copy.auth = additional_params.get("auth", param_copy.auth)
+
         return sse_client(
             url=param_copy.url,
+            auth=param_copy.auth,
             headers=param_copy.headers,
             timeout=float(param_copy.timeout),
             sse_read_timeout=float(param_copy.sse_read_timeout),

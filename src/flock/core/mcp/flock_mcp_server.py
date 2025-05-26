@@ -26,7 +26,7 @@ from flock.core.serialization.serialization_utils import (
     serialize_item,
 )
 
-logger = get_logger("core.mcp.server_base")
+logger = get_logger("mcp.server")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 
@@ -206,7 +206,6 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             async with self.condition:
                 try:
                     await self.pre_mcp_call()
-                    # TODO: inject additional params here.
                     additional_params: dict[str, Any] = {}
                     additional_params = await self.before_connect(
                         additional_params=additional_params
@@ -314,7 +313,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     async def post_terminate(self) -> None:
         """Run post-terminate hooks on modules."""
         logger.debug(
-            f"Running post_terminat hooks for modules in server: '{self.config.name}'"
+            f"Running post_terminate hooks for modules in server: '{self.config.name}'"
         )
         with tracer.start_as_current_span("server.post_terminate") as span:
             span.set_attribute("server.name", self.config.name)
@@ -437,7 +436,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
 
         FlockRegistry = get_registry()
 
-        exclude = ["modules"]
+        exclude = ["modules", "config"]
 
         logger.debug(f"Serializing server '{self.config.name}' to dict.")
         # Use Pydantic's dump, exclued manually handled fields.
@@ -447,6 +446,11 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             exclude_none=True,  # Exclude None values for cleaner output
         )
 
+        # --- Let the config handle its own serialization ---
+        config_data = self.config.to_dict(path_type=path_type)
+        data["config"] = config_data
+
+
         builtin_by_transport = {}
 
         try:
@@ -454,12 +458,16 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             from flock.mcp.servers.stdio.flock_stdio_server import (
                 FlockMCPStdioServer,
             )
+            from flock.mcp.servers.streamable_http.flock_streamable_http_server import (
+                FlockStreamableHttpServer,
+            )
             from flock.mcp.servers.websockets.flock_websocket_server import (
                 FlockWSServer,
             )
 
             builtin_by_transport = {
                 "stdio": FlockMCPStdioServer,
+                "streamable_http": FlockStreamableHttpServer,
                 "sse": FlockSSEServer,
                 "websockets": FlockWSServer,
             }
@@ -570,6 +578,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             from flock.mcp.servers.stdio.flock_stdio_server import (
                 FlockMCPStdioServer,
             )
+            from flock.mcp.servers.streamable_http.flock_streamable_http_server import (
+                FlockStreamableHttpServer,
+            )
             from flock.mcp.servers.websockets.flock_websocket_server import (
                 FlockWSServer,
             )
@@ -577,6 +588,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             builtin_by_transport = {
                 "stdio": FlockMCPStdioServer,
                 "sse": FlockSSEServer,
+                "streamable_http": FlockStreamableHttpServer,
                 "websockets": FlockWSServer,
             }
         except ImportError:
@@ -591,6 +603,20 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             # built-in: inspect transport_type in data["config"]
             transport = data["config"]["connection_config"]["transport_type"]
             real_cls = builtin_by_transport.get(transport, cls)
+
+        # deserialize the config:
+        config_data = data.pop("config", None)
+        if config_data:
+            # Forcing a square into a round hole
+            # pretty ugly, but gets the job done.
+            try:
+                config_field = real_cls.model_fields["config"]
+                config_cls = config_field.annotation
+            except (AttributeError, KeyError):
+                # fallback if Pydantic v1 or missing
+                config_cls = FlockMCPConfigurationBase
+            config_object = config_cls.from_dict(config_data)
+            data["config"] = config_object
 
         # now construct
         server = real_cls(**{k: v for k, v in data.items() if k != "modules"})

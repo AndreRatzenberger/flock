@@ -8,25 +8,22 @@ from mcp.shared.context import RequestContext
 from mcp.shared.session import RequestResponder
 from mcp.types import (
     INTERNAL_ERROR,
+    CancelledNotification,
     ClientResult,
     ErrorData,
     ListRootsRequest,
-    ServerNotification as _MCPServerNotification,
-    ServerRequest,
-)
-
-from flock.core.logging.logging import FlockLogger
-from flock.core.mcp.mcp_client import Any
-from flock.core.mcp.types.types import (
-    CancelledNotification,
-    FlockLoggingMessageNotificationParams,
     LoggingMessageNotification,
+    LoggingMessageNotificationParams,
     ProgressNotification,
     ResourceListChangedNotification,
     ResourceUpdatedNotification,
     ServerNotification,
+    ServerRequest,
     ToolListChangedNotification,
 )
+
+from flock.core.logging.logging import FlockLogger
+from flock.core.mcp.mcp_client import Any
 
 
 async def handle_incoming_exception(
@@ -129,11 +126,11 @@ async def handle_tool_list_changed_notification(
     await associated_client.invalidate_tool_cache()
 
 
-_SERVER_NOTIFICATION_MAP: dict[type[_MCPServerNotification], Callable] = {
+_SERVER_NOTIFICATION_MAP: dict[type[ServerNotification], Callable] = {
     ResourceListChangedNotification: handle_resource_list_changed_notification,
     ResourceUpdatedNotification: handle_resource_update_notification,
     LoggingMessageNotification: lambda n, log, client: handle_logging_message(
-        params=n,
+        params=n.params,
         logger=log,
         server_name=client.config.name,
     ),
@@ -154,7 +151,7 @@ async def handle_incoming_server_notification(
 
 
 async def handle_logging_message(
-    params: FlockLoggingMessageNotificationParams,
+    params: LoggingMessageNotificationParams,
     logger: FlockLogger,
     server_name: str,
 ) -> None:

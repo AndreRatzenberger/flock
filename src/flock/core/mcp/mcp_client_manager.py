@@ -19,7 +19,7 @@ from flock.core.mcp.mcp_client import (
 )
 from flock.core.mcp.mcp_config import FlockMCPConfigurationBase
 
-logger = get_logger("core.mcp.connection_manager_base")
+logger = get_logger("mcp.client_manager")
 tracer = trace.get_tracer(__name__)
 
 TClient = TypeVar("TClient", bound="FlockMCPClientBase")
