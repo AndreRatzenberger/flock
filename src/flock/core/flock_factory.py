@@ -472,7 +472,6 @@ class FlockFactory:
         schedule_expression: str, # e.g., "every 1h", "0 0 * * *"
         description: str | Callable[..., str] | None = None,
         model: str | Callable[..., str] | None = None,
-        input: SignatureType = None, # Input might be implicit or none
         output: SignatureType = None, # Input might be implicit or none
         tools: list[Callable[..., Any] | Any] | None = None,
         servers: list[str | FlockMCPServerBase] | None = None,
@@ -496,7 +495,7 @@ class FlockFactory:
             name=name,
             description=description,
             model=model,
-            input=input + ", trigger_time: str | Time of scheduled execution",
+            input="trigger_time: str | Time of scheduled execution",
             output=output,
             tools=tools,
             servers=servers,
