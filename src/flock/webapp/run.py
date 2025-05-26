@@ -142,7 +142,8 @@ def start_unified_server(
             "flock.webapp.app.main:app",
             host=host,
             port=port,
-            reload=False # Critical for programmatically set state like flock_instance
+            reload=False, # Critical for programmatically set state like flock_instance
+       #     root_path=os.getenv("FLOCK_ROOT_PATH", "")
         )
 
     except ImportError as e:
@@ -206,6 +207,7 @@ def main():
         host=host,
         port=port,
         reload=webapp_reload,
+       # root_path=os.getenv("FLOCK_ROOT_PATH", "")
     )
 
 
