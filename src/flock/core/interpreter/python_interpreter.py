@@ -37,14 +37,20 @@ class InterpreterError(ValueError):
 
     pass
 
+class BreakException(Exception):
+    """Signal a 'break' from the simulated loop."""
+    pass
+
+class ContinueException(Exception):
+    """Signal a 'continue' in the simulated loop."""
+    pass
+
 
 class PythonInterpreter:
     r"""A customized python interpreter to control the execution of
     LLM-generated codes. The interpreter makes sure the code can only execute
     functions given in action space and import white list. It also supports
     fuzzy variable matching to receive uncertain input variable name.
-
-    [Documentation omitted for brevity]
 
     Args:
         action_space (Dict[str, Any]): A dictionary mapping action names to
@@ -76,6 +82,9 @@ class PythonInterpreter:
             "enum",
             "json",
             "ast",
+            "numpy",
+            "sympy",
+            "pandas",
         ]  # default imports
         self.verbose = verbose
 
@@ -95,50 +104,57 @@ class PythonInterpreter:
 
         [Documentation omitted for brevity]
         """
-        if state is not None:
-            self.state.update(state)
-        if fuzz_state is not None:
-            self.fuzz_state.update(fuzz_state)
-
         try:
-            expression = ast.parse(code)
-        except SyntaxError as e:
-            error_line = code.splitlines()[e.lineno - 1]
-            raise InterpreterError(
-                f"Syntax error in code at line {e.lineno}: {error_line}\nError: {e}"
-            )
-
-        result = None
-        if self.verbose:
-            self.log("[Interpreter] Starting code execution...")
-
-        for idx, node in enumerate(expression.body):
-            # Log the AST node being executed (using unparse if available)
-            if self.verbose:
-                try:
-                    node_repr = ast.unparse(node)
-                except Exception:
-                    node_repr = ast.dump(node)
-                self.log(f"[Interpreter] Executing node {idx}: {node_repr}")
+            if state is not None:
+                self.state.update(state)
+            if fuzz_state is not None:
+                self.fuzz_state.update(fuzz_state)
 
             try:
-                line_result = self._execute_ast(node)
-            except InterpreterError as e:
-                if not keep_state:
-                    self.clear_state()
-                msg = f"Evaluation of the code stopped at node {idx}. See:\n{e}"
-                raise InterpreterError(msg)
-            if line_result is not None:
-                result = line_result
+                expression = ast.parse(code)
+            except SyntaxError as e:
+                error_line = code.splitlines()[e.lineno - 1]
+                self.log(
+                    f"[Interpreter] Syntax error in code at line {e.lineno}: {error_line}\nError: {e}")
+                return(
+                    f"Syntax error in code at line {e.lineno}: {error_line}\nError: {e}"
+                )
+
+            result = None
+            if self.verbose:
+                self.log("[Interpreter] Starting code execution...")
+
+            for idx, node in enumerate(expression.body):
+                # Log the AST node being executed (using unparse if available)
                 if self.verbose:
-                    self.log(f"[Interpreter] Node {idx} result: {result}")
+                    try:
+                        node_repr = ast.unparse(node)
+                    except Exception:
+                        node_repr = ast.dump(node)
+                    self.log(f"[Interpreter] Executing node {idx}: {node_repr}")
 
-        if self.verbose:
-            self.log("[Interpreter] Finished code execution.")
-        if not keep_state:
-            self.clear_state()
+                try:
+                    line_result = self._execute_ast(node)
+                except InterpreterError as e:
+                    if not keep_state:
+                        self.clear_state()
+                    msg = f"Evaluation of the code stopped at node {idx}. See:\n{e}"
+                    return msg
+                if line_result is not None:
+                    result = line_result
+                    if self.verbose:
+                        self.log(f"[Interpreter] Node {idx} result: {result}")
 
-        return result
+            if self.verbose:
+                self.log("[Interpreter] Finished code execution.")
+            if not keep_state:
+                self.clear_state()
+
+            return result
+        except Exception as e:
+            self.log(
+                f"[Interpreter] Error during code execution: {e}")
+            return f"[Interpreter] Error during code execution: {e}"
 
     def clear_state(self) -> None:
         r"""Initialize :obj:`state` and :obj:`fuzz_state`"""
@@ -236,7 +252,7 @@ class PythonInterpreter:
         elif isinstance(expression, ast.Assert):
             return self._execute_assert(expression)
         else:
-            raise InterpreterError(
+            return(
                 f"{expression.__class__.__name__} is not supported."
             )
 
@@ -253,17 +269,17 @@ class PythonInterpreter:
             self.state[target.id] = value
         elif isinstance(target, ast.Tuple):
             if not isinstance(value, tuple):
-                raise InterpreterError(
+                return(
                     f"Expected type tuple, but got {value.__class__.__name__} instead."
                 )
             if len(target.elts) != len(value):
-                raise InterpreterError(
+                return(
                     f"Expected {len(target.elts)} values but got {len(value)}."
                 )
             for t, v in zip(target.elts, value):
                 self.state[self._execute_ast(t)] = v
         else:
-            raise InterpreterError(
+            return(
                 f"Unsupported variable type. Expected ast.Name or ast.Tuple, got {target.__class__.__name__} instead."
             )
 
@@ -297,7 +313,7 @@ class PythonInterpreter:
             isinstance(current_value, (int, float))
             and isinstance(increment_value, (int, float))
         ):
-            raise InterpreterError(
+            return(
                 f"Invalid types for augmented assignment: {type(current_value)}, {type(increment_value)}"
             )
         if isinstance(augassign.op, ast.Add):
@@ -309,7 +325,7 @@ class PythonInterpreter:
         elif isinstance(augassign.op, ast.Div):
             new_value = current_value / increment_value
         else:
-            raise InterpreterError(
+            return(
                 f"Augmented assignment operator {augassign.op} is not supported"
             )
         self._assign(augassign.target, new_value)
@@ -319,7 +335,7 @@ class PythonInterpreter:
         index = self._execute_ast(subscript.slice)
         value = self._execute_ast(subscript.value)
         if not isinstance(subscript.ctx, ast.Load):
-            raise InterpreterError(
+            return(
                 f"{subscript.ctx.__class__.__name__} is not supported for subscript."
             )
         if isinstance(value, (list, tuple)):
@@ -330,7 +346,7 @@ class PythonInterpreter:
             close_matches = difflib.get_close_matches(index, list(value.keys()))
             if len(close_matches) > 0:
                 return value[close_matches[0]]
-        raise InterpreterError(f"Could not index {value} with '{index}'.")
+        return(f"Could not index {value} with '{index}'.")
 
     def _execute_name(self, name: ast.Name):
         if name.id in dir(builtins):
@@ -340,7 +356,7 @@ class PythonInterpreter:
         elif isinstance(name.ctx, ast.Load):
             return self._get_value_from_state(name.id)
         else:
-            raise InterpreterError(f"{name.ctx} is not supported.")
+            return(f"{name.ctx} is not supported.")
 
     def _execute_condition(self, condition):
         if isinstance(condition, ast.BoolOp):
@@ -355,12 +371,12 @@ class PythonInterpreter:
                 ]
                 return any(results)
             else:
-                raise InterpreterError(
+                return(
                     f"Boolean operator {condition.op} is not supported"
                 )
         elif isinstance(condition, ast.Compare):
             if len(condition.ops) > 1:
-                raise InterpreterError(
+                return(
                     "Cannot evaluate conditions with multiple operators"
                 )
             left = self._execute_ast(condition.left)
@@ -387,7 +403,7 @@ class PythonInterpreter:
             elif isinstance(comparator, ast.NotIn):
                 return left not in right
             else:
-                raise InterpreterError("Unsupported comparison operator")
+                return("Unsupported comparison operator")
         elif isinstance(condition, ast.UnaryOp):
             return self._execute_unaryop(condition)
         elif isinstance(condition, ast.Name) or isinstance(condition, ast.Call):
@@ -395,7 +411,7 @@ class PythonInterpreter:
         elif isinstance(condition, ast.Constant):
             return bool(condition.value)
         else:
-            raise InterpreterError(
+            return(
                 f"Unsupported condition type: {type(condition).__name__}"
             )
 
@@ -428,7 +444,7 @@ class PythonInterpreter:
 
     def _execute_import_from(self, import_from: ast.ImportFrom):
         if import_from.module is None:
-            raise InterpreterError('"from . import" is not supported.')
+            return('"from . import" is not supported.')
         for import_name in import_from.names:
             full_name = import_from.module + f".{import_name.name}"
             self._validate_import(full_name)
@@ -440,12 +456,6 @@ class PythonInterpreter:
     # We keep both as provided, but you may wish to consolidate these in your code.
 
     def _execute_for(self, for_statement: ast.For):
-        class BreakException(Exception):
-            pass
-
-        class ContinueException(Exception):
-            pass
-
         result = None
         try:
             for value in self._execute_ast(for_statement.iter):
@@ -462,12 +472,6 @@ class PythonInterpreter:
         return result
 
     def _execute_while(self, while_statement: ast.While):
-        class BreakException(Exception):
-            pass
-
-        class ContinueException(Exception):
-            pass
-
         result = None
         try:
             while self._execute_condition(while_statement.test):
@@ -540,7 +544,7 @@ class PythonInterpreter:
                 found_name = True
                 return
         if not found_name:
-            raise InterpreterError(
+            return(
                 f"It is not permitted to import modules "
                 f"than module white list (try to import {full_name})."
             )
@@ -577,7 +581,7 @@ class PythonInterpreter:
         elif isinstance(operator, ast.MatMult):
             return left @ right
         else:
-            raise InterpreterError(f"Operator not supported: {operator}")
+            return(f"Operator not supported: {operator}")
 
     def _execute_unaryop(self, unaryop: ast.UnaryOp):
         operand = self._execute_ast(unaryop.operand)
@@ -592,31 +596,33 @@ class PythonInterpreter:
         elif isinstance(operator, ast.Invert):
             return ~operand
         else:
-            raise InterpreterError(f"Operator not supported: {operator}")
+            return(f"Operator not supported: {operator}")
 
     def _execute_listcomp(self, comp: ast.ListComp):
-        return [self._execute_comp(comp.elt, comp.generators)]
-
-    def _execute_dictcomp(self, comp: ast.DictComp):
-        return {
-            self._execute_comp(comp.key, comp.generators): self._execute_comp(
-                comp.value, comp.generators
-            )
-        }
+        return self._execute_comp(comp.elt, comp.generators)
 
     def _execute_setcomp(self, comp: ast.SetComp):
-        return {self._execute_comp(comp.elt, comp.generators)}
+        return set(self._execute_comp(comp.elt, comp.generators))
+
+    def _execute_dictcomp(self, comp: ast.DictComp):
+        keys   = self._execute_comp(comp.key,   comp.generators)
+        values = self._execute_comp(comp.value, comp.generators)
+        return dict(zip(keys, values))
 
     def _execute_comp(self, elt, generators):
+        # Base-case: wrap the single element in a list so that
+        # callers can safely .extend() it.
         if not generators:
-            return self._execute_ast(elt)
+            return [self._execute_ast(elt)]
+
         gen = generators[0]
-        result = []
+        acc: list[Any] = []
         for value in self._execute_ast(gen.iter):
             self._assign(gen.target, value)
             if all(self._execute_condition(if_cond) for if_cond in gen.ifs):
-                result.extend(self._execute_comp(elt, generators[1:]))
-        return result
+                acc.extend(self._execute_comp(elt, generators[1:]))
+        return acc
+
 
     def _execute_generatorexp(self, genexp: ast.GeneratorExp):
         def generator():
@@ -631,7 +637,7 @@ class PythonInterpreter:
         elif key in self.fuzz_state:
             return self.fuzz_state[key]
         else:
-            raise InterpreterError(f"The variable `{key}` is not defined.")
+            return(f"The variable `{key}` is not defined.")
 
 
 class TextPrompt(str):

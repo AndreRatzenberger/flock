@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 from flock.core.logging.logging import (
     get_logger as get_flock_logger,  # For logging within the new endpoint
 )
-from flock.core.util.spliter import parse_schema
+from flock.core.util.splitter import parse_schema
 
 # Import the dependency to get the current Flock instance
 from flock.webapp.app.dependencies import (

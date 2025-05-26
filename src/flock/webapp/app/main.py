@@ -34,7 +34,7 @@ from flock.core.api.run_store import RunStore
 from flock.core.flock import Flock  # For type hinting
 from flock.core.flock_scheduler import FlockScheduler
 from flock.core.logging.logging import get_logger  # For logging
-from flock.core.util.spliter import parse_schema
+from flock.core.util.splitter import parse_schema
 
 # Import UI-specific routers
 from flock.webapp.app.api import (
