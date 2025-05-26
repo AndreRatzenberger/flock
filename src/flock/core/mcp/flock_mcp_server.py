@@ -206,7 +206,6 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             async with self.condition:
                 try:
                     await self.pre_mcp_call()
-                    # TODO: inject additional params here.
                     additional_params: dict[str, Any] = {}
                     additional_params = await self.before_connect(
                         additional_params=additional_params
@@ -446,6 +445,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             mode="json",  # Use json mode for better handling of standard types by Pydantic
             exclude_none=True,  # Exclude None values for cleaner output
         )
+
 
         builtin_by_transport = {}
 
