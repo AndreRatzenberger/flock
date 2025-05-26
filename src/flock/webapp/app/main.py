@@ -1,4 +1,5 @@
 # src/flock/webapp/app/main.py
+import asyncio
 import json
 import os  # Added import
 import shutil
@@ -8,6 +9,7 @@ import urllib.parse
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import markdown2  # Import markdown2
 from fastapi import (
@@ -24,13 +26,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Any
 
 from flock.core.api.endpoints import create_api_router
 from flock.core.api.run_store import RunStore
 
 # Import core Flock components and API related modules
 from flock.core.flock import Flock  # For type hinting
+from flock.core.flock_scheduler import FlockScheduler
 from flock.core.logging.logging import get_logger  # For logging
 from flock.core.util.spliter import parse_schema
 
@@ -44,7 +46,6 @@ from flock.webapp.app.api import (
 from flock.webapp.app.config import (
     DEFAULT_THEME_NAME,
     FLOCK_FILES_DIR,
-    SHARED_LINKS_DB_PATH,
     THEMES_DIR,
     get_current_theme_name,
 )
@@ -72,7 +73,7 @@ from flock.webapp.app.services.flock_service import (
 from flock.webapp.app.services.sharing_models import SharedLinkConfig
 from flock.webapp.app.services.sharing_store import (
     SharedLinkStoreInterface,
-    SQLiteSharedLinkStore,
+    create_shared_link_store,
 )
 from flock.webapp.app.theme_mapper import alacritty_to_pico
 
@@ -138,23 +139,21 @@ async def lifespan(app: FastAPI):
     logger.info("FastAPI application starting up...")
     # Flock instance and RunStore are expected to be set on app.state
     # by `start_unified_server` in `webapp/run.py` *before* uvicorn starts the app.
-    # The call to `set_global_flock_services` also happens there.
-
-    # Initialize and set the SharedLinkStore
+    # The call to `set_global_flock_services` also happens there.    # Initialize and set the SharedLinkStore
     try:
-        logger.info(f"Initializing SharedLinkStore with DB path: {SHARED_LINKS_DB_PATH}")
-        shared_link_store = SQLiteSharedLinkStore(db_path=str(SHARED_LINKS_DB_PATH))
+        logger.info("Initializing SharedLinkStore using factory...")
+        shared_link_store = create_shared_link_store()
         await shared_link_store.initialize() # Create tables if they don't exist
         set_global_shared_link_store(shared_link_store)
         logger.info("SharedLinkStore initialized and set globally.")
     except Exception as e:
-        logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)    # Configure chat features with clear precedence:
+        logger.error(f"Failed to initialize SharedLinkStore: {e}", exc_info=True)# Configure chat features with clear precedence:
     # 1. Value set by start_unified_server (programmatic)
     # 2. Environment variables (standalone mode)
     programmatic_chat_enabled = getattr(app.state, "chat_enabled", None)
     env_start_mode = os.environ.get("FLOCK_START_MODE")
     env_chat_enabled = os.environ.get("FLOCK_CHAT_ENABLED", "false").lower() == "true"
-    
+
     if programmatic_chat_enabled is not None:
         # Programmatic setting takes precedence (from start_unified_server)
         should_enable_chat_routes = programmatic_chat_enabled
@@ -235,11 +234,66 @@ async def lifespan(app: FastAPI):
             logger.info(f"Lifespan: Added {len(pending_endpoints)} custom API routes to main app.")
         else:
             logger.warning("Lifespan: Pending custom endpoints found, but no Flock instance in app.state. Cannot add custom routes.")
+
+    # --- Add Scheduler Startup Logic ---
+    flock_instance_from_state: Flock | None = getattr(app.state, "flock_instance", None)
+    if flock_instance_from_state:
+        # Create and start the scheduler
+        scheduler = FlockScheduler(flock_instance_from_state)
+        app.state.flock_scheduler = scheduler  # Store for access during shutdown
+
+        scheduler_loop_task = await scheduler.start() # Start returns the task
+        if scheduler_loop_task:
+            app.state.flock_scheduler_task = scheduler_loop_task # Store the task
+            logger.info("FlockScheduler background task started.")
+        else:
+            app.state.flock_scheduler_task = None
+            logger.info("FlockScheduler initialized, but no scheduled agents found or loop not started.")
+    else:
+        app.state.flock_scheduler = None
+        app.state.flock_scheduler_task = None
+        logger.warning("No Flock instance found in app.state; FlockScheduler not started.")
+    # --- End Scheduler Startup Logic ---
+
     yield
     logger.info("FastAPI application shutting down...")
 
-app = FastAPI(title="Flock Web UI & API", lifespan=lifespan)
+     # --- Add Scheduler Shutdown Logic ---
+    logger.info("FastAPI application initiating shutdown...")
+    scheduler_to_stop: FlockScheduler | None = getattr(app.state, "flock_scheduler", None)
+    scheduler_task_to_await: asyncio.Task | None = getattr(app.state, "flock_scheduler_task", None)
 
+    if scheduler_to_stop:
+        logger.info("Attempting to stop FlockScheduler...")
+        await scheduler_to_stop.stop() # Signal the scheduler loop to stop
+
+        if scheduler_task_to_await and not scheduler_task_to_await.done():
+            logger.info("Waiting for FlockScheduler task to complete...")
+            try:
+                await asyncio.wait_for(scheduler_task_to_await, timeout=10.0) # Wait for graceful exit
+                logger.info("FlockScheduler task completed gracefully.")
+            except asyncio.TimeoutError:
+                logger.warning("FlockScheduler task did not complete in time, cancelling.")
+                scheduler_task_to_await.cancel()
+                try:
+                    await scheduler_task_to_await # Await cancellation
+                except asyncio.CancelledError:
+                    logger.info("FlockScheduler task cancelled.")
+            except Exception as e:
+                logger.error(f"Error during FlockScheduler task finalization: {e}", exc_info=True)
+        elif scheduler_task_to_await and scheduler_task_to_await.done():
+            logger.info("FlockScheduler task was already done.")
+        else:
+            logger.info("FlockScheduler instance found, but no running task was stored to await.")
+    else:
+        logger.info("No active FlockScheduler found to stop.")
+
+    logger.info("FastAPI application finished shutdown sequence.")
+    # --- End Scheduler Shutdown Logic ---
+
+app = FastAPI(title="Flock Web UI & API", lifespan=lifespan, docs_url="/docs",
+    openapi_url="/openapi.json", root_path=os.getenv("FLOCK_ROOT_PATH", ""))
+logger.info("FastAPI booting complete.")
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -825,6 +879,7 @@ async def ui_create_flock_action(request: Request, flock_name: str = Form(...), 
     response_headers = {"HX-Push-Url": f"/ui/editor/execute?ui_mode={ui_mode_query}", "HX-Trigger": json.dumps({"flockLoaded": None, "notify": {"type": "success", "message": success_msg_text}})}
     context = get_base_context_web(request, success=success_msg_text, ui_mode=ui_mode_query)
     return templates.TemplateResponse("partials/_execution_view_container.html", context, headers=response_headers)
+
 
 # --- Settings Page & Endpoints ---
 @app.get("/ui/settings", response_class=HTMLResponse, tags=["UI Pages"])

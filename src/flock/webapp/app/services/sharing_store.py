@@ -1,3 +1,5 @@
+"""Shared link and feedback storage implementations supporting SQLite and Azure Table Storage."""
+
 import logging
 import sqlite3
 from abc import ABC, abstractmethod
@@ -9,6 +11,17 @@ from flock.webapp.app.services.sharing_models import (
     FeedbackRecord,
     SharedLinkConfig,
 )
+
+# Azure Table Storage imports - will be conditionally imported
+try:
+    from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+    from azure.data.tables.aio import TableServiceClient
+    AZURE_AVAILABLE = True
+except ImportError:
+    AZURE_AVAILABLE = False
+    TableServiceClient = None
+    ResourceNotFoundError = None
+    ResourceExistsError = None
 
 # Get a logger instance
 logger = logging.getLogger(__name__)
@@ -46,6 +59,7 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
     """SQLite implementation for storing and retrieving shared link configurations."""
 
     def __init__(self, db_path: str):
+        """Initialize SQLite store with database path."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True) # Ensure directory exists
         logger.info(f"SQLiteSharedLinkStore initialized with db_path: {self.db_path}")
@@ -213,3 +227,162 @@ class SQLiteSharedLinkStore(SharedLinkStoreInterface):
         except sqlite3.Error as e:
             logger.error(f"SQLite error saving feedback {record.feedback_id}: {e}", exc_info=True)
             raise
+
+class AzureTableSharedLinkStore(SharedLinkStoreInterface):
+    """Azure Table Storage implementation for storing and retrieving shared link configurations."""
+
+    def __init__(self, connection_string: str):
+        """Initialize Azure Table Storage store with connection string."""
+        if not AZURE_AVAILABLE:
+            raise ImportError("Azure Table Storage dependencies not available. Install with: pip install azure-data-tables")
+
+        self.connection_string = connection_string
+        self.table_service_client = TableServiceClient.from_connection_string(connection_string)
+        self.shared_links_table_name = "flocksharedlinks"
+        self.feedback_table_name = "flockfeedback"
+        logger.info("AzureTableSharedLinkStore initialized")
+
+    async def initialize(self) -> None:
+        """Initializes the Azure Tables (creates them if they don't exist)."""
+        try:
+            # Create shared_links table
+            try:
+                await self.table_service_client.create_table(self.shared_links_table_name)
+                logger.info(f"Created Azure Table: {self.shared_links_table_name}")
+            except ResourceExistsError:
+                logger.debug(f"Azure Table already exists: {self.shared_links_table_name}")
+
+            # Create feedback table
+            try:
+                await self.table_service_client.create_table(self.feedback_table_name)
+                logger.info(f"Created Azure Table: {self.feedback_table_name}")
+            except ResourceExistsError:
+                logger.debug(f"Azure Table already exists: {self.feedback_table_name}")
+
+            logger.info("Azure Table Storage initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing Azure Table Storage: {e}", exc_info=True)
+            raise
+
+    async def save_config(self, config: SharedLinkConfig) -> SharedLinkConfig:
+        """Saves a shared link configuration to Azure Table Storage."""
+        try:
+            table_client = self.table_service_client.get_table_client(self.shared_links_table_name)
+
+            entity = {
+                "PartitionKey": "shared_links",  # Use a fixed partition key for simplicity
+                "RowKey": config.share_id,
+                "share_id": config.share_id,
+                "agent_name": config.agent_name,
+                "flock_definition": config.flock_definition,
+                "created_at": config.created_at.isoformat(),
+                "share_type": config.share_type,
+                "chat_message_key": config.chat_message_key,
+                "chat_history_key": config.chat_history_key,
+                "chat_response_key": config.chat_response_key,
+            }
+
+            await table_client.upsert_entity(entity)
+            logger.info(f"Saved shared link config to Azure Table Storage for ID: {config.share_id} with type: {config.share_type}")
+            return config
+        except Exception as e:
+            logger.error(f"Error saving config to Azure Table Storage for ID {config.share_id}: {e}", exc_info=True)
+            raise
+
+    async def get_config(self, share_id: str) -> SharedLinkConfig | None:
+        """Retrieves a shared link configuration from Azure Table Storage by its ID."""
+        try:
+            table_client = self.table_service_client.get_table_client(self.shared_links_table_name)
+
+            entity = await table_client.get_entity(partition_key="shared_links", row_key=share_id)
+
+            logger.debug(f"Retrieved shared link config from Azure Table Storage for ID: {share_id}")
+            return SharedLinkConfig(
+                share_id=entity["share_id"],
+                agent_name=entity["agent_name"],
+                created_at=entity["created_at"],  # Pydantic will parse from ISO format
+                flock_definition=entity["flock_definition"],
+                share_type=entity.get("share_type", "agent_run"),
+                chat_message_key=entity.get("chat_message_key"),
+                chat_history_key=entity.get("chat_history_key"),
+                chat_response_key=entity.get("chat_response_key"),
+            )
+        except ResourceNotFoundError:
+            logger.debug(f"No shared link config found in Azure Table Storage for ID: {share_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error retrieving config from Azure Table Storage for ID {share_id}: {e}", exc_info=True)
+            return None
+
+    async def delete_config(self, share_id: str) -> bool:
+        """Deletes a shared link configuration from Azure Table Storage by its ID."""
+        try:
+            table_client = self.table_service_client.get_table_client(self.shared_links_table_name)
+
+            await table_client.delete_entity(partition_key="shared_links", row_key=share_id)
+            logger.info(f"Deleted shared link config from Azure Table Storage for ID: {share_id}")
+            return True
+        except ResourceNotFoundError:
+            logger.info(f"Attempted to delete non-existent shared link config from Azure Table Storage for ID: {share_id}")
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting config from Azure Table Storage for ID {share_id}: {e}", exc_info=True)
+            return False
+
+    # ----------------------- Feedback methods -----------------------
+
+    async def save_feedback(self, record: FeedbackRecord) -> FeedbackRecord:
+        """Persist a feedback record to Azure Table Storage."""
+        try:
+            table_client = self.table_service_client.get_table_client(self.feedback_table_name)
+
+            entity = {
+                "PartitionKey": "feedback",  # Use a fixed partition key for simplicity
+                "RowKey": record.feedback_id,
+                "feedback_id": record.feedback_id,
+                "share_id": record.share_id,
+                "context_type": record.context_type,
+                "reason": record.reason,
+                "expected_response": record.expected_response,
+                "actual_response": record.actual_response,
+                "flock_name": record.flock_name,
+                "agent_name": record.agent_name,
+                "flock_definition": record.flock_definition,
+                "created_at": record.created_at.isoformat(),
+            }
+
+            await table_client.upsert_entity(entity)
+            logger.info(f"Saved feedback to Azure Table Storage: {record.feedback_id} (share={record.share_id})")
+            return record
+        except Exception as e:
+            logger.error(f"Error saving feedback to Azure Table Storage {record.feedback_id}: {e}", exc_info=True)
+            raise
+
+
+# ----------------------- Factory Function -----------------------
+
+def create_shared_link_store(store_type: str | None = None, connection_string: str | None = None) -> SharedLinkStoreInterface:
+    """Factory function to create the appropriate shared link store based on configuration.
+    
+    Args:
+        store_type: Type of store to create ("local" for SQLite, "azure-storage" for Azure Table Storage)
+        connection_string: Connection string for the store (file path for SQLite, connection string for Azure)
+    
+    Returns:
+        Configured SharedLinkStoreInterface implementation
+    """
+    import os
+
+    # Get values from environment if not provided
+    if store_type is None:
+        store_type = os.getenv("FLOCK_WEBAPP_STORE", "local").lower()
+
+    if connection_string is None:
+        connection_string = os.getenv("FLOCK_WEBAPP_STORE_CONNECTION", ".flock/shared_links.db")
+
+    if store_type == "local":
+        return SQLiteSharedLinkStore(connection_string)
+    elif store_type == "azure-storage":
+        return AzureTableSharedLinkStore(connection_string)
+    else:
+        raise ValueError(f"Unsupported store type: {store_type}. Supported types: 'local', 'azure-storage'")

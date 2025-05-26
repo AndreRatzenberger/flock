@@ -1,7 +1,6 @@
 {% if flock_files %}
 <ul class="item-list">
-    {% for file_name in flock_files %}
-    <li hx-get="/ui/htmx/dashboard-flock-properties-preview/{{ file_name }}" 
+    {% for file_name in flock_files %}    <li hx-get="{{ url_for('htmx_get_dashboard_flock_properties_preview', filename=file_name) }}" 
         hx-target="#flock-properties-or-action-content" {# Target the right pane #}
         hx-swap="innerHTML"
         hx-indicator="#flock-properties-or-action-content progress" 

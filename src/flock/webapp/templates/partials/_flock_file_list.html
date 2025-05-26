@@ -1,7 +1,6 @@
 {% if flock_files %}
 <ul class="item-list">
-    {% for file_name in flock_files %}
-    <li hx-post="/ui/load-flock-action/by-name" 
+    {% for file_name in flock_files %}    <li hx-post="{{ url_for('ui_load_flock_by_name_action') }}" 
         hx-vals='{"selected_flock_filename": "{{ file_name }}"}'
         {# After successful load, the main.py route for by-name will now return 
            the flock properties form targeted to the main content area AND
@@ -13,7 +12,7 @@
         hx-target="#main-content-area" {# This will load the editor page content #}
         hx-swap="innerHTML" 
         hx-indicator="#flock-file-list-loading-indicator"
-        hx-push-url="/ui/editor/properties"> {# Push URL to editor after load #}
+        hx-push-url="{{ url_for('page_editor_section', ui_mode='properties') }}"> {# Push URL to editor after load #}
         {{ file_name }}
     </li>
     {% endfor %}

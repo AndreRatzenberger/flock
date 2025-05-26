@@ -13,9 +13,8 @@
         <ul role="group">
             <li>
                 <button role="button" 
-                        class="outline" 
-                        hx-get="/ui/api/registry/htmx/type/table" 
-                        hx-target="#registry-table-container" 
+                        class="outline"                        hx-get="{{ url_for('htmx_get_registry_table', item_type='type') }}" 
+                        hx-target="#registry-table-container"
                         hx-indicator="#registry-loading"
                         hx-on:click="setActiveButton(this)">
                     View Types
@@ -23,9 +22,8 @@
             </li>
             <li>
                 <button role="button" 
-                        class="outline" 
-                        hx-get="/ui/api/registry/htmx/tool/table" 
-                        hx-target="#registry-table-container" 
+                        class="outline"                        hx-get="{{ url_for('htmx_get_registry_table', item_type='tool') }}" 
+                        hx-target="#registry-table-container"
                         hx-indicator="#registry-loading"
                         hx-on:click="setActiveButton(this)">
                     View Tools/Callables
@@ -33,9 +31,8 @@
             </li>
             <li>
                 <button role="button" 
-                        class="outline" 
-                        hx-get="/ui/api/registry/htmx/component/table" 
-                        hx-target="#registry-table-container" 
+                        class="outline"                        hx-get="{{ url_for('htmx_get_registry_table', item_type='component') }}" 
+                        hx-target="#registry-table-container"
                         hx-indicator="#registry-loading"
                         hx-on:click="setActiveButton(this)">
                     View Components
@@ -53,7 +50,7 @@
     </div>
 
     <footer style="margin-top: 2rem;">
-        <a href="/ui/editor" role="button" class="secondary contrast">Back to Editor</a>
+        <a href="{{ url_for('page_editor_section', section='execute') }}" role="button" class="secondary contrast">Back to Editor</a>
     </footer>
 </article>
 

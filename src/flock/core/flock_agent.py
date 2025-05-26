@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.workflow.temporal_config import TemporalActivityConfig
@@ -122,6 +123,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     modules: dict[str, FlockModule] = Field(  # Keep as dict
         default_factory=dict,
         description="Dictionary of FlockModules attached to this agent.",
+    )
+
+    config: FlockAgentConfig = Field(
+        default_factory=lambda: FlockAgentConfig(),
+        description="Configuration for this agent, holding various settings and parameters.",
     )
 
     # --- Temporal Configuration (Optional) ---
