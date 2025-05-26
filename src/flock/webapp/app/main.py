@@ -708,7 +708,8 @@ def get_base_context_web(
 @app.get("/", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_dashboard(
     request: Request, error: str = None, success: str = None, ui_mode: str = Query(None)
-):    # Handle initial redirect if flagged during app startup
+):
+    # Handle initial redirect if flagged during app startup
     if getattr(request.app.state, "initial_redirect_to_chat", False):
         logger.info("Initial redirect to CHAT page triggered from dashboard (FLOCK_START_MODE='chat').")
         # Use url_for to respect the root_path setting
@@ -721,8 +722,10 @@ async def page_dashboard(
     if effective_ui_mode is None:
         effective_ui_mode = "scoped" if flock_is_preloaded else "standalone"
         if effective_ui_mode == "scoped":
-            # Use url_for to respect the root_path setting
-            redirect_url = str(request.url_for("page_dashboard").include_query_params(ui_mode="scoped", initial_load="true"))
+            # Manually construct URL with root_path to ensure it works with proxy setups
+            root_path = request.scope.get("root_path", "")
+            redirect_url = f"{root_path}/?ui_mode=scoped&initial_load=true"
+            logger.info(f"Dashboard redirect: {redirect_url} (root_path: '{root_path}')")
             return RedirectResponse(url=redirect_url, status_code=307)
 
     if effective_ui_mode == "standalone" and flock_is_preloaded:
@@ -733,9 +736,9 @@ async def page_dashboard(
     flock_in_state = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
 
     if effective_ui_mode == "scoped":
-        context["initial_content_url"] = "/ui/htmx/execution-view-container" if flock_in_state else "/ui/htmx/scoped-no-flock-view"
+        context["initial_content_url"] = str(request.url_for("htmx_get_execution_view_container")) if flock_in_state else str(request.url_for("htmx_scoped_no_flock_view"))
     else:
-        context["initial_content_url"] = "/ui/htmx/load-flock-view"
+        context["initial_content_url"] = str(request.url_for("htmx_get_load_flock_view"))
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/editor/{section:path}", response_class=HTMLResponse, tags=["UI Pages"])
@@ -752,26 +755,29 @@ async def page_editor_section(
         return RedirectResponse(url=redirect_url, status_code=303)
 
     context = get_base_context_web(request, error, success, ui_mode)
+    root_path = request.scope.get("root_path", "")
     content_map = {
-        "properties": "/ui/api/flock/htmx/flock-properties-form",
-        "agents": "/ui/htmx/agent-manager-view",
-        "execute": "/ui/htmx/execution-view-container"
+        "properties": f"{root_path}/ui/api/flock/htmx/flock-properties-form",
+        "agents": f"{root_path}/ui/htmx/agent-manager-view",
+        "execute": f"{root_path}/ui/htmx/execution-view-container"
     }
-    context["initial_content_url"] = content_map.get(section, "/ui/htmx/load-flock-view")
+    context["initial_content_url"] = content_map.get(section, f"{root_path}/ui/htmx/load-flock-view")
     if section not in content_map: context["error_message"] = "Invalid editor section."
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/registry", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_registry(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
-    context["initial_content_url"] = "/ui/htmx/registry-viewer"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/registry-viewer"
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/create", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_create(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     clear_current_flock_service(request.app.state) # Pass app.state
     context = get_base_context_web(request, error, success, "standalone")
-    context["initial_content_url"] = "/ui/htmx/create-flock-form"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/create-flock-form"
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/htmx/sidebar", response_class=HTMLResponse, tags=["UI HTMX Partials"])
@@ -896,7 +902,8 @@ async def ui_create_flock_action(request: Request, flock_name: str = Form(...), 
 @app.get("/ui/settings", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_settings(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
-    context["initial_content_url"] = "/ui/htmx/settings-view"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/settings-view"
     return templates.TemplateResponse("base.html", context)
 
 def _prepare_env_vars_for_template_web():
