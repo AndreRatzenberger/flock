@@ -27,70 +27,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-# Custom middleware for handling proxy headers
-# from starlette.middleware.base import BaseHTTPMiddleware
-# from starlette.requests import Request as StarletteRequest
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-
-# class ProxyHeadersMiddleware(BaseHTTPMiddleware):
-#     """Middleware to handle proxy headers for HTTPS detection.
-#     This ensures url_for() generates HTTPS URLs when behind an HTTPS proxy.
-#     """
-#     async def dispatch(self, request: StarletteRequest, call_next):
-#         import logging
-#         logger = logging.getLogger(__name__)
-#         # Log original scheme and relevant headers for debugging
-#         original_scheme = request.scope.get("scheme", "unknown")
-#         logger.debug(f"Original scheme: {original_scheme}, URL: {request.url}")
-#         # Check for common proxy headers that indicate HTTPS
-#         forwarded_proto = request.headers.get("x-forwarded-proto")
-#         forwarded_scheme = request.headers.get("x-forwarded-scheme")
-#         cloudflare_proto = request.headers.get("cf-visitor")
-#         # Log proxy headers for debugging
-#         proxy_headers = {
-#             "x-forwarded-proto": forwarded_proto,
-#             "x-forwarded-scheme": forwarded_scheme,
-#             "cf-visitor": cloudflare_proto,
-#             "x-forwarded-for": request.headers.get("x-forwarded-for"),
-#             "host": request.headers.get("host")
-#         }
-#         logger.debug(f"Proxy headers: {proxy_headers}")
-#         scheme_updated = False
-#         # Handle X-Forwarded-Proto header
-#         if forwarded_proto:
-#             # Update the request scope to reflect the original protocol
-#             request.scope["scheme"] = forwarded_proto.lower()
-#             scheme_updated = True
-#             logger.debug(f"Updated scheme from X-Forwarded-Proto: {forwarded_proto}")
-#         # Handle X-Forwarded-Scheme header
-#         elif forwarded_scheme:
-#             request.scope["scheme"] = forwarded_scheme.lower()
-#             scheme_updated = True
-#             logger.debug(f"Updated scheme from X-Forwarded-Scheme: {forwarded_scheme}")
-#         # Handle Cloudflare's CF-Visitor header (JSON format)
-#         elif cloudflare_proto:
-#             try:
-#                 import json
-#                 visitor_info = json.loads(cloudflare_proto)
-#                 if visitor_info.get("scheme"):
-#                     request.scope["scheme"] = visitor_info["scheme"].lower()
-#                     scheme_updated = True
-#                     logger.debug(f"Updated scheme from CF-Visitor: {visitor_info['scheme']}")
-#             except (json.JSONDecodeError, KeyError) as e:
-#                 logger.warning(f"Failed to parse CF-Visitor header: {e}")
-#         if not scheme_updated:
-#             logger.debug("No proxy headers found, keeping original scheme")
-#         # Handle X-Forwarded-For for client IP (optional but good practice)
-#         forwarded_for = request.headers.get("x-forwarded-for")
-#         if forwarded_for:
-#             # Take the first IP in the chain (the original client)
-#             client_ip = forwarded_for.split(",")[0].strip()
-#             request.scope["client"] = (client_ip, request.scope.get("client", ["", 0])[1])
-#         # Log final scheme
-#         final_scheme = request.scope.get("scheme")
-#         logger.debug(f"Final scheme: {final_scheme}")
-#         response = await call_next(request)
-#         return response
 from flock.core.api.endpoints import create_api_router
 from flock.core.api.run_store import RunStore
 
@@ -123,6 +59,7 @@ from flock.webapp.app.dependencies import (
 )
 
 # Import service functions (which now expect app_state)
+from flock.webapp.app.middleware import ProxyHeadersMiddleware
 from flock.webapp.app.services.flock_service import (
     clear_current_flock_service,
     create_new_flock_service,
@@ -359,8 +296,10 @@ app = FastAPI(title="Flock Web UI & API", lifespan=lifespan, docs_url="/docs",
     openapi_url="/openapi.json", root_path=os.getenv("FLOCK_ROOT_PATH", ""))
 
 # Add middleware for handling proxy headers (HTTPS detection)
-app.add_middleware(ProxyHeadersMiddleware)
-logger.info("FastAPI booting complete with proxy headers middleware.")
+# You can force HTTPS by setting FLOCK_FORCE_HTTPS=true
+force_https = os.getenv("FLOCK_FORCE_HTTPS", "false").lower() == "true"
+app.add_middleware(ProxyHeadersMiddleware, force_https=force_https)
+logger.info(f"FastAPI booting complete with proxy headers middleware (force_https={force_https}).")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
