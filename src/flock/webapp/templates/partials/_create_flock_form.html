@@ -15,8 +15,7 @@
     {% endif %}
     
     <section id="create-by-details-section">
-        <h4>Define New Flock Properties</h4>
-        <form hx-post="/ui/create-flock" 
+        <h4>Define New Flock Properties</h4>        <form hx-post="{{ url_for('create_flock') }}" 
               hx-target="#main-content-area" {# On success, loads properties form into main area #}
               hx-swap="innerHTML" 
               hx-indicator="#create-indicator-details">
@@ -37,8 +36,7 @@
     <hr>
 
     <section id="create-by-upload-section">
-        <h4>Upload Existing Flock File</h4>
-        <form hx-post="/ui/load-flock-action/by-upload"
+        <h4>Upload Existing Flock File</h4>        <form hx-post="{{ url_for('load_flock_by_upload') }}"
               hx-target="#main-content-area" {# On success, loads properties form into main area #}
               hx-swap="innerHTML"
               hx-encoding="multipart/form-data"

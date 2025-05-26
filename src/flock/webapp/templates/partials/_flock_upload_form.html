@@ -1,8 +1,7 @@
 <article>
     <header>
         <h5>Upload New Flock File</h5>
-    </header>
-    <form hx-post="/ui/load-flock-action/by-upload"
+    </header>    <form hx-post="{{ url_for('load_flock_by_upload') }}"
           hx-target="#main-content-area" {# After upload, go to editor #}
           hx-swap="innerHTML"
           hx-encoding="multipart/form-data"

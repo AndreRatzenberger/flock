@@ -6,12 +6,11 @@
     <title>Flock Shared Agent: {{ selected_agent_name }}</title>
     
     {# Link to Pico.css #}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <link rel="stylesheet" href="/static/css/layout.css">
-    <link rel="stylesheet" href="/static/css/header.css">
-    <link rel="stylesheet" href="/static/css/sidebar.css">
-    <link rel="stylesheet" href="/static/css/components.css">
-    <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />    <link rel="stylesheet" href="{{ url_for('static', path='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/header.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/sidebar.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/chat.css') }}">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Prism.js CSS for syntax highlighting (okaidia theme) -->
@@ -49,10 +48,8 @@
         {% if selected_agent_name and not error_message %} {# Only show form if no fatal error and agent is selected #}
             <div style="display: flex; gap: var(--pico-spacing, 1rem);">
                 <div style="flex: 1;">
-                    <article id="execution-form-content">
-                        <form id="agent-run-form-shared" 
-                              hx-post="/ui/api/flock/htmx/run-shared" 
-                              hx-target="#results-display" 
+                    <article id="execution-form-content">                        <form id="agent-run-form-shared"                              hx-post="{{ url_for('htmx_run_shared_flock') }}" 
+                              hx-target="#results-display"
                               hx-swap="innerHTML" 
                               hx-indicator="#run-loading-indicator">
                             

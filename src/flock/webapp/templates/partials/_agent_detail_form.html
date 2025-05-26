@@ -11,12 +11,9 @@
              x-transition:leave-end="opacity-0">
             {{ form_message }}
         </div>
-    {% endif %}
-
-    <form {% if is_new %}
-              hx-post="/ui/api/flock/htmx/agents"
-          {% else %}
-              hx-put="/ui/api/flock/htmx/agents/{{ agent.name if agent else '' }}"
+    {% endif %}    <form {% if is_new %}              hx-post="{{ url_for('htmx_create_agent') }}"
+              {% else %}
+              hx-put="{{ url_for('htmx_update_agent', original_agent_name=agent.name if agent else '') }}"
           {% endif %}
           hx-target="#agent-detail-form-content"
           hx-swap="innerHTML"
@@ -75,18 +72,15 @@
             <button type="submit">
                 {% if is_new %}Create Agent{% else %}Save Changes{% endif %}
             </button>
-            {% if not is_new and agent %}
-            <button type="button" role="button" class="secondary outline"
-                    hx-delete="/ui/api/flock/htmx/agents/{{ agent.name }}"
-                    hx-target="#agent-detail-form-content" 
+            {% if not is_new and agent %}            <button type="button" role="button" class="secondary outline"                    hx-delete="{{ url_for('htmx_delete_agent', agent_name=agent.name) }}"
+                    hx-target="#agent-detail-form-content"
                     hx-confirm="Are you sure you want to delete agent '{{ agent.name }}'?"
                     hx-indicator="#agent-detail-loading-indicator">
                 Delete Agent
             </button>
             {% endif %}
-            <button type="button" class="outline" 
-                    hx-get="/ui/api/flock/htmx/agents/new-agent-form" 
-                    hx-target="#agent-detail-panel" 
+            <button type="button" class="outline"                    hx-get="{{ url_for('htmx_get_new_agent_form') }}" 
+                    hx-target="#agent-detail-panel"
                     hx-swap="innerHTML"
                     hx-indicator="#agent-detail-loading-indicator">
                 Cancel / New Form
