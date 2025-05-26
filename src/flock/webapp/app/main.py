@@ -1,4 +1,5 @@
 # src/flock/webapp/app/main.py
+import asyncio
 import json
 import os  # Added import
 import shutil
@@ -31,6 +32,7 @@ from flock.core.api.run_store import RunStore
 
 # Import core Flock components and API related modules
 from flock.core.flock import Flock  # For type hinting
+from flock.core.flock_scheduler import FlockScheduler
 from flock.core.logging.logging import get_logger  # For logging
 from flock.core.util.spliter import parse_schema
 
@@ -232,8 +234,62 @@ async def lifespan(app: FastAPI):
             logger.info(f"Lifespan: Added {len(pending_endpoints)} custom API routes to main app.")
         else:
             logger.warning("Lifespan: Pending custom endpoints found, but no Flock instance in app.state. Cannot add custom routes.")
+
+    # --- Add Scheduler Startup Logic ---
+    flock_instance_from_state: Flock | None = getattr(app.state, "flock_instance", None)
+    if flock_instance_from_state:
+        # Create and start the scheduler
+        scheduler = FlockScheduler(flock_instance_from_state)
+        app.state.flock_scheduler = scheduler  # Store for access during shutdown
+
+        scheduler_loop_task = await scheduler.start() # Start returns the task
+        if scheduler_loop_task:
+            app.state.flock_scheduler_task = scheduler_loop_task # Store the task
+            logger.info("FlockScheduler background task started.")
+        else:
+            app.state.flock_scheduler_task = None
+            logger.info("FlockScheduler initialized, but no scheduled agents found or loop not started.")
+    else:
+        app.state.flock_scheduler = None
+        app.state.flock_scheduler_task = None
+        logger.warning("No Flock instance found in app.state; FlockScheduler not started.")
+    # --- End Scheduler Startup Logic ---
+
     yield
     logger.info("FastAPI application shutting down...")
+
+     # --- Add Scheduler Shutdown Logic ---
+    logger.info("FastAPI application initiating shutdown...")
+    scheduler_to_stop: FlockScheduler | None = getattr(app.state, "flock_scheduler", None)
+    scheduler_task_to_await: asyncio.Task | None = getattr(app.state, "flock_scheduler_task", None)
+
+    if scheduler_to_stop:
+        logger.info("Attempting to stop FlockScheduler...")
+        await scheduler_to_stop.stop() # Signal the scheduler loop to stop
+
+        if scheduler_task_to_await and not scheduler_task_to_await.done():
+            logger.info("Waiting for FlockScheduler task to complete...")
+            try:
+                await asyncio.wait_for(scheduler_task_to_await, timeout=10.0) # Wait for graceful exit
+                logger.info("FlockScheduler task completed gracefully.")
+            except asyncio.TimeoutError:
+                logger.warning("FlockScheduler task did not complete in time, cancelling.")
+                scheduler_task_to_await.cancel()
+                try:
+                    await scheduler_task_to_await # Await cancellation
+                except asyncio.CancelledError:
+                    logger.info("FlockScheduler task cancelled.")
+            except Exception as e:
+                logger.error(f"Error during FlockScheduler task finalization: {e}", exc_info=True)
+        elif scheduler_task_to_await and scheduler_task_to_await.done():
+            logger.info("FlockScheduler task was already done.")
+        else:
+            logger.info("FlockScheduler instance found, but no running task was stored to await.")
+    else:
+        logger.info("No active FlockScheduler found to stop.")
+
+    logger.info("FastAPI application finished shutdown sequence.")
+    # --- End Scheduler Shutdown Logic ---
 
 app = FastAPI(title="Flock Web UI & API", lifespan=lifespan, docs_url="/docs",
     openapi_url="/openapi.json", root_path=os.getenv("FLOCK_ROOT_PATH", ""))

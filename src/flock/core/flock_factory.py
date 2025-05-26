@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import AnyUrl, BaseModel, Field, FileUrl
 
+from flock.core.config.scheduled_agent_config import ScheduledAgentConfig
 from flock.core.flock_agent import FlockAgent, SignatureType
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
@@ -380,4 +381,47 @@ class FlockFactory:
 
         agent.add_module(output_module)
         agent.add_module(metrics_module)
+        return agent
+
+    @staticmethod
+    def create_scheduled_agent(
+        name: str,
+        schedule_expression: str, # e.g., "every 1h", "0 0 * * *"
+        description: str | Callable[..., str] | None = None,
+        model: str | Callable[..., str] | None = None,
+        input: SignatureType = None, # Input might be implicit or none
+        output: SignatureType = None, # Input might be implicit or none
+        tools: list[Callable[..., Any] | Any] | None = None,
+        servers: list[str | FlockMCPServerBase] | None = None,
+        use_cache: bool = False, # Whether to cache results
+        temperature: float = 0.7, # Temperature for model responses
+        # ... other common agent params from create_default_agent ...
+        temporal_activity_config: TemporalActivityConfig | None = None, # If you want scheduled tasks to be Temporal activities
+        **kwargs # Forward other standard agent params
+    ) -> FlockAgent:
+        """Creates a FlockAgent configured to run on a schedule."""
+        agent_config = ScheduledAgentConfig( # Use the new config type
+            schedule_expression=schedule_expression,
+            enabled=True,
+            initial_run=True,
+            max_runs=0,
+            **kwargs
+        )
+
+
+        agent = FlockFactory.create_default_agent( # Reuse your existing factory
+            name=name,
+            description=description,
+            model=model,
+            input=input + ", trigger_time: str | Time of scheduled execution",
+            output=output,
+            tools=tools,
+            servers=servers,
+            temporal_activity_config=temporal_activity_config,
+            use_cache=use_cache,
+            temperature=temperature,
+            **kwargs
+        )
+        agent.config = agent_config  # Assign the scheduled agent config
+
         return agent

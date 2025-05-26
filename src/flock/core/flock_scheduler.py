@@ -140,25 +140,27 @@ class FlockScheduler:
         self._is_running = False
         logger.info("FlockScheduler loop stopped.")
 
-    async def start(self):
+    async def start(self) -> asyncio.Task | None: # Modified to return Task or None
         if self._is_running:
             logger.warning("Scheduler is already running.")
-            return
+            return None # Or return the existing task if you store it
 
         self._load_scheduled_agents_from_flock()
         if not self._scheduled_tasks:
-            logger.info("No scheduled agents found. Scheduler will not start.")
-            return
+            logger.info("No scheduled agents found. Scheduler will not start a loop task.")
+            return None # Return None if no tasks to schedule
 
         self._stop_event.clear()
-        # It's usually better to return the task if the caller wants to await its completion or manage it
         loop_task = asyncio.create_task(self._scheduler_loop())
-        return loop_task
+        # Store the task if you need to reference it, e.g., for forced cancellation beyond _stop_event
+        # self._loop_task = loop_task
+        return loop_task # Return the created task
 
     async def stop(self):
-        if not self._is_running:
-            logger.info("Scheduler is not running.")
+        if not self._is_running and not self._stop_event.is_set(): # Check if stop already called
+            logger.info("Scheduler is not running or already signaled to stop.")
             return
         logger.info("Stopping FlockScheduler...")
         self._stop_event.set()
-        # Wait for the loop to finish if needed, or just signal
+        # If you stored self._loop_task, you can await it here or in the lifespan manager
+        # await self._loop_task # (This might block if loop doesn't exit quickly)
