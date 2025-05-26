@@ -26,7 +26,7 @@ from flock.core.serialization.serialization_utils import (
     serialize_item,
 )
 
-logger = get_logger("core.mcp.server_base")
+logger = get_logger("mcp.server")
 tracer = trace.get_tracer(__name__)
 T = TypeVar("T", bound="FlockMCPServerBase")
 

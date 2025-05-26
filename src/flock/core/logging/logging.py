@@ -68,6 +68,14 @@ COLOR_MAP = {
     "workflow": "cyan",  # Color only
     "activities": "cyan",
     "context": "green",
+    "mcp.server": "blue",
+    "mcp.tool": "cyan",
+    "mcp.client_manager": "light-blue",
+    "mcp.client": "light-cyan",
+    "mcp.callback.logging": "white",
+    "mcp.callback.sampling": "pink",
+    "mcp.callback.root": "light-yellow",
+    "mcp.callback.message": "light-blue",
     # Components & Mechanisms
     "registry": "yellow",  # Color only
     "serialization": "yellow",

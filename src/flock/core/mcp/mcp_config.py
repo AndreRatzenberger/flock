@@ -245,14 +245,13 @@ class FlockMCPConnectionConfigurationBase(BaseModel, Serializable):
         if connection_params:
             kind = connection_params.get("transport_type", None)
             auth_spec = connection_params.get("auth", None)
-            if auth_spec and kind:
+            if auth_spec:
                 # find the concrete implementation and
                 # instantiate it.
-                if kind == "sse" or kind == "streamable_http":
                     # find the concrete implementation for auth and instatiate it.
-                    impl = auth_spec.get("implementation", None)
-                    params = auth_spec.get("params", None)
-                    if impl and params:
+                impl = auth_spec.get("implementation", None)
+                params = auth_spec.get("params", None)
+                if impl and params:
                         mod = importlib.import_module(impl["module_path"])
                         real_cls = getattr(mod, impl["class_name"])
                         auth_obj = real_cls(**{k: v for k, v in params.items()})

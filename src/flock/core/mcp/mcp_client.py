@@ -55,7 +55,7 @@ from flock.core.mcp.types.types import (
 )
 from flock.core.mcp.util.helpers import cache_key_generator
 
-logger = get_logger("core.mcp.client_base")
+logger = get_logger("mcp.client")
 tracer = trace.get_tracer(__name__)
 
 GetSessionIdCallback = Callable[[], str | None]
@@ -162,9 +162,7 @@ class FlockMCPClientBase(BaseModel, ABC):
                     max_tries = cfg.connection_config.max_retries or 1
                     base_delay = 0.1
                     span.set_attribute("client.name", client.config.name)
-                    span.set_attribute(
-                            "max_tries", max_tries
-                        )
+                    span.set_attribute("max_tries", max_tries)
 
                     for attempt in range(1, max_tries + 2):
                         span.set_attribute("base_delay", base_delay)
@@ -519,8 +517,7 @@ class FlockMCPClientBase(BaseModel, ABC):
             if self.session_stack:
                 # manually __aexit__
                 await self.session_stack.aclose()
-                self.session_stack = AsyncExitStack()
-                self.client_session = None
+                self.client_session = None  # remove the reference
 
     # --- Private Methods ---
     @asynccontextmanager
@@ -541,6 +538,10 @@ class FlockMCPClientBase(BaseModel, ABC):
     async def _create_session(self) -> None:
         """Create and hold onto a single ClientSession + ExitStack."""
         logger.debug(f"Creating Client Session for server '{self.config.name}'")
+        if self.session_stack:
+            await self.session_stack.aclose()
+        if self.client_session:
+            self.client_session = None
         stack = AsyncExitStack()
         await stack.__aenter__()
 
@@ -642,18 +643,7 @@ class FlockMCPClientBase(BaseModel, ABC):
 
         self.connected_server_capabilities = init
 
-        init_report = f"""
-            Server Init Handshake completed Server '{self.config.name}'
-            Lists the following Capabilities:
-
-            - Protocol Version: {init.protocolVersion}
-            - Instructions: {init.instructions or "No specific Instructions"}
-            - MCP Implementation:
-                - Name: {init.serverInfo.name}
-                - Version: {init.serverInfo.version}
-            - Capabilities:
-                {init.capabilities}
-            """
+        init_report = f"Server: '{self.config.name}': Protocol-Version: {init.protocolVersion}, Instructions: {init.instructions or 'No specific instructions'}, MCP_Implementation: Name: {init.serverInfo.name}, Version: {init.serverInfo.version}, Capabilities: {init.capabilities}"
 
         logger.debug(init_report)
 

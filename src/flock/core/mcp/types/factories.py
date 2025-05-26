@@ -23,10 +23,10 @@ from flock.core.mcp.types.types import (
     ServerNotification,
 )
 
-default_logging_callback_logger = get_logger("core.mcp.callback.logging")
-default_sampling_callback_logger = get_logger("core.mcp.callback.sampling")
-default_list_roots_callback_logger = get_logger("core.mcp.callback.sampling")
-default_message_handler_logger = get_logger("core.mcp.callback.message")
+default_logging_callback_logger = get_logger("mcp.callback.logging")
+default_sampling_callback_logger = get_logger("mcp.callback.sampling")
+default_list_roots_callback_logger = get_logger("mcp.callback.roots")
+default_message_handler_logger = get_logger("mcp.callback.message")
 
 
 def default_flock_mcp_logging_callback_factory(
