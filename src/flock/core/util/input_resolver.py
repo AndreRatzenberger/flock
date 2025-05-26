@@ -1,7 +1,7 @@
 """Utility functions for resolving input keys to their corresponding values."""
 
 from flock.core.context.context import FlockContext
-from flock.core.util.spliter import split_top_level
+from flock.core.util.splitter import split_top_level
 
 
 def get_callable_members(obj):

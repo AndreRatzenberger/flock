@@ -9,7 +9,7 @@ from typing import Any, Literal
 from dspy import Tool
 
 from flock.core.logging.logging import get_logger
-from flock.core.util.spliter import split_top_level
+from flock.core.util.splitter import split_top_level
 
 # Import split_top_level (assuming it's moved or copied appropriately)
 # Option 1: If moved to a shared util
