@@ -7,6 +7,7 @@ from asyncio import Lock
 from collections.abc import Callable
 from contextlib import (
     AsyncExitStack,
+    asynccontextmanager,
 )
 from datetime import timedelta
 from typing import (
@@ -518,10 +519,25 @@ class FlockMCPClientBase(BaseModel, ABC):
             if self.session_stack:
                 # manually __aexit__
                 await self.session_stack.aclose()
-                self.session_stack = None
+                self.session_stack = AsyncExitStack()
                 self.client_session = None
 
     # --- Private Methods ---
+    @asynccontextmanager
+    async def _safe_transport_ctx(self, cm: Any):
+        """Enter the real transport ctxmg, yield its value, but on __aexit__ always swallow all errors."""
+        val = await cm.__aenter__()
+        try:
+            yield val
+        finally:
+            try:
+                await cm.__aexit__(None, None, None)
+            except Exception as e:
+                logger.debug(
+                    f"Suppressed transport-ctx exit error "
+                    f"for server '{self.config.name}': {e!r}"
+                )
+
     async def _create_session(self) -> None:
         """Create and hold onto a single ClientSession + ExitStack."""
         logger.debug(f"Creating Client Session for server '{self.config.name}'")
@@ -534,7 +550,8 @@ class FlockMCPClientBase(BaseModel, ABC):
         transport_ctx = await self.create_transport(
             server_params, self.additional_params
         )
-        result = await stack.enter_async_context(transport_ctx)
+        safe_transport = self._safe_transport_ctx(transport_ctx)
+        result = await stack.enter_async_context(safe_transport)
 
         # support old (read, write) or new (read, write, get_sesssion_id_callback)
         read: MemoryObjectReceiveStream | None = None
