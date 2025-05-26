@@ -9,7 +9,7 @@ from anyio.streams.memory import (
     MemoryObjectSendStream,
 )
 from mcp.client.websocket import websocket_client
-from mcp.types import JSONRPCMessage
+from mcp.shared.message import SessionMessage
 from opentelemetry import trace
 from pydantic import Field
 
@@ -69,8 +69,8 @@ class FlockWSClient(FlockMCPClientBase):
         additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
-            MemoryObjectReceiveStream[JSONRPCMessage | Exception],
-            MemoryObjectSendStream[JSONRPCMessage],
+            MemoryObjectReceiveStream[SessionMessage | Exception],
+            MemoryObjectSendStream[SessionMessage],
         ]
     ]:
         """Return an async context manager whose __aenter__ method yields a read_stream and a send_stream."""

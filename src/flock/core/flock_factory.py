@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from pydantic import AnyUrl, BaseModel, Field, FileUrl
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, FileUrl
 
 from flock.core.flock_agent import FlockAgent, SignatureType
 from flock.core.logging.formatters.themes import OutputTheme
@@ -140,9 +140,10 @@ class FlockFactory:
             description="Whether or not to terminate the underlying connection on close."
         )
 
-        model_config = {
-            "arbitrary_types_allowed": True
-        }
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+            extra="allow",
+        )
 
     class SSEParams(BaseModel):
         """Factory-Params for SSE-Servers."""
@@ -171,10 +172,10 @@ class FlockFactory:
             description="Httpx Auth Scheme."
         )
 
-        model_config = {
-            "arbitrary_types_allowed": True
-        }
-
+        model_config = ConfigDict(
+            arbitrary_types_allowed=True,
+            extra="allow",
+        )
 
     class WebsocketParams(BaseModel):
         """Factory-Params for Websocket Servers."""

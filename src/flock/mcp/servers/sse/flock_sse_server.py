@@ -10,7 +10,7 @@ from anyio.streams.memory import (
     MemoryObjectSendStream,
 )
 from mcp.client.sse import sse_client
-from mcp.types import JSONRPCMessage
+from mcp.shared.message import SessionMessage
 from opentelemetry import trace
 from pydantic import Field
 
@@ -64,8 +64,8 @@ class FlockSSEClient(FlockMCPClientBase):
         additional_params: dict[str, Any] | None = None,
     ) -> AbstractAsyncContextManager[
         tuple[
-            MemoryObjectReceiveStream[JSONRPCMessage | Exception],
-            MemoryObjectSendStream[JSONRPCMessage],
+            MemoryObjectReceiveStream[SessionMessage | Exception],
+            MemoryObjectSendStream[SessionMessage],
         ]
     ]:
         """Return an async context manager whose __aenter__ method yields (read_stream, send_stream)."""

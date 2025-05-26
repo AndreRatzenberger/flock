@@ -8,6 +8,8 @@ from mcp.types import (
     CreateMessageRequestParams,
     ErrorData,
     ListRootsResult,
+    LoggingMessageNotificationParams,
+    ServerNotification,
     ServerRequest,
 )
 
@@ -18,10 +20,6 @@ from flock.core.mcp.types.handlers import (
     handle_incoming_request,
     handle_incoming_server_notification,
     handle_logging_message,
-)
-from flock.core.mcp.types.types import (
-    FlockLoggingMessageNotificationParams,
-    ServerNotification,
 )
 
 
@@ -76,7 +74,7 @@ async def default_list_roots_callback(
 
 
 async def default_logging_callback(
-    params: FlockLoggingMessageNotificationParams,
+    params: LoggingMessageNotificationParams,
     logger: FlockLogger,
     server_name: str,
 ) -> None:

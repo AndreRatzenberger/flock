@@ -4,8 +4,8 @@ import asyncio
 import random
 from abc import ABC, abstractmethod
 from asyncio import Lock
+from collections.abc import Callable
 from contextlib import (
-    AbstractAsyncContextManager,
     AsyncExitStack,
 )
 from datetime import timedelta
@@ -27,7 +27,7 @@ from mcp import (
     McpError,
     ServerCapabilities,
 )
-from mcp.types import CallToolResult, JSONRPCMessage
+from mcp.types import CallToolResult
 from opentelemetry import trace
 from pydantic import (
     BaseModel,
@@ -56,6 +56,8 @@ from flock.core.mcp.util.helpers import cache_key_generator
 
 logger = get_logger("core.mcp.client_base")
 tracer = trace.get_tracer(__name__)
+
+GetSessionIdCallback = Callable[[], str | None]
 
 
 class FlockMCPClientBase(BaseModel, ABC):
@@ -159,11 +161,11 @@ class FlockMCPClientBase(BaseModel, ABC):
                     max_tries = cfg.connection_config.max_retries or 1
                     base_delay = 0.1
                     span.set_attribute("client.name", client.config.name)
+                    span.set_attribute(
+                            "max_tries", max_tries
+                        )
 
                     for attempt in range(1, max_tries + 2):
-                        span.set_attribute(
-                            "max_tries", max_tries
-                        )  # TODO: shift outside of loop
                         span.set_attribute("base_delay", base_delay)
                         span.set_attribute("attempt", attempt)
                         await client._ensure_connected()
@@ -364,12 +366,7 @@ class FlockMCPClientBase(BaseModel, ABC):
         self,
         params: ServerParameters,
         additional_params: dict[str, Any] | None = None,
-    ) -> AbstractAsyncContextManager[
-        tuple[
-            MemoryObjectReceiveStream[JSONRPCMessage | Exception],
-            MemoryObjectSendStream[JSONRPCMessage],
-        ]
-    ]:
+    ) -> Any:
         """Given your custom ServerParameters, return an async-contextmgr whose __aenter yields (read_stream, write_stream)."""
         ...
 
@@ -526,7 +523,7 @@ class FlockMCPClientBase(BaseModel, ABC):
 
     # --- Private Methods ---
     async def _create_session(self) -> None:
-        """Create and hol onto a single ClientSession + ExitStack."""
+        """Create and hold onto a single ClientSession + ExitStack."""
         logger.debug(f"Creating Client Session for server '{self.config.name}'")
         stack = AsyncExitStack()
         await stack.__aenter__()
@@ -537,7 +534,29 @@ class FlockMCPClientBase(BaseModel, ABC):
         transport_ctx = await self.create_transport(
             server_params, self.additional_params
         )
-        read, write = await stack.enter_async_context(transport_ctx)
+        result = await stack.enter_async_context(transport_ctx)
+
+        # support old (read, write) or new (read, write, get_sesssion_id_callback)
+        read: MemoryObjectReceiveStream | None = None
+        write: MemoryObjectSendStream | None = None
+        get_session_id_callback: GetSessionIdCallback | None = None
+        if isinstance(result, tuple) and len(result) == 2:
+            # old type
+            read, write = result
+            get_session_id_callback = None
+        elif isinstance(result, tuple) and len(result) == 3:
+            # new type
+            read, write, get_session_id_callback = result
+        else:
+            raise RuntimeError(
+                f"create_transport returned unexpected tuple of {result}"
+            )
+
+        if read is None or write is None:
+            raise RuntimeError(
+                f"create_transport did not create any read or write streams."
+            )
+
         read_timeout = self.config.connection_config.read_timeout_seconds
 
         if (
@@ -553,6 +572,8 @@ class FlockMCPClientBase(BaseModel, ABC):
             if isinstance(read_timeout, timedelta)
             else timedelta(seconds=float(read_timeout))
         )
+
+        # TODO: get_session_id_callback is currently ignored.
 
         session = await stack.enter_async_context(
             ClientSession(
