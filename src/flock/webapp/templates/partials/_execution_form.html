@@ -38,9 +38,7 @@ window.agentInputFormUrlTemplate = '{{ url_for("htmx_get_agent_input_form", agen
             <progress indeterminate></progress> Loading input form...
         </div>
 
-        <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>
-
-        <div id="share-agent-link-container" style="margin-top: 0.5rem;">            <a href="#" 
+        <button type="submit" {% if not flock.agents %}disabled{% endif %}>Run Flock</button>        <div id="share-agent-link-container" style="margin-top: 0.5rem;">            <a href="#" 
                id="shareAgentHtmxLink"
                hx-post="{{ url_for('htmx_generate_share_link') }}" 
                hx-target="#shareLinkDisplayArea" 
@@ -50,6 +48,9 @@ window.agentInputFormUrlTemplate = '{{ url_for("htmx_get_agent_input_form", agen
                style="text-decoration: underline; cursor: pointer; color: var(--pico-primary);">
                 Create shareable link...
             </a>
+            <span id="share-loading-indicator" class="htmx-indicator">
+                <progress indeterminate></progress> Generating link...
+            </span>
         </div>
 
         <span id="run-loading-indicator" class="htmx-indicator">

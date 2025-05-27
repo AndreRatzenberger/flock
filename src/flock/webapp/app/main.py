@@ -3,7 +3,6 @@ import asyncio
 import json
 import os  # Added import
 import shutil
-import urllib.parse
 
 # Added for share link creation
 import uuid
@@ -27,70 +26,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-# Custom middleware for handling proxy headers
-# from starlette.middleware.base import BaseHTTPMiddleware
-# from starlette.requests import Request as StarletteRequest
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-
-# class ProxyHeadersMiddleware(BaseHTTPMiddleware):
-#     """Middleware to handle proxy headers for HTTPS detection.
-#     This ensures url_for() generates HTTPS URLs when behind an HTTPS proxy.
-#     """
-#     async def dispatch(self, request: StarletteRequest, call_next):
-#         import logging
-#         logger = logging.getLogger(__name__)
-#         # Log original scheme and relevant headers for debugging
-#         original_scheme = request.scope.get("scheme", "unknown")
-#         logger.debug(f"Original scheme: {original_scheme}, URL: {request.url}")
-#         # Check for common proxy headers that indicate HTTPS
-#         forwarded_proto = request.headers.get("x-forwarded-proto")
-#         forwarded_scheme = request.headers.get("x-forwarded-scheme")
-#         cloudflare_proto = request.headers.get("cf-visitor")
-#         # Log proxy headers for debugging
-#         proxy_headers = {
-#             "x-forwarded-proto": forwarded_proto,
-#             "x-forwarded-scheme": forwarded_scheme,
-#             "cf-visitor": cloudflare_proto,
-#             "x-forwarded-for": request.headers.get("x-forwarded-for"),
-#             "host": request.headers.get("host")
-#         }
-#         logger.debug(f"Proxy headers: {proxy_headers}")
-#         scheme_updated = False
-#         # Handle X-Forwarded-Proto header
-#         if forwarded_proto:
-#             # Update the request scope to reflect the original protocol
-#             request.scope["scheme"] = forwarded_proto.lower()
-#             scheme_updated = True
-#             logger.debug(f"Updated scheme from X-Forwarded-Proto: {forwarded_proto}")
-#         # Handle X-Forwarded-Scheme header
-#         elif forwarded_scheme:
-#             request.scope["scheme"] = forwarded_scheme.lower()
-#             scheme_updated = True
-#             logger.debug(f"Updated scheme from X-Forwarded-Scheme: {forwarded_scheme}")
-#         # Handle Cloudflare's CF-Visitor header (JSON format)
-#         elif cloudflare_proto:
-#             try:
-#                 import json
-#                 visitor_info = json.loads(cloudflare_proto)
-#                 if visitor_info.get("scheme"):
-#                     request.scope["scheme"] = visitor_info["scheme"].lower()
-#                     scheme_updated = True
-#                     logger.debug(f"Updated scheme from CF-Visitor: {visitor_info['scheme']}")
-#             except (json.JSONDecodeError, KeyError) as e:
-#                 logger.warning(f"Failed to parse CF-Visitor header: {e}")
-#         if not scheme_updated:
-#             logger.debug("No proxy headers found, keeping original scheme")
-#         # Handle X-Forwarded-For for client IP (optional but good practice)
-#         forwarded_for = request.headers.get("x-forwarded-for")
-#         if forwarded_for:
-#             # Take the first IP in the chain (the original client)
-#             client_ip = forwarded_for.split(",")[0].strip()
-#             request.scope["client"] = (client_ip, request.scope.get("client", ["", 0])[1])
-#         # Log final scheme
-#         final_scheme = request.scope.get("scheme")
-#         logger.debug(f"Final scheme: {final_scheme}")
-#         response = await call_next(request)
-#         return response
 from flock.core.api.endpoints import create_api_router
 from flock.core.api.run_store import RunStore
 
@@ -123,6 +58,7 @@ from flock.webapp.app.dependencies import (
 )
 
 # Import service functions (which now expect app_state)
+from flock.webapp.app.middleware import ProxyHeadersMiddleware
 from flock.webapp.app.services.flock_service import (
     clear_current_flock_service,
     create_new_flock_service,
@@ -359,8 +295,10 @@ app = FastAPI(title="Flock Web UI & API", lifespan=lifespan, docs_url="/docs",
     openapi_url="/openapi.json", root_path=os.getenv("FLOCK_ROOT_PATH", ""))
 
 # Add middleware for handling proxy headers (HTTPS detection)
-app.add_middleware(ProxyHeadersMiddleware)
-logger.info("FastAPI booting complete with proxy headers middleware.")
+# You can force HTTPS by setting FLOCK_FORCE_HTTPS=true
+force_https = os.getenv("FLOCK_FORCE_HTTPS", "false").lower() == "true"
+app.add_middleware(ProxyHeadersMiddleware, force_https=force_https)
+logger.info(f"FastAPI booting complete with proxy headers middleware (force_https={force_https}).")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -774,7 +712,9 @@ async def page_dashboard(
     # Handle initial redirect if flagged during app startup
     if getattr(request.app.state, "initial_redirect_to_chat", False):
         logger.info("Initial redirect to CHAT page triggered from dashboard (FLOCK_START_MODE='chat').")
-        return RedirectResponse(url="/chat", status_code=307)
+        # Use url_for to respect the root_path setting
+        chat_url = str(request.url_for("page_chat"))
+        return RedirectResponse(url=chat_url, status_code=307)
 
     effective_ui_mode = ui_mode
     flock_is_preloaded = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
@@ -782,7 +722,11 @@ async def page_dashboard(
     if effective_ui_mode is None:
         effective_ui_mode = "scoped" if flock_is_preloaded else "standalone"
         if effective_ui_mode == "scoped":
-             return RedirectResponse(url=f"/?ui_mode=scoped&initial_load=true", status_code=307)
+            # Manually construct URL with root_path to ensure it works with proxy setups
+            root_path = request.scope.get("root_path", "")
+            redirect_url = f"{root_path}/?ui_mode=scoped&initial_load=true"
+            logger.info(f"Dashboard redirect: {redirect_url} (root_path: '{root_path}')")
+            return RedirectResponse(url=redirect_url, status_code=307)
 
     if effective_ui_mode == "standalone" and flock_is_preloaded:
         clear_current_flock_service(request.app.state) # Pass app.state
@@ -792,9 +736,9 @@ async def page_dashboard(
     flock_in_state = hasattr(request.app.state, "flock_instance") and request.app.state.flock_instance is not None
 
     if effective_ui_mode == "scoped":
-        context["initial_content_url"] = "/ui/htmx/execution-view-container" if flock_in_state else "/ui/htmx/scoped-no-flock-view"
+        context["initial_content_url"] = str(request.url_for("htmx_get_execution_view_container")) if flock_in_state else str(request.url_for("htmx_scoped_no_flock_view"))
     else:
-        context["initial_content_url"] = "/ui/htmx/load-flock-view"
+        context["initial_content_url"] = str(request.url_for("htmx_get_load_flock_view"))
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/editor/{section:path}", response_class=HTMLResponse, tags=["UI Pages"])
@@ -804,31 +748,36 @@ async def page_editor_section(
     flock_instance_from_state: Flock | None = getattr(request.app.state, "flock_instance", None)
     if not flock_instance_from_state:
         err_msg = "No flock loaded. Please load or create a flock first."
-        redirect_url = f"/?error={urllib.parse.quote(err_msg)}"
-        if ui_mode == "scoped": redirect_url += "&ui_mode=scoped"
+        # Use url_for to respect the root_path setting
+        redirect_url = str(request.url_for("page_dashboard").include_query_params(error=err_msg))
+        if ui_mode == "scoped":
+            redirect_url = str(request.url_for("page_dashboard").include_query_params(error=err_msg, ui_mode="scoped"))
         return RedirectResponse(url=redirect_url, status_code=303)
 
     context = get_base_context_web(request, error, success, ui_mode)
+    root_path = request.scope.get("root_path", "")
     content_map = {
-        "properties": "/ui/api/flock/htmx/flock-properties-form",
-        "agents": "/ui/htmx/agent-manager-view",
-        "execute": "/ui/htmx/execution-view-container"
+        "properties": f"{root_path}/ui/api/flock/htmx/flock-properties-form",
+        "agents": f"{root_path}/ui/htmx/agent-manager-view",
+        "execute": f"{root_path}/ui/htmx/execution-view-container"
     }
-    context["initial_content_url"] = content_map.get(section, "/ui/htmx/load-flock-view")
+    context["initial_content_url"] = content_map.get(section, f"{root_path}/ui/htmx/load-flock-view")
     if section not in content_map: context["error_message"] = "Invalid editor section."
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/registry", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_registry(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
-    context["initial_content_url"] = "/ui/htmx/registry-viewer"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/registry-viewer"
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/create", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_create(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     clear_current_flock_service(request.app.state) # Pass app.state
     context = get_base_context_web(request, error, success, "standalone")
-    context["initial_content_url"] = "/ui/htmx/create-flock-form"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/create-flock-form"
     return templates.TemplateResponse("base.html", context)
 
 @app.get("/ui/htmx/sidebar", response_class=HTMLResponse, tags=["UI HTMX Partials"])
@@ -953,7 +902,8 @@ async def ui_create_flock_action(request: Request, flock_name: str = Form(...), 
 @app.get("/ui/settings", response_class=HTMLResponse, tags=["UI Pages"])
 async def page_settings(request: Request, error: str = None, success: str = None, ui_mode: str = Query("standalone")):
     context = get_base_context_web(request, error, success, ui_mode)
-    context["initial_content_url"] = "/ui/htmx/settings-view"
+    root_path = request.scope.get("root_path", "")
+    context["initial_content_url"] = f"{root_path}/ui/htmx/settings-view"
     return templates.TemplateResponse("base.html", context)
 
 def _prepare_env_vars_for_template_web():
