@@ -19,10 +19,8 @@
                             <input type="hidden" name="agent_name" value="{{ entry.agent }}">
                             <input type="hidden" name="actual_response" value='{{ entry.raw_json | replace("'", "&#39;") }}'>
                             <input type="hidden" name="reason" value="positive">
-                        </form>
-
-                        <a href="#" 
-                           hx-post="{% if share_id %}/chat/htmx/feedback-shared{% else %}/chat/htmx/feedback{% endif %}" 
+                        </form>                        <a href="#" 
+                           hx-post="{% if share_id %}{{ url_for('chat_feedback_shared') }}{% else %}{{ url_for('chat_feedback') }}{% endif %}" 
                            hx-include="closest .feedback-meta" 
                            hx-target="closest .bubble" 
                            hx-swap="innerHTML" 
@@ -34,9 +32,8 @@
             </div>
 
             <!-- Feedback form (initially hidden, toggled by 👎 link) -->
-            <div x-show="showForm" style="width: 800px;">
-                <form
-                    hx-post="{% if share_id %}/chat/htmx/feedback-shared{% else %}/chat/htmx/feedback{% endif %}"
+            <div x-show="showForm" style="width: 800px;">                <form
+                    hx-post="{% if share_id %}{{ url_for('chat_feedback_shared') }}{% else %}{{ url_for('chat_feedback') }}{% endif %}"
                     hx-target="closest .bubble"
                     hx-swap="innerHTML"
                     x-on:htmx:afterRequest="showForm=false"

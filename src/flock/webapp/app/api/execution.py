@@ -154,14 +154,14 @@ async def htmx_run_flock(
     raw_json_for_template = json.dumps(result_data, indent=2)
     # Unescape newlines for proper display in HTML <pre> tag
     result_data_raw_json_str = raw_json_for_template.replace('\\n', '\n')
-
+    root_path = request.scope.get("root_path", "")
     return templates.TemplateResponse(
         "partials/_results_display.html",
         {
             "request": request,
             "result": result_data,
             "result_raw_json": result_data_raw_json_str,
-            "feedback_endpoint": "/ui/api/flock/htmx/feedback",
+            "feedback_endpoint": f"{root_path}/ui/api/flock/htmx/feedback",
             "share_id": None,
             "flock_name": current_flock_from_state.name,
             "agent_name": start_agent_name,
@@ -226,6 +226,7 @@ async def htmx_run_shared_flock(
     except Exception as e:
         shared_logger.error(f"HTMX Run Shared: Error during execution for '{start_agent_name}' (share_id: {share_id}): {e}", exc_info=True)
         return HTMLResponse(f"<p class='error'>An unexpected error occurred: {e!s}</p>")
+    root_path = request.scope.get("root_path", "")
 
     return templates.TemplateResponse(
         "partials/_results_display.html",
@@ -233,7 +234,7 @@ async def htmx_run_shared_flock(
             "request": request,
             "result": result_data,
             "result_raw_json": result_data_raw_json_str,
-            "feedback_endpoint": "/ui/api/flock/htmx/feedback-shared",
+            "feedback_endpoint": f"{root_path}/ui/api/flock/htmx/feedback-shared",
             "share_id": share_id,
             "flock_name": temp_flock.name,
             "agent_name": start_agent_name,
