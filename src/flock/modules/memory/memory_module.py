@@ -105,6 +105,12 @@ class MemoryModule(FlockModule):
         )
         logger.debug(f"Initialized memory module for agent {agent.name}")
 
+    def _serialize_combined_data(self, inputs: dict[str, Any], result: dict[str, Any] | None = None) -> str:
+        """Helper method to combine and serialize inputs and results efficiently."""
+        if result:
+            return json.dumps(inputs) + json.dumps(result)
+        return json.dumps(inputs)
+
     async def on_pre_evaluate(
         self,
         agent: FlockAgent,
@@ -315,7 +321,7 @@ class MemoryModule(FlockModule):
         )
         agent._configure_language_model(agent.model, True, 0.0, 8192)
         splitter = agent._select_task(split_signature, "Completion")
-        full_text = json.dumps(inputs) + json.dumps(result)
+        full_text = self._serialize_combined_data(inputs, result)
         split_result = splitter(content=full_text)
         return "\n".join(split_result.chunks)
 
@@ -336,7 +342,7 @@ class MemoryModule(FlockModule):
         )
         agent._configure_language_model(agent.model, True, 0.0, 8192)
         splitter = agent._select_task(split_signature, "Completion")
-        full_text = json.dumps(inputs) + (json.dumps(result) if result else "")
+        full_text = self._serialize_combined_data(inputs, result)
         split_result = splitter(content=full_text)
         # Flatten list[dict] into list[str] of "title: content" strings to
         # keep downstream storage logic simple and type-safe.
@@ -376,11 +382,7 @@ class MemoryModule(FlockModule):
         elif mode == "characters":
             return await self._character_splitter_mode(agent, inputs, result)
         elif mode == "none":
-            return (
-                json.dumps(inputs) + json.dumps(result)
-                if result
-                else json.dumps(inputs)
-            )
+            return self._serialize_combined_data(inputs, result)
         else:
             raise ValueError(f"Unknown splitting mode: {mode}")
 

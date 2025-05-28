@@ -26,8 +26,7 @@ def markdown_split_by_headers(
     chunks = []
 
     # Process each section
-    for i in range(len(headers)):
-        current_header = headers[i]
+    for i, current_header in enumerate(headers):
         header_text = current_header.group(2).strip()
         header_level = len(current_header.group(1))
 

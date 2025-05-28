@@ -1,7 +1,6 @@
 # src/flock/core/serialization/flock_serializer.py
 """Handles serialization and deserialization logic for Flock instances."""
 
-import builtins
 import importlib
 import importlib.util
 import inspect
@@ -679,16 +678,20 @@ class FlockSerializer:
         try:
             fields = []
             for field_name, field_props in fields_def.items():
-                # Safely evaluate type string - requires care!
+                # Safely map type strings to actual types
                 field_type_str = field_props.get("type", "str")
-                try:
-                    field_type = eval(
-                        field_type_str,
-                        {"__builtins__": builtins.__dict__},
-                        {"List": list, "Dict": dict},
-                    )  # Allow basic types
-                except Exception:
-                    field_type = Any
+                type_mapping = {
+                    "str": str,
+                    "int": int,
+                    "float": float,
+                    "bool": bool,
+                    "list": list,
+                    "dict": dict,
+                    "List": list,
+                    "Dict": dict,
+                    "Any": Any,
+                }
+                field_type = type_mapping.get(field_type_str, Any)
                 fields.append((field_name, field_type))
 
             DynamicDataclass = make_dataclass(type_name, fields)

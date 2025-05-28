@@ -1,5 +1,6 @@
 """Parser for memory mapping declarations into executable operations."""
 
+import ast
 import re
 from typing import Any
 
@@ -112,12 +113,12 @@ class MemoryMappingParser:
             key = key.strip()
             value = value.strip()
 
-            # Try to evaluate the value (for lists, dicts, numbers)
+            # Try to safely parse the value (for lists, dicts, numbers)
             try:
-                # Safely evaluate the value
-                value = eval(value, {"__builtins__": {}}, {})
-            except:
-                # If evaluation fails, treat as string
+                # Use ast.literal_eval for safe evaluation of literals
+                value = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                # If parsing fails, treat as string
                 value = value.strip("'\"")
 
             params[key] = value

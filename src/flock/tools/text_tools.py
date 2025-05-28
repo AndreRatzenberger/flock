@@ -206,8 +206,7 @@ def text_split_code_by_functions(code: str) -> list[dict[str, Any]]:
     functions = []
 
     # Process each function
-    for i in range(len(matches)):
-        current_match = matches[i]
+    for i, current_match in enumerate(matches):
         function_name = current_match.group(2)
 
         # Determine function content
