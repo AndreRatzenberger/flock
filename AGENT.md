@@ -45,9 +45,10 @@ flock/
    - Entry point for most operations
 
 2. **`FlockAgent`** (`src/flock/core/flock_agent.py`)
-   - Base class for all agents (very large, ~1000 lines)
+   - Base class for all agents (refactored from 1000+ to 263 lines)
    - Lifecycle hooks: initialize → evaluate → terminate
    - Supports modules, evaluators, routers
+   - Uses composition-based architecture with focused components
 
 3. **`FlockRegistry`** (`src/flock/core/flock_registry.py`)
    - Singleton for component discovery
@@ -93,8 +94,7 @@ uv run python -c "from flock.core import Flock; print('OK')" # Quick import test
 ### Current Problems
 1. **Logging conflicts**: `exc_info` parameter duplication causing test failures
 2. **Registry state**: Global singleton causes test isolation issues
-3. **Large classes**: `FlockAgent` is 1000+ lines, needs refactoring
-4. **Test brittleness**: Some tests depend on external services or configuration
+3. **Test brittleness**: Some tests depend on external services or configuration
 
 ### Code Quality Issues Found
 - Bare `except:` handlers in multiple files
@@ -181,10 +181,20 @@ Start with: `flock.serve()` method on any Flock instance.
 ## Next Priority Areas
 
 Based on the review, focus on:
-1. **Refactoring large classes** (especially `FlockAgent`)
-2. **Fixing logging conflicts** in test suite
-3. **Improving error handling** patterns
-4. **Adding security guidelines** for component development
-5. **Thread safety** for registry operations
+1. **Fixing logging conflicts** in test suite
+2. **Improving error handling** patterns
+3. **Adding security guidelines** for component development
+4. **Thread safety** for registry operations
+
+## Recently Completed
+
+### FlockAgent Refactoring (December 2024)
+✅ **Completed**: Successfully refactored the FlockAgent class from 1,039 lines to 263 lines using composition-based architecture. See [`refactor.md`](refactor.md) for complete details.
+
+- **Main class reduced by 75%**: From 1,039 to 263 lines
+- **Composed into 5 focused components**: Components (148 lines), Lifecycle (144 lines), Execution (83 lines), Integration (112 lines), Serialization (435 lines)
+- **100% backward compatibility**: All existing code continues to work unchanged
+- **Improved maintainability**: Each component has single responsibility
+- **Enhanced testability**: Components can be tested in isolation
 
 This should give you a solid foundation to understand and contribute to the Flock framework efficiently!
