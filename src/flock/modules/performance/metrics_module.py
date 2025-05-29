@@ -65,7 +65,8 @@ class MetricsModuleConfig(FlockModuleConfig):
         default=1000, description="Threshold for latency alerts"
     )
 
-    @validator("aggregation_interval")
+    @field_validator("aggregation_interval")
+    @classmethod
     def validate_interval(cls, v):
         """Validate time interval format."""
         if v[-1] not in ["s", "m", "h", "d"]:

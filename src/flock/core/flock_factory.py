@@ -49,9 +49,9 @@ from flock.mcp.servers.websockets.flock_websocket_server import (
     FlockWSConnectionConfig,
     FlockWSServer,
 )
-from flock.modules.performance.metrics_module import (
-    MetricsModule,
-    MetricsModuleConfig,
+from flock.components.utility.metrics_utility_component import (
+    MetricsUtilityComponent,
+    MetricsUtilityConfig,
 )
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -373,13 +373,13 @@ class FlockFactory:
 
         server = concrete_server_cls(config=server_config)
 
-        metrics_module_config = MetricsModuleConfig(
+        metrics_component_config = MetricsUtilityConfig(
             latency_threshold_ms=alert_latency_threshold_ms
         )
 
-        metrics_module = MetricsModule("metrics", config=metrics_module_config)
+        metrics_component = MetricsUtilityComponent("metrics", config=metrics_component_config)
 
-        server.add_module(metrics_module)
+        server.add_module(metrics_component)
 
         return server
 
