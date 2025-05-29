@@ -31,7 +31,7 @@ class FlockAgentSerialization:
 
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
         """Save output to file if configured."""
-        if not self.agent.write_to_file:
+        if not self.agent.config.write_to_file:
             return
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

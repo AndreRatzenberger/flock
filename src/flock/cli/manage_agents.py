@@ -168,8 +168,8 @@ def _view_agent_details(agent: FlockAgent):
     basic_info.add_row("Description", agent.resolved_description if agent.resolved_description else "N/A")
     basic_info.add_row("Input", str(agent.input))
     basic_info.add_row("Output", str(agent.output))
-    basic_info.add_row("Write to File", str(agent.write_to_file))
-    basic_info.add_row("Wait for input", str(agent.wait_for_input))
+    basic_info.add_row("Write to File", str(agent.config.write_to_file))
+    basic_info.add_row("Wait for input", str(agent.config.wait_for_input))
 
     console.print(Panel(basic_info, title="Basic Information"))
 

@@ -63,10 +63,10 @@ class FlockAgentLifecycle:
                     if tmp_result:
                         current_result = tmp_result
 
-                if self.agent.write_to_file:
+                if self.agent.config.write_to_file:
                     self.agent._save_output(self.agent.name, current_result)
 
-                if self.agent.wait_for_input:
+                if self.agent.config.wait_for_input:
                     # simple input prompt
                     input("Press Enter to continue...")
 

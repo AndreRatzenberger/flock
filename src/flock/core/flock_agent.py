@@ -83,15 +83,6 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         description="List of MCP Servers the agent can use to enhance its capabilities.",
     )
 
-    write_to_file: bool = Field(
-        default=False,
-        description="Write the agent's output to a file.",
-    )
-    wait_for_input: bool = Field(
-        default=False,
-        description="Wait for user input after the agent's output is displayed.",
-    )
-
     # --- UNIFIED COMPONENT SYSTEM ---
     components: list[AgentComponent] = Field(
         default_factory=list,
@@ -146,8 +137,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             tools=tools,
             servers=servers,
             components=components if components is not None else [],
-            write_to_file=write_to_file,
-            wait_for_input=wait_for_input,
+            config=FlockAgentConfig(
+                write_to_file=write_to_file,
+                wait_for_input=wait_for_input,
+            ),
             temporal_activity_config=temporal_activity_config,
             **kwargs,
         )
@@ -163,57 +156,38 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     @property
     def evaluator(self) -> EvaluationComponentBase | None:
         """Get the primary evaluation component for this agent."""
-        return next(
-            (c for c in self.components if isinstance(c, EvaluationComponentBase)), 
-            None
-        )
+        return self.components_helper.get_primary_evaluator()
     
     @property
     def router(self) -> RoutingComponentBase | None:
         """Get the primary routing component for this agent."""
-        return next(
-            (c for c in self.components if isinstance(c, RoutingComponentBase)), 
-            None
-        )
+        return self.components_helper.get_primary_router()
     
     @property 
     def modules(self) -> list[AgentComponent]:
         """Get all components (for backward compatibility with module-style access)."""
         return self.components.copy()
     
-    # --- COMPONENT MANAGEMENT ---
+    @property
+    def components_helper(self):
+        """Get the component management helper."""
+        if not hasattr(self, '_components_helper'):
+            from flock.core.agent.flock_agent_components import FlockAgentComponents
+            self._components_helper = FlockAgentComponents(self)
+        return self._components_helper
     
+    # Component management delegated to components_helper
     def add_component(self, component: AgentComponent) -> None:
         """Add a component to this agent."""
-        if not component.name:
-            logger.error("Component must have a name to be added.")
-            return
-            
-        # Check for existing component with same name
-        existing = next((c for c in self.components if c.name == component.name), None)
-        if existing:
-            logger.warning(f"Replacing existing component: {component.name}")
-            self.components.remove(existing)
-            
-        self.components.append(component)
-        logger.debug(f"Added component '{component.name}' to agent '{self.name}'")
+        self.components_helper.add_component(component)
 
     def remove_component(self, component_name: str) -> None:
         """Remove a component from this agent."""
-        component = next((c for c in self.components if c.name == component_name), None)
-        if component:
-            self.components.remove(component)
-            logger.debug(f"Removed component '{component_name}' from agent '{self.name}'")
-        else:
-            logger.warning(f"Component '{component_name}' not found on agent '{self.name}'.")
+        self.components_helper.remove_component(component_name)
 
     def get_component(self, component_name: str) -> AgentComponent | None:
         """Get a component by name."""
-        return next((c for c in self.components if c.name == component_name), None)
-
-    def get_enabled_components(self) -> list[AgentComponent]:
-        """Get a list of currently enabled components."""
-        return [c for c in self.components if c.config.enabled]
+        return self.components_helper.get_component(component_name)
 
     # --- BACKWARD COMPATIBILITY METHODS ---
     # These maintain the old API while using the new architecture
@@ -319,10 +293,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 logger.error(f"Error in terminate for component '{component.name}': {e}")
 
         # Handle output file writing
-        if self.write_to_file:
+        if self.config.write_to_file:
             self._serialization._save_output(self.name, current_result)
 
-        if self.wait_for_input:
+        if self.config.wait_for_input:
             input("Press Enter to continue...")
 
     async def on_error(self, error: Exception, inputs: dict[str, Any]) -> None:
@@ -533,7 +507,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
         """Save output to file if configured."""
-        if not self.write_to_file:
+        if not self.config.write_to_file:
             return
 
         from datetime import datetime

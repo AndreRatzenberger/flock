@@ -76,10 +76,10 @@ flock/
 
 **Key Properties**:
 - `agent.components`: List of all components
-- `agent.evaluator`: Primary evaluation component (convenience property)
-- `agent.router`: Primary routing component (convenience property)
+- `agent.evaluator`: Primary evaluation component (delegates to helper)
+- `agent.router`: Primary routing component (delegates to helper)
 - `agent.next_agent`: Next agent in workflow (string, callable, or None)
-- `FlockAgentComponents(agent)`: Helper class for component management
+- `agent.components_helper`: Component management helper (lazy-loaded)
 
 ### Execution Flow
 
@@ -183,9 +183,13 @@ agent = FlockAgent(
 )
 
 # Use helper for component management
-helper = FlockAgentComponents(agent)
+helper = agent.components_helper  # Lazy-loaded property
 print(f"Evaluation components: {len(helper.get_evaluation_components())}")
 print(f"Primary evaluator: {helper.get_primary_evaluator()}")
+
+# Basic operations delegate to helper
+agent.add_component(my_component)  # Delegates to helper
+agent.get_component("component_name")  # Delegates to helper
 
 # Alternative: Set next_agent directly
 agent.next_agent = "next_agent_name"
@@ -196,9 +200,8 @@ agent.next_agent = "next_agent_name"
 The `FlockAgentComponents` class provides convenient methods for managing components:
 
 ```python
-from flock.core.agent.flock_agent_components import FlockAgentComponents
-
-helper = FlockAgentComponents(agent)
+# Access helper through agent property (lazy-loaded)
+helper = agent.components_helper
 
 # Component management
 helper.add_component(my_component)
@@ -214,6 +217,11 @@ utility_components = helper.get_utility_components()
 primary_evaluator = helper.get_primary_evaluator()
 primary_router = helper.get_primary_router()
 enabled_components = helper.get_enabled_components()
+
+# Basic operations delegate to helper automatically
+agent.add_component(my_component)  # Same as helper.add_component()
+agent.evaluator  # Same as helper.get_primary_evaluator()
+agent.router     # Same as helper.get_primary_router()
 ```
 
 ### Serialization
@@ -336,6 +344,7 @@ The unified architecture completely replaces the legacy system:
 - Easier testing and debugging
 - Unified component registration and discovery
 - Consistent `*ComponentBase` naming convention
-- Helpful component management utilities via `FlockAgentComponents`
+- No code duplication between FlockAgent and component management
+- Lazy-loaded component helper with rich functionality
 
 This should give you a solid foundation to understand and contribute to the Flock framework efficiently!
