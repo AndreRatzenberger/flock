@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_registry import flock_component
-from flock.core.flock_router import HandOffRequest
+
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -22,13 +22,13 @@ logger = get_logger("components.routing.default")
 class DefaultRoutingConfig(AgentComponentConfig):
     """Configuration for the default routing component."""
 
-    hand_off: str | HandOffRequest | Callable[..., HandOffRequest] = Field(
+    hand_off: str | Callable[..., str] = Field(
         default="", description="Next agent to hand off to"
     )
 
 
 @flock_component(config_class=DefaultRoutingConfig)
-class DefaultRoutingComponent(RoutingModuleBase):
+class DefaultRoutingComponent(RoutingComponentBase):
     """Default routing component implementation.
 
     This router simply uses the configured hand_off property to determine the next agent.
@@ -36,8 +36,7 @@ class DefaultRoutingComponent(RoutingModuleBase):
 
     Configuration can be:
     - A string: Simple agent name to route to
-    - A HandOffRequest: Full routing configuration
-    - A callable: Function that takes (context, result) and returns HandOffRequest
+    - A callable: Function that takes (context, result) and returns agent name
     """
 
     config: DefaultRoutingConfig = Field(
@@ -66,7 +65,7 @@ class DefaultRoutingComponent(RoutingModuleBase):
         agent: "FlockAgent",
         result: dict[str, Any],
         context: FlockContext | None = None,
-    ) -> HandOffRequest | None:
+    ) -> str | None:
         """Determine the next agent to hand off to based on configuration.
 
         Args:
@@ -75,7 +74,7 @@ class DefaultRoutingComponent(RoutingModuleBase):
             context: The global execution context
 
         Returns:
-            A HandOffRequest containing the next agent and input data, or None to end workflow
+            String agent name to route to, or None to end workflow
         """
         handoff = self.config.hand_off
 
@@ -93,22 +92,13 @@ class DefaultRoutingComponent(RoutingModuleBase):
                 logger.error("Error invoking handoff callable: %s", e)
                 return None
 
-        # If string, convert to HandOffRequest
-        if isinstance(handoff, str):
-            logger.debug(
-                "Converting string handoff to HandOffRequest: %s", handoff
-            )
-            handoff = HandOffRequest(
-                next_agent=handoff, output_to_input_merge_strategy="match"
-            )
-
-        # Validate it's a HandOffRequest
-        if not isinstance(handoff, HandOffRequest):
+        # Validate it's a string
+        if not isinstance(handoff, str):
             logger.error(
-                "Invalid handoff type: %s. Expected HandOffRequest, str, or callable",
+                "Invalid handoff type: %s. Expected str or callable returning str",
                 type(handoff),
             )
             return None
 
-        logger.debug("Routing to agent: %s", handoff.next_agent)
+        logger.debug("Routing to agent: %s", handoff)
         return handoff

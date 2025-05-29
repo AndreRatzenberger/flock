@@ -5,12 +5,12 @@ from abc import abstractmethod
 from typing import Any
 
 from flock.core.context.context import FlockContext
-from flock.core.flock_router import HandOffRequest
+
 
 from .agent_component_base import AgentComponent
 
 
-class RoutingModuleBase(AgentComponent):
+class RoutingComponentBase(AgentComponent):
     """Base class for routing components.
     
     Routing components determine the next step in a workflow based on the
@@ -33,12 +33,12 @@ class RoutingModuleBase(AgentComponent):
         agent: Any,
         result: dict[str, Any],
         context: FlockContext | None = None,
-    ) -> HandOffRequest | None:
-        """Determine the next step in the workflow - MUST be implemented.
+    ) -> str | Any | None:
+        """Determine the next agent in the workflow - MUST be implemented.
         
-        This method analyzes the agent's result and determines what should
-        happen next in the workflow. The returned HandOffRequest will be
-        stored in agent.next_handoff for the orchestrator to process.
+        This method analyzes the agent's result and determines what agent
+        should execute next. The result will be stored in agent.next_agent
+        for the orchestrator to process.
         
         Args:
             agent: The agent that just completed execution
@@ -46,7 +46,7 @@ class RoutingModuleBase(AgentComponent):
             context: Execution context with workflow state
             
         Returns:
-            HandOffRequest specifying next agent and data flow, or None to end workflow
+            String (agent name), FlockAgent instance, or None to end workflow
             
         Raises:
             NotImplementedError: Must be implemented by concrete classes

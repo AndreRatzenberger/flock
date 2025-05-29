@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.utility_component_base import UtilityModuleBase
+from flock.core.component.utility_component_base import UtilityComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_BATCH_SILENT_MODE
 from flock.core.flock_registry import flock_component
@@ -58,7 +58,7 @@ class OutputUtilityConfig(AgentComponentConfig):
 
 
 @flock_component(config_class=OutputUtilityConfig)
-class OutputUtilityComponent(UtilityModuleBase):
+class OutputUtilityComponent(UtilityComponentBase):
     """Utility component that handles output formatting and display."""
 
     config: OutputUtilityConfig = Field(

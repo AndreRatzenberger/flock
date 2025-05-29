@@ -6,9 +6,7 @@ import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from flock.core.flock_evaluator import FlockEvaluator
-from flock.core.flock_module import FlockModule
-from flock.core.flock_router import FlockRouter
+# Legacy component imports removed
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.core.serialization.json_encoder import FlockJSONEncoder

@@ -15,7 +15,7 @@ from pydantic import (
     Field,
 )
 
-from flock.core.flock_module import FlockModule
+from flock.core.component.agent_component_base import AgentComponent
 from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
 from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
@@ -74,9 +74,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         description="Whether or not this Server has already initialized.",
     )
 
-    modules: dict[str, FlockModule] = Field(
+    components: dict[str, AgentComponent] = Field(
         default={},
-        description="Dictionary of FlockModules attached to this Server.",
+        description="Dictionary of unified agent components attached to this Server.",
     )
 
     # --- Underlying ConnectionManager ---
@@ -98,40 +98,40 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         arbitrary_types_allowed=True,
     )
 
-    def add_module(self, module: FlockModule) -> None:
-        """Add a module to this server."""
-        if not module.name:
-            logger.error("Module must have a name to be added.")
+    def add_component(self, component: AgentComponent) -> None:
+        """Add a unified component to this server."""
+        if not component.name:
+            logger.error("Component must have a name to be added.")
             return
-        if self.modules and module.name in self.modules:
-            logger.warning(f"Overwriting existing module: {module.name}")
+        if self.components and component.name in self.components:
+            logger.warning(f"Overwriting existing component: {component.name}")
 
-        self.modules[module.name] = module
+        self.components[component.name] = component
         logger.debug(
-            f"Added module '{module.name}' to server {self.config.name}"
+            f"Added component '{component.name}' to server {self.config.name}"
         )
         return
 
-    def remove_module(self, module_name: str) -> None:
-        """Remove a module from this server."""
-        if module_name in self.modules:
-            del self.modules[module_name]
+    def remove_component(self, component_name: str) -> None:
+        """Remove a component from this server."""
+        if component_name in self.components:
+            del self.components[component_name]
             logger.debug(
-                f"Removed module '{module_name}' from server '{self.config.name}'"
+                f"Removed component '{component_name}' from server '{self.config.name}'"
             )
         else:
             logger.warning(
-                f"Module '{module_name}' not found on server '{self.config.name}'"
+                f"Component '{component_name}' not found on server '{self.config.name}'"
             )
         return
 
-    def get_module(self, module_name: str) -> FlockModule | None:
-        """Get a module by name."""
-        return self.modules.get(module_name)
+    def get_component(self, component_name: str) -> AgentComponent | None:
+        """Get a component by name."""
+        return self.components.get(component_name)
 
-    def get_enabled_modules(self) -> list[FlockModule]:
-        """Get a list of currently enabled modules attached to this server."""
-        return [m for m in self.modules.values() if m.config.enabled]
+    def get_enabled_components(self) -> list[AgentComponent]:
+        """Get a list of currently enabled components attached to this server."""
+        return [c for c in self.components.values() if c.config.enabled]
 
     @abstractmethod
     async def initialize(self) -> FlockMCPClientManagerBase:
@@ -619,11 +619,16 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             data["config"] = config_object
 
         # now construct
-        server = real_cls(**{k: v for k, v in data.items() if k != "modules"})
+        server = real_cls(**{k: v for k, v in data.items() if k not in ["modules", "components"]})
 
-        # re-hydrate modules
+        # re-hydrate components (both legacy modules and new components)
+        for cname, cdata in data.get("components", {}).items():
+            server.add_component(deserialize_component(cdata, AgentComponent))
+        
+        # Handle legacy modules for backward compatibility during transition
         for mname, mdata in data.get("modules", {}).items():
-            server.add_module(deserialize_component(mdata, FlockModule))
+            logger.warning(f"Legacy module '{mname}' found during deserialization - consider migrating to unified components")
+            # Skip legacy modules during migration
 
         # --- Separate Data ---
         component_configs = {}

@@ -43,7 +43,7 @@ from flock.core.logging.logging import get_logger
 if TYPE_CHECKING:
     from flock.core.flock import Flock
     from flock.core.flock_agent import FlockAgent
-    from flock.core.flock_evaluator import FlockEvaluator
+    # Legacy FlockEvaluator import removed
     # Conditional types
 
 

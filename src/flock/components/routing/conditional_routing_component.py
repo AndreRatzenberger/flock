@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import Field, model_validator
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_registry import flock_component, get_registry
-from flock.core.flock_router import HandOffRequest
+# HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -148,7 +148,7 @@ class ConditionalRoutingConfig(AgentComponentConfig):
 
 
 @flock_component(config_class=ConditionalRoutingConfig)
-class ConditionalRoutingComponent(RoutingModuleBase):
+class ConditionalRoutingComponent(RoutingComponentBase):
     """Routes workflow based on evaluating a condition against a value in the FlockContext.
     
     Supports various built-in checks (string, number, list, type, bool, existence)
@@ -389,11 +389,11 @@ class ConditionalRoutingComponent(RoutingModuleBase):
         agent: "FlockAgent",
         result: dict[str, Any],
         context: FlockContext | None = None,
-    ) -> HandOffRequest | None:
+    ) -> None:
         """Determine next step based on evaluating a condition against context value."""
         if not context:
             logger.warning("No context provided for conditional routing")
-            return None
+            return
 
         cfg = self.config
         condition_value = context.get_variable(cfg.condition_context_key, None)
@@ -434,13 +434,10 @@ class ConditionalRoutingComponent(RoutingModuleBase):
                     f"Cleared feedback key '{cfg.feedback_context_key}' on success."
                 )
 
-            next_agent = cfg.success_agent or ""  # Stop chain if None
+            next_agent = cfg.success_agent or None  # Stop chain if None
             logger.debug(f"Success route target: '{next_agent}'")
             
-            if next_agent:
-                return HandOffRequest(next_agent=next_agent)
-            else:
-                return None  # End workflow
+            agent.next_agent = next_agent  # Set directly on agent
 
         else:
             # --- Failure Path ---
@@ -472,10 +469,7 @@ class ConditionalRoutingComponent(RoutingModuleBase):
                             f"Set feedback key '{cfg.feedback_context_key}': {feedback_msg or 'Condition failed'}"
                         )
 
-                    return HandOffRequest(
-                        next_agent=agent.name,  # Route back to self
-                        output_to_input_merge_strategy="add",  # Make feedback available
-                    )
+                    agent.next_agent = agent.name  # Route back to self
                 else:
                     # --- Max Retries Exceeded ---
                     logger.error(
@@ -483,23 +477,17 @@ class ConditionalRoutingComponent(RoutingModuleBase):
                     )
                     if retry_key in context.state:
                         del context.state[retry_key]  # Reset count
-                    next_agent = cfg.failure_agent or ""
+                    next_agent = cfg.failure_agent or None
                     logger.debug(
                         f"Failure route target (after retries): '{next_agent}'"
                     )
                     
-                    if next_agent:
-                        return HandOffRequest(next_agent=next_agent)
-                    else:
-                        return None  # End workflow
+                    agent.next_agent = next_agent
             else:
                 # --- No Retry Logic ---
                 next_agent = (
-                    cfg.failure_agent or ""
+                    cfg.failure_agent or None
                 )  # Use failure agent or stop
                 logger.debug(f"Failure route target (no retry): '{next_agent}'")
                 
-                if next_agent:
-                    return HandOffRequest(next_agent=next_agent)
-                else:
-                    return None  # End workflow
+                agent.next_agent = next_agent

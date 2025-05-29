@@ -29,12 +29,10 @@ if TYPE_CHECKING:
     from flock.core.flock_agent import (
         FlockAgent,  # Import only for type checking
     )
-    from flock.core.flock_evaluator import FlockEvaluator
-    from flock.core.flock_module import FlockModule
-    from flock.core.flock_router import FlockRouter
     from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+    from flock.core.component.agent_component_base import AgentComponent
 
-    COMPONENT_BASE_TYPES = (FlockModule, FlockEvaluator, FlockRouter)
+    COMPONENT_BASE_TYPES = (AgentComponent,)
 
     IS_COMPONENT_CHECK_ENABLED = True
 else:
@@ -44,7 +42,6 @@ else:
     IS_COMPONENT_CHECK_ENABLED = False
 
 # Fallback if core types aren't available during setup
-from flock.core.flock_module import FlockModuleConfig
 from flock.core.logging.logging import get_logger
 
 logger = get_logger("registry")
@@ -118,18 +115,7 @@ class FlockRegistry:
         config_cls: type[ConfigType], component_cls: type[ClassType]
     ):
         """Explicitly registers the mapping between a config and component class."""
-        from flock.core.flock_evaluator import (
-            FlockEvaluatorConfig,
-        )
-        from flock.core.flock_router import FlockRouterConfig
-
-        if not issubclass(
-            config_cls,
-            FlockModuleConfig | FlockRouterConfig | FlockEvaluatorConfig,
-        ):
-            logger.warning(
-                f"Config class {config_cls.__name__} does not inherit from a standard Flock config base."
-            )
+        # Component config validation can be added here if needed
         # Add more checks if needed (e.g., component_cls inherits from Module/Router/Evaluator)
 
         if (

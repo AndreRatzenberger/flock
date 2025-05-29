@@ -49,7 +49,7 @@ from flock.core.context.context_manager import initialize_context
 
 # Assuming run_temporal_workflow is correctly placed and importable
 from flock.core.execution.temporal_executor import run_temporal_workflow
-from flock.core.flock_evaluator import FlockEvaluator  # For type hint
+# Legacy FlockEvaluator import removed
 from flock.core.logging.logging import get_logger
 from flock.core.serialization.serializable import Serializable
 from flock.core.util.cli_helper import init_console

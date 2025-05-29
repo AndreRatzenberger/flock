@@ -30,7 +30,7 @@ from flock.adapter.faiss_adapter import FAISSAdapter
 from flock.adapter.pinecone_adapter import PineconeAdapter
 from flock.adapter.vector_base import VectorAdapter
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.utility_component_base import UtilityModuleBase
+from flock.core.component.utility_component_base import UtilityComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_registry import flock_component
 from flock.core.logging.logging import get_logger
@@ -423,7 +423,7 @@ class MemoryStore:
 
 
 @flock_component(config_class=MemoryUtilityConfig)
-class MemoryUtilityComponent(UtilityModuleBase):
+class MemoryUtilityComponent(UtilityComponentBase):
     """Enterprise-ready memory utility component using real datastores."""
 
     config: MemoryUtilityConfig = Field(

@@ -11,10 +11,10 @@ from flock.core.agent.flock_agent_integration import FlockAgentIntegration
 from flock.core.agent.flock_agent_serialization import FlockAgentSerialization
 from flock.core.component.agent_component_base import AgentComponent
 from flock.core.component.evaluation_component_base import EvaluationComponentBase
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.context.context import FlockContext
-from flock.core.flock_router import HandOffRequest
+
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -47,7 +47,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     
     Key changes:
     - components: list[AgentComponent] - unified component list
-    - next_handoff: HandOffRequest | None - explicit workflow state
+    - next_agent: str | None - explicit workflow state
     - evaluator/router properties - convenience access to primary components
     """
 
@@ -99,10 +99,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     )
     
     # --- EXPLICIT WORKFLOW STATE ---
-    next_handoff: HandOffRequest | None = Field(
+    next_agent: str | Callable[..., str] | None = Field(
         default=None,
         exclude=True,  # Runtime state, don't serialize
-        description="Next step in workflow, set by routing components.",
+        description="Next agent in workflow - set by user or routing components.",
     )
 
     config: FlockAgentConfig = Field(
@@ -169,10 +169,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         )
     
     @property
-    def router(self) -> RoutingModuleBase | None:
+    def router(self) -> RoutingComponentBase | None:
         """Get the primary routing component for this agent."""
         return next(
-            (c for c in self.components if isinstance(c, RoutingModuleBase)), 
+            (c for c in self.components if isinstance(c, RoutingComponentBase)), 
             None
         )
     
@@ -291,12 +291,12 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 logger.error(f"Error in post-evaluate for component '{component.name}': {e}")
 
         # 4. Determine next step (routing components)
-        self.next_handoff = None  # Reset
+        self.next_agent = None  # Reset
         
         router = self.router
         if router:
             try:
-                self.next_handoff = await router.determine_next_step(
+                self.next_agent = await router.determine_next_step(
                     self, current_result, self.context
                 )
             except Exception as e:
@@ -366,7 +366,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         FlockRegistry = get_registry()
         
         # Basic agent data (exclude components and runtime state)
-        exclude = ["components", "context", "next_handoff", "tools", "servers"]
+        exclude = ["components", "context", "next_agent", "tools", "servers"]
         
         # Handle callable fields
         if callable(self.description):

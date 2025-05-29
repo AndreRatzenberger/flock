@@ -17,7 +17,7 @@ from opik.evaluation import evaluate
 
 from flock.core.flock import Flock
 from flock.core.flock_agent import FlockAgent
-from flock.core.flock_evaluator import FlockEvaluator
+# Legacy FlockEvaluator import removed
 from flock.core.logging.logging import get_logger
 
 # Potentially import metrics libraries like rouge_score, nltk, sentence_transformers

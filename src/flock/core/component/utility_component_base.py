@@ -4,12 +4,12 @@
 from typing import Any
 
 from flock.core.context.context import FlockContext
-from flock.core.flock_router import HandOffRequest
+# HandOffRequest removed - using agent.next_agent directly
 
 from .agent_component_base import AgentComponent
 
 
-class UtilityModuleBase(AgentComponent):
+class UtilityComponentBase(AgentComponent):
     """Base class for utility/enhancement components.
     
     Utility components add cross-cutting concerns to agents without being
@@ -57,14 +57,13 @@ class UtilityModuleBase(AgentComponent):
         agent: Any,
         result: dict[str, Any],
         context: FlockContext | None = None,
-    ) -> HandOffRequest | None:
+    ) -> None:
         """Utility components typically don't implement routing logic.
         
-        This default implementation returns None, indicating no routing
-        decision. Utility components usually enhance behavior through
-        other lifecycle hooks.
+        This default implementation does nothing, as utility components
+        usually enhance behavior through other lifecycle hooks.
         
         Override this only if your utility component needs to influence
-        workflow routing decisions.
+        workflow routing decisions by setting agent.next_agent.
         """
-        return None
+        pass

@@ -8,10 +8,10 @@ import litellm
 from pydantic import Field
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_registry import flock_component
-from flock.core.flock_router import HandOffRequest
+# HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ If no agent is suitable, use "next_agent": "" to end the workflow.""",
 
 
 @flock_component(config_class=LLMRoutingConfig)
-class LLMRoutingComponent(RoutingModuleBase):
+class LLMRoutingComponent(RoutingComponentBase):
     """Router that uses an LLM to determine the next agent in a workflow.
     
     This component analyzes the current agent's output and uses an LLM to
@@ -166,12 +166,12 @@ class LLMRoutingComponent(RoutingModuleBase):
         agent: "FlockAgent",
         result: dict[str, Any],
         context: FlockContext | None = None,
-    ) -> HandOffRequest | None:
+    ) -> None:
         """Use LLM to determine the next agent based on current output."""
         
         if not context:
             logger.warning("No context provided for LLM routing")
-            return None
+            return
 
         logger.info(f"LLM routing from agent '{agent.name}'")
         
@@ -183,7 +183,7 @@ class LLMRoutingComponent(RoutingModuleBase):
         
         if not available_agents:
             logger.warning("No available agents for LLM routing")
-            return None
+            return
 
         # Use LLM to select the next agent
         next_agent_name, confidence = await self._select_next_agent(
@@ -197,15 +197,12 @@ class LLMRoutingComponent(RoutingModuleBase):
             logger.warning(
                 f"LLM routing confidence {confidence} below threshold {self.config.confidence_threshold}"
             )
-            return None
+            return
         
         # Validate the selected agent exists
         if next_agent_name not in agent_definitions:
             logger.error(f"LLM selected non-existent agent '{next_agent_name}'")
-            return None
+            return
         
         logger.info(f"Successfully routed to agent '{next_agent_name}' with confidence {confidence}")
-        return HandOffRequest(
-            next_agent=next_agent_name,
-            output_to_input_merge_strategy="add"
-        )
+        agent.next_agent = next_agent_name
