@@ -87,8 +87,7 @@ graph TD
     Components --> Route
     Components --> Util
     
-    classDef old fill:#ffcccc
-    classDef new fill:#ccffcc
+ 
     
     class OldAgent,OldEval,OldRouter,OldModule old
     class NewAgent,Components,Eval,Route,Util new
@@ -109,13 +108,13 @@ graph LR
     end
     
     subgraph "FlockAgentComponents (Rich Functionality)"
-        AddComp[add_component()]
-        RemoveComp[remove_component()]
-        GetComp[get_component()]
-        GetEval[get_evaluation_components()]
-        GetRoute[get_routing_components()]
-        GetUtil[get_utility_components()]
-        Primary[get_primary_*()]
+        AddComp[add_component]
+        RemoveComp[remove_component]
+        GetComp[get_component]
+        GetEval[get_evaluation_components]
+        GetRoute[get_routing_components]
+        GetUtil[get_utility_components]
+        Primary[get_primary_*]
     end
     
     Agent --> Components
@@ -130,6 +129,7 @@ graph LR
     
     Evaluator -.->|delegates to| Primary
     Router -.->|delegates to| Primary
+
 ```
 
 ### 2.2 Component Lifecycle & Registration
@@ -163,20 +163,20 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start[Agent.run_async()] --> Init[Initialize Components]
+    Start[Agent run async] --> Init[Initialize Components]
     Init --> Eval[Run Evaluation Components]
     Eval --> Route[Run Routing Components]
     Route --> SetNext{Set next_agent?}
-    SetNext -->|Yes| NextAgent[agent.next_agent = target]
+    SetNext -->|Yes| NextAgent[agent next_agent = target]
     SetNext -->|No| Util[Run Utility Components]
     NextAgent --> Util
     Util --> Term[Terminate Components]
     Term --> End[Return Result]
     
-    subgraph "Component Execution"
-        EvalComp[EvaluationComponent.evaluate()]
-        RouteComp[RoutingComponent.determine_next_step()]
-        UtilComp[UtilityComponent hooks]
+    subgraph Component Execution
+        EvalComp[Evaluation Component evaluate]
+        RouteComp[Routing Component determine next step]
+        UtilComp[Utility Component hooks]
     end
     
     Eval --> EvalComp
