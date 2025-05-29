@@ -81,14 +81,14 @@ async def run_agent(context: FlockContext) -> dict:
                 # Determine the next agent using the handoff router if available
                 handoff_data = HandOffRequest()
 
-                if agent.handoff_router:
+                if agent.router:
                     logger.info(
-                        f"Using handoff router: {agent.handoff_router.__class__.__name__}",
+                        f"Using router: {agent.router.__class__.__name__}",
                         agent=agent.name,
                     )
                     try:
                         # Route to the next agent
-                        handoff_data = await agent.handoff_router.route(
+                        handoff_data = await agent.router.route(
                             agent, result, context
                         )
 

@@ -366,7 +366,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         FlockRegistry = get_registry()
         
         # Basic agent data (exclude components and runtime state)
-        exclude = ["components", "context", "next_handoff"]
+        exclude = ["components", "context", "next_handoff", "tools", "servers"]
         
         # Handle callable fields
         if callable(self.description):
@@ -493,6 +493,137 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 f"Agent '{self.name}' has no evaluator to set model for."
             )
 
+    def resolve_callables(self, context: FlockContext | None = None) -> None:
+        """Resolves callable fields (description, input, output) using context."""
+        if callable(self.description):
+            self.description = self.description(
+                context
+            )  # Pass context if needed by callable
+        if callable(self.input):
+            self.input = self.input(context)
+        if callable(self.output):
+            self.output = self.output(context)
+
+    @property
+    def resolved_description(self) -> str | None:
+        """Returns the resolved agent description.
+        If the description is a callable, it attempts to call it.
+        Returns None if the description is None or a callable that fails.
+        """
+        if callable(self.description):
+            try:
+                # Attempt to call without context first.
+                return self.description()
+            except TypeError:
+                # Log a warning that context might be needed
+                logger.warning(
+                    f"Callable description for agent '{self.name}' could not be resolved "
+                    f"without context via the simple 'resolved_description' property. "
+                    f"Consider calling 'agent.resolve_callables(context)' beforehand if context is required."
+                )
+                return None  # Or a placeholder like "[Callable Description]"
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable description for agent '{self.name}': {e}"
+                )
+                return None
+        elif isinstance(self.description, str):
+            return self.description
+        return None
+
+    def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
+        """Save output to file if configured."""
+        if not self.write_to_file:
+            return
+
+        from datetime import datetime
+        import os
+        import json
+        from flock.core.serialization.json_encoder import FlockJSONEncoder
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{agent_name}_output_{timestamp}.json"
+        filepath = os.path.join(".flock/output/", filename)
+        os.makedirs(".flock/output/", exist_ok=True)
+
+        output_data = {
+            "agent": agent_name,
+            "timestamp": timestamp,
+            "output": result,
+        }
+
+        try:
+            with open(filepath, "w") as f:
+                json.dump(output_data, f, indent=2, cls=FlockJSONEncoder)
+        except Exception as e:
+            logger.warning(f"Failed to save output to file: {e}")
+
+    def add_legacy_component(
+        self,
+        config_instance: Any,
+        component_name: str | None = None,
+    ) -> "FlockAgent":
+        """Adds or replaces a component based on its configuration object.
+        
+        This method provides backward compatibility with the old component system
+        while working with the new unified components architecture.
+
+        Args:
+            config_instance: An instance of a config class for FlockModule, FlockRouter, or FlockEvaluator.
+            component_name: Explicit name for the component.
+
+        Returns:
+            self for potential chaining.
+        """
+        from flock.core.flock_registry import get_registry
+
+        config_type = type(config_instance)
+        registry = get_registry()
+        logger.debug(
+            f"Attempting to add component via config: {config_type.__name__}"
+        )
+
+        # Find Component Class using Registry Map
+        ComponentClass = registry.get_component_class_for_config(config_type)
+
+        if not ComponentClass:
+            logger.error(
+                f"No component class registered for config type {config_type.__name__}. Use @flock_component(config_class=...) on the component."
+            )
+            raise TypeError(
+                f"Cannot find component class for config {config_type.__name__}"
+            )
+
+        component_class_name = ComponentClass.__name__
+        logger.debug(
+            f"Found component class '{component_class_name}' mapped to config '{config_type.__name__}'"
+        )
+
+        # Determine instance name
+        instance_name = component_name
+        if not instance_name:
+            instance_name = getattr(
+                config_instance, "name", component_class_name.lower()
+            )
+
+        # Instantiate the Component
+        try:
+            init_args = {"config": config_instance, "name": instance_name}
+            component_instance = ComponentClass(**init_args)
+        except Exception as e:
+            logger.error(
+                f"Failed to instantiate {ComponentClass.__name__} with config {config_type.__name__}: {e}",
+                exc_info=True,
+            )
+            raise RuntimeError(f"Component instantiation failed: {e}") from e
+
+        # Add to unified components list
+        self.add_component(component_instance)
+        logger.info(
+            f"Added component '{instance_name}' (type: {ComponentClass.__name__}) to agent '{self.name}'"
+        )
+
+        return self
+
     # --- Pydantic v2 Configuration ---
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}

@@ -19,14 +19,15 @@ flock/
 ├── src/flock/
 │   ├── core/                   # Framework foundation
 │   │   ├── flock.py           # Main orchestrator class
-│   │   ├── flock_agent.py     # Base agent class (1000+ lines)
+│   │   ├── flock_agent.py     # Base agent class (~500 lines)
 │   │   ├── flock_registry.py  # Component discovery & registration
 │   │   ├── context/           # State management
 │   │   ├── execution/         # Local & Temporal executors
 │   │   ├── serialization/     # Save/load functionality
 │   │   └── mcp/              # Model Context Protocol integration
-│   ├── evaluators/            # Agent execution logic (DSPy-based)
-│   ├── modules/               # Pluggable behavior extensions
+│   ├── components/            # Unified agent components (evaluation, routing, utility)
+│   ├── evaluators/            # Legacy evaluators (for compatibility)
+│   ├── modules/               # Legacy modules (for compatibility)
 │   ├── tools/                 # Utility functions
 │   ├── webapp/                # FastAPI web interface
 │   └── workflow/              # Temporal.io activities
@@ -45,10 +46,10 @@ flock/
    - Entry point for most operations
 
 2. **`FlockAgent`** (`src/flock/core/flock_agent.py`)
-   - Base class for all agents (refactored from 1000+ to 263 lines)
+   - Base class for all agents (refactored from 1000+ to ~500 lines)
    - Lifecycle hooks: initialize → evaluate → terminate
-   - Supports modules, evaluators, routers
-   - Uses composition-based architecture with focused components
+   - Uses unified components list instead of separate evaluator/router/modules properties
+   - Composition-based architecture with focused components
 
 3. **`FlockRegistry`** (`src/flock/core/flock_registry.py`)
    - Singleton for component discovery
@@ -107,9 +108,10 @@ uv run python -c "from flock.core import Flock; print('OK')" # Quick import test
 ### Component Registration
 ```python
 from flock.core.flock_registry import flock_component
+from flock.core.component import EvaluationComponentBase
 
 @flock_component(config_class=MyComponentConfig)
-class MyComponent(FlockEvaluator):
+class MyComponent(EvaluationComponentBase):
     # Component implementation
 ```
 

@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 import numpy as np
 import psutil
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent
@@ -25,8 +25,7 @@ class MetricPoint(BaseModel):
     value: int | float | str
     tags: dict[str, str] = {}
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class MetricsModuleConfig(FlockModuleConfig):

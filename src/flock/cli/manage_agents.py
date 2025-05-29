@@ -180,7 +180,7 @@ def _view_agent_details(agent: FlockAgent):
     console.print(Panel(evaluator_info, title="Evaluator"))
 
     # Router info
-    router_info = f"Type: {type(agent.handoff_router).__name__ if agent.handoff_router else 'None'}"
+    router_info = f"Type: {type(agent.router).__name__ if agent.router else 'None'}"
     console.print(Panel(router_info, title="Router"))
 
     # Tools

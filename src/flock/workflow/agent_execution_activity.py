@@ -133,22 +133,22 @@ async def determine_next_agent(
                 f"Agent '{current_agent_name}' not found for routing."
             )
 
-        if not agent.handoff_router:
+        if not agent.router:
             logger.info(
-                "No handoff router defined for agent", agent=current_agent_name
+                "No router defined for agent", agent=current_agent_name
             )
             span.add_event("no_router")
             return None  # Indicate no handoff
 
         logger.debug(
-            f"Using router {agent.handoff_router.__class__.__name__}",
+            f"Using router {agent.router.__class__.__name__}",
             agent=agent.name,
         )
         try:
             # Execute the routing logic
             handoff_data: (
                 HandOffRequest | Callable
-            ) = await agent.handoff_router.route(agent, result, context)
+            ) = await agent.router.route(agent, result, context)
 
             # Handle callable handoff functions - This is complex in distributed systems.
             # Consider if this pattern should be supported or if routing should always

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import psutil
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.utility_component_base import UtilityModuleBase
@@ -29,8 +29,7 @@ class MetricPoint(BaseModel):
     value: int | float | str
     tags: dict[str, str] = {}
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class MetricsUtilityConfig(AgentComponentConfig):
@@ -70,7 +69,8 @@ class MetricsUtilityConfig(AgentComponentConfig):
         default=1000, description="Threshold for latency alerts"
     )
 
-    @validator("aggregation_interval")
+    @field_validator("aggregation_interval")
+    @classmethod
     def validate_interval(cls, v):
         """Validate time interval format."""
         if v[-1] not in ["s", "m", "h", "d"]:
