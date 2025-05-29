@@ -149,6 +149,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         self._execution = FlockAgentExecution(self)
         self._integration = FlockAgentIntegration(self)
         self._serialization = FlockAgentSerialization(self)
+        # Lifecycle will be lazy-loaded when needed
 
     # --- CONVENIENCE PROPERTIES ---
     # These provide familiar access patterns while using the unified model
@@ -156,12 +157,12 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     @property
     def evaluator(self) -> EvaluationComponentBase | None:
         """Get the primary evaluation component for this agent."""
-        return self.components_helper.get_primary_evaluator()
+        return self._components.get_primary_evaluator()
 
     @property
     def router(self) -> RoutingComponentBase | None:
         """Get the primary routing component for this agent."""
-        return self.components_helper.get_primary_router()
+        return self._components.get_primary_router()
 
     @property
     def modules(self) -> list[AgentComponent]:
@@ -169,7 +170,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         return self.components.copy()
 
     @property
-    def components_helper(self):
+    def _components(self):
         """Get the component management helper."""
         if not hasattr(self, '_components_helper'):
             from flock.core.agent.flock_agent_components import (
@@ -178,124 +179,52 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             self._components_helper = FlockAgentComponents(self)
         return self._components_helper
 
-    # Component management delegated to components_helper
+    # Component management delegated to _components
     def add_component(self, component: AgentComponent) -> None:
         """Add a component to this agent."""
-        self.components_helper.add_component(component)
+        self._components.add_component(component)
 
     def remove_component(self, component_name: str) -> None:
         """Remove a component from this agent."""
-        self.components_helper.remove_component(component_name)
+        self._components.remove_component(component_name)
 
     def get_component(self, component_name: str) -> AgentComponent | None:
         """Get a component by name."""
-        return self.components_helper.get_component(component_name)
+        return self._components.get_component(component_name)
 
 
     def get_enabled_components(self) -> list[AgentComponent]:
         """Get enabled components (backward compatibility)."""
-        return self.components_helper.get_enabled_components()
+        return self._components.get_enabled_components()
 
-    # --- UNIFIED LIFECYCLE EXECUTION ---
+    # --- LIFECYCLE DELEGATION ---
+    # Delegate lifecycle methods to the composition objects
+
+    @property
+    def _lifecycle(self):
+        """Get the lifecycle management helper (lazy-loaded)."""
+        if not hasattr(self, '_lifecycle_helper'):
+            from flock.core.agent.flock_agent_lifecycle import (
+                FlockAgentLifecycle,
+            )
+            self._lifecycle_helper = FlockAgentLifecycle(self)
+        return self._lifecycle_helper
 
     async def initialize(self, inputs: dict[str, Any]) -> None:
         """Initialize agent and run component initializers."""
-        logger.debug(f"Initializing unified agent '{self.name}'")
-
-        for component in self.get_enabled_components():
-            try:
-                await component.on_initialize(self, inputs, self.context)
-            except Exception as e:
-                logger.error(f"Error initializing component '{component.name}': {e}")
+        return await self._lifecycle.initialize(inputs)
 
     async def evaluate(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Core evaluation logic using unified component system."""
-        logger.debug(f"Evaluating unified agent '{self.name}'")
-
-        current_inputs = inputs
-
-        # 1. Pre-evaluate hooks (all components)
-        for component in self.get_enabled_components():
-            try:
-                current_inputs = await component.on_pre_evaluate(self, current_inputs, self.context)
-            except Exception as e:
-                logger.error(f"Error in pre-evaluate for component '{component.name}': {e}")
-
-        # 2. Core evaluation (primary evaluator component)
-        result = current_inputs  # Default if no evaluator
-
-        evaluator = self.evaluator
-        if evaluator:
-            try:
-                # Get tools through integration system
-                registered_tools = self.tools or []
-                mcp_tools = await self._integration.get_mcp_tools() if self.servers else []
-
-                result = await evaluator.evaluate_core(
-                    self, current_inputs, self.context, registered_tools, mcp_tools
-                )
-            except Exception as e:
-                logger.error(f"Error in core evaluation: {e}")
-                raise
-        else:
-            logger.warning(f"Agent '{self.name}' has no evaluation component")
-
-        # 3. Post-evaluate hooks (all components)
-        current_result = result
-        for component in self.get_enabled_components():
-            try:
-                tmp_result = await component.on_post_evaluate(
-                    self, current_inputs, self.context, current_result
-                )
-                if tmp_result is not None:
-                    current_result = tmp_result
-            except Exception as e:
-                logger.error(f"Error in post-evaluate for component '{component.name}': {e}")
-
-        # 4. Determine next step (routing components)
-        self.next_agent = None  # Reset
-
-        router = self.router
-        if router:
-            try:
-                self.next_agent = await router.determine_next_step(
-                    self, current_result, self.context
-                )
-            except Exception as e:
-                logger.error(f"Error in routing: {e}")
-
-        return current_result
+        return await self._lifecycle.evaluate(inputs)
 
     async def terminate(self, inputs: dict[str, Any], result: dict[str, Any]) -> None:
         """Terminate agent and run component terminators."""
-        logger.debug(f"Terminating unified agent '{self.name}'")
-
-        current_result = result
-
-        for component in self.get_enabled_components():
-            try:
-                tmp_result = await component.on_terminate(self, inputs, self.context, current_result)
-                if tmp_result is not None:
-                    current_result = tmp_result
-            except Exception as e:
-                logger.error(f"Error in terminate for component '{component.name}': {e}")
-
-        # Handle output file writing
-        if self.config.write_to_file:
-            self._serialization._save_output(self.name, current_result)
-
-        if self.config.wait_for_input:
-            input("Press Enter to continue...")
+        return await self._lifecycle.terminate(inputs, result)
 
     async def on_error(self, error: Exception, inputs: dict[str, Any]) -> None:
         """Handle errors and run component error handlers."""
-        logger.error(f"Error occurred in unified agent '{self.name}': {error}")
-
-        for component in self.get_enabled_components():
-            try:
-                await component.on_error(self, inputs, self.context, error)
-            except Exception as e:
-                logger.error(f"Error in error handler for component '{component.name}': {e}")
+        return await self._lifecycle.on_error(error, inputs)
 
     # --- EXECUTION METHODS ---
     # Delegate to the execution system
@@ -306,135 +235,19 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     async def run_async(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Asynchronous execution logic with unified lifecycle."""
-        try:
-            await self.initialize(inputs)
-            result = await self.evaluate(inputs)
-            await self.terminate(inputs, result)
-            logger.info("Unified agent run completed", agent=self.name)
-            return result
-        except Exception as run_error:
-            logger.error(f"Error running unified agent: {run_error}")
-            await self.on_error(run_error, inputs)
-            raise
+        return await self._execution.run_async(inputs)
 
     # --- SERIALIZATION ---
     # Delegate to the serialization system
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary using unified component serialization."""
-        from flock.core.flock_registry import get_registry
-        from flock.core.serialization.serialization_utils import serialize_item
-
-        FlockRegistry = get_registry()
-
-        # Basic agent data (exclude components and runtime state)
-        exclude = ["components", "context", "next_agent", "tools", "servers"]
-
-        # Handle callable fields
-        if callable(self.description):
-            exclude.append("description")
-        if callable(self.input):
-            exclude.append("input")
-        if callable(self.output):
-            exclude.append("output")
-
-        data = self.model_dump(
-            exclude=exclude,
-            mode="json",
-            exclude_none=True,
-        )
-
-        # Serialize components list
-        if self.components:
-            serialized_components = []
-            for component in self.components:
-                try:
-                    comp_type = type(component)
-                    type_name = FlockRegistry.get_component_type_name(comp_type)
-                    if type_name:
-                        component_data = serialize_item(component)
-                        if isinstance(component_data, dict):
-                            component_data["type"] = type_name
-                            serialized_components.append(component_data)
-                        else:
-                            logger.warning(f"Component {component.name} serialization failed")
-                    else:
-                        logger.warning(f"Component {component.name} type not registered")
-                except Exception as e:
-                    logger.error(f"Failed to serialize component {component.name}: {e}")
-
-            if serialized_components:
-                data["components"] = serialized_components
-
-        # Handle other serializable fields (tools, servers, callables)
-        if self.tools:
-            serialized_tools = []
-            for tool in self.tools:
-                if callable(tool):
-                    path_str = FlockRegistry.get_callable_path_string(tool)
-                    if path_str:
-                        func_name = path_str.split(".")[-1]
-                        serialized_tools.append(func_name)
-            if serialized_tools:
-                data["tools"] = serialized_tools
-
-        if self.servers:
-            serialized_servers = []
-            for server in self.servers:
-                if isinstance(server, str):
-                    serialized_servers.append(server)
-                elif hasattr(server, 'config') and hasattr(server.config, 'name'):
-                    serialized_servers.append(server.config.name)
-            if serialized_servers:
-                data["mcp_servers"] = serialized_servers
-
-        return data
+        return self._serialization.to_dict()
 
     @classmethod
     def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         """Deserialize from dictionary using unified component deserialization."""
-        from flock.core.flock_registry import get_registry
-        from flock.core.serialization.serialization_utils import (
-            deserialize_component,
-        )
-
-        registry = get_registry()
-
-        # Separate component data from agent data
-        components_data = data.pop("components", [])
-        tools_data = data.pop("tools", [])
-        servers_data = data.pop("mcp_servers", [])
-
-        # Create base agent
-        agent = cls(**data)
-
-        # Deserialize components
-        if components_data:
-            for component_data in components_data:
-                try:
-                    # Use the existing deserialize_component function
-                    component = deserialize_component(component_data, AgentComponent)
-                    if component:
-                        agent.add_component(component)
-                except Exception as e:
-                    logger.error(f"Failed to deserialize component: {e}")
-
-        # Deserialize tools
-        if tools_data:
-            agent.tools = []
-            for tool_name in tools_data:
-                try:
-                    tool = registry.get_callable(tool_name)
-                    if tool:
-                        agent.tools.append(tool)
-                except Exception as e:
-                    logger.warning(f"Could not resolve tool '{tool_name}': {e}")
-
-        # Deserialize servers
-        if servers_data:
-            agent.servers = servers_data  # Store as names, resolve at runtime
-
-        return agent
+        return FlockAgentSerialization.from_dict(cls, data)
 
     def set_model(self, model: str):
         """Set the model for the agent and its evaluator.
@@ -459,14 +272,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     def resolve_callables(self, context: FlockContext | None = None) -> None:
         """Resolves callable fields (description, input, output) using context."""
-        if callable(self.description):
-            self.description = self.description(
-                context
-            )  # Pass context if needed by callable
-        if callable(self.input):
-            self.input = self.input(context)
-        if callable(self.output):
-            self.output = self.output(context)
+        return self._integration.resolve_callables(context)
 
     @property
     def resolved_description(self) -> str | None:
@@ -496,99 +302,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         return None
 
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
-        """Save output to file if configured."""
-        if not self.config.write_to_file:
-            return
-
-        import json
-        import os
-        from datetime import datetime
-
-        from flock.core.serialization.json_encoder import FlockJSONEncoder
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{agent_name}_output_{timestamp}.json"
-        filepath = os.path.join(".flock/output/", filename)
-        os.makedirs(".flock/output/", exist_ok=True)
-
-        output_data = {
-            "agent": agent_name,
-            "timestamp": timestamp,
-            "output": result,
-        }
-
-        try:
-            with open(filepath, "w") as f:
-                json.dump(output_data, f, indent=2, cls=FlockJSONEncoder)
-        except Exception as e:
-            logger.warning(f"Failed to save output to file: {e}")
-
-    def add_legacy_component(
-        self,
-        config_instance: Any,
-        component_name: str | None = None,
-    ) -> "FlockAgent":
-        """Adds or replaces a component based on its configuration object.
-        
-        This method provides backward compatibility with the old component system
-        while working with the new unified components architecture.
-
-        Args:
-            config_instance: An instance of a config class for FlockModule, FlockRouter, or FlockEvaluator.
-            component_name: Explicit name for the component.
-
-        Returns:
-            self for potential chaining.
-        """
-        from flock.core.flock_registry import get_registry
-
-        config_type = type(config_instance)
-        registry = get_registry()
-        logger.debug(
-            f"Attempting to add component via config: {config_type.__name__}"
-        )
-
-        # Find Component Class using Registry Map
-        ComponentClass = registry.get_component_class_for_config(config_type)
-
-        if not ComponentClass:
-            logger.error(
-                f"No component class registered for config type {config_type.__name__}. Use @flock_component(config_class=...) on the component."
-            )
-            raise TypeError(
-                f"Cannot find component class for config {config_type.__name__}"
-            )
-
-        component_class_name = ComponentClass.__name__
-        logger.debug(
-            f"Found component class '{component_class_name}' mapped to config '{config_type.__name__}'"
-        )
-
-        # Determine instance name
-        instance_name = component_name
-        if not instance_name:
-            instance_name = getattr(
-                config_instance, "name", component_class_name.lower()
-            )
-
-        # Instantiate the Component
-        try:
-            init_args = {"config": config_instance, "name": instance_name}
-            component_instance = ComponentClass(**init_args)
-        except Exception as e:
-            logger.error(
-                f"Failed to instantiate {ComponentClass.__name__} with config {config_type.__name__}: {e}",
-                exc_info=True,
-            )
-            raise RuntimeError(f"Component instantiation failed: {e}") from e
-
-        # Add to unified components list
-        self.add_component(component_instance)
-        logger.info(
-            f"Added component '{instance_name}' (type: {ComponentClass.__name__}) to agent '{self.name}'"
-        )
-
-        return self
+        """Save output to file if configured (delegated to serialization)."""
+        return self._serialization._save_output(agent_name, result)
 
     # --- Pydantic v2 Configuration ---
     model_config = {"arbitrary_types_allowed": True}

@@ -381,7 +381,7 @@ class FlockFactory:
 
         metrics_component = MetricsUtilityComponent("metrics", config=metrics_component_config)
 
-        server.add_module(metrics_component)
+        server.add_component(metrics_component)
 
         return server
 

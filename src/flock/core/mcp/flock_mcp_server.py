@@ -244,7 +244,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
             try:
                 if not additional_params:
                     additional_params = {}
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     additional_params = await module.on_connect(
                         server=self, additional_params=additional_params
                     )
@@ -624,7 +624,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         # re-hydrate components (both legacy modules and new components)
         for cname, cdata in data.get("components", {}).items():
             server.add_component(deserialize_component(cdata, AgentComponent))
-        
+
         # Handle legacy modules for backward compatibility during transition
         for mname, mdata in data.get("modules", {}).items():
             logger.warning(f"Legacy module '{mname}' found during deserialization - consider migrating to unified components")

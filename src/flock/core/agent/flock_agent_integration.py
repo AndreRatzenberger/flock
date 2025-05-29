@@ -93,8 +93,8 @@ class FlockAgentIntegration:
                     # Build execution chain where the evaluator is the terminal handler
 
                     async def _final_handler():
-                        return await self.agent.evaluator.evaluate(
-                            self.agent, current_inputs, registered_tools
+                        return await self.agent.evaluator.evaluate_core(
+                            self.agent, current_inputs, self.agent.context, registered_tools, mcp_tools
                         )
 
                     idx = 0
@@ -112,21 +112,22 @@ class FlockAgentIntegration:
                     result = await _invoke_next()
                 else:
                     # No pipeline registered, direct evaluation
-                    result = await self.agent.evaluator.evaluate(
-                        self.agent, current_inputs, registered_tools
+                    result = await self.agent.evaluator.evaluate_core(
+                        self.agent, current_inputs, self.agent.context, registered_tools, mcp_tools
                     )
             except ImportError:
                 # wd.di not installed – fall back
-                result = await self.agent.evaluator.evaluate(
-                    self.agent, current_inputs, registered_tools
+                result = await self.agent.evaluator.evaluate_core(
+                    self.agent, current_inputs, self.agent.context, registered_tools, mcp_tools
                 )
         else:
             # No DI container – standard execution
-            result = await self.agent.evaluator.evaluate(
+            result = await self.agent.evaluator.evaluate_core(
                 self.agent,
                 current_inputs,
+                self.agent.context,
                 registered_tools,
-                mcp_tools=mcp_tools,
+                mcp_tools,
             )
         
         return result

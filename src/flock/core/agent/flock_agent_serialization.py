@@ -14,7 +14,6 @@ from flock.core.serialization.serialization_utils import (
     deserialize_component,
     serialize_item,
 )
-from flock.workflow.temporal_config import TemporalActivityConfig
 
 if TYPE_CHECKING:
     from flock.core.flock_agent import FlockAgent
@@ -59,9 +58,7 @@ class FlockAgentSerialization:
 
         exclude = [
             "context",
-            "evaluator",
-            "modules",
-            "handoff_router",
+            "components",
             "tools",
             "servers",
         ]
@@ -82,6 +79,9 @@ class FlockAgentSerialization:
         if callable(self.agent.output):
             is_output_callable = True
             exclude.append("output")
+        if callable(self.agent.next_agent):
+            is_next_agent_callable = True
+            exclude.append("next_agent")
 
         logger.debug(f"Serializing agent '{self.agent.name}' to dict.")
         # Use Pydantic's dump, exclude manually handled fields and runtime context
@@ -91,71 +91,29 @@ class FlockAgentSerialization:
             exclude_none=True,  # Exclude None values for cleaner output
         )
         logger.debug(f"Base agent data for '{self.agent.name}': {list(data.keys())}")
-        serialized_modules = {}
 
-        def add_serialized_component(component: Any, field_name: str):
-            if component:
-                comp_type = type(component)
-                type_name = FlockRegistry.get_component_type_name(
-                    comp_type
-                )  # Get registered name
-                if type_name:
-                    try:
-                        serialized_component_data = serialize_item(component)
-
-                        if not isinstance(serialized_component_data, dict):
-                            logger.error(
-                                f"Serialization of component {type_name} for field '{field_name}' did not result in a dictionary. Got: {type(serialized_component_data)}"
-                            )
-                            serialized_modules[field_name] = {
-                                "type": type_name,
-                                "name": getattr(component, "name", "unknown"),
-                                "error": "serialization_failed_non_dict",
-                            }
+        # Serialize components list using unified architecture
+        if self.agent.components:
+            serialized_components = []
+            for component in self.agent.components:
+                try:
+                    comp_type = type(component)
+                    type_name = FlockRegistry.get_component_type_name(comp_type)
+                    if type_name:
+                        component_data = serialize_item(component)
+                        if isinstance(component_data, dict):
+                            component_data["type"] = type_name
+                            serialized_components.append(component_data)
                         else:
-                            serialized_component_data["type"] = type_name
-                            serialized_modules[field_name] = (
-                                serialized_component_data
-                            )
-                            logger.debug(
-                                f"Successfully serialized component for field '{field_name}' (type: {type_name})"
-                            )
+                            logger.warning(f"Component {component.name} serialization failed")
+                    else:
+                        logger.warning(f"Component {component.name} type not registered")
+                except Exception as e:
+                    logger.error(f"Failed to serialize component {component.name}: {e}")
 
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to serialize component {type_name} for field '{field_name}': {e}",
-                            exc_info=True,
-                        )
-                        serialized_modules[field_name] = {
-                            "type": type_name,
-                            "name": getattr(component, "name", "unknown"),
-                            "error": "serialization_failed",
-                        }
-                else:
-                    logger.warning(
-                        f"Cannot serialize unregistered component {comp_type.__name__} for field '{field_name}'"
-                    )
-
-        add_serialized_component(self.agent.evaluator, "evaluator")
-        if serialized_modules:
-            data["evaluator"] = serialized_modules["evaluator"]
-            logger.debug(f"Added evaluator to agent '{self.agent.name}'")
-
-        serialized_modules = {}
-        add_serialized_component(self.agent.handoff_router, "handoff_router")
-        if serialized_modules:
-            data["handoff_router"] = serialized_modules["handoff_router"]
-            logger.debug(f"Added handoff_router to agent '{self.agent.name}'")
-
-        serialized_modules = {}
-        for module in self.agent.modules.values():
-            add_serialized_component(module, module.name)
-
-        if serialized_modules:
-            data["modules"] = serialized_modules
-            logger.debug(
-                f"Added {len(serialized_modules)} modules to agent '{self.agent.name}'"
-            )
+            if serialized_components:
+                data["components"] = serialized_components
+                logger.debug(f"Added {len(serialized_components)} components to agent '{self.agent.name}'")
 
         # --- Serialize Servers ---
         if self.agent.servers:
@@ -247,6 +205,20 @@ class FlockAgentSerialization:
                     f"Could not get path string for output {self.agent.output} in agent '{self.agent.name}'. Skipping."
                 )
 
+        if is_next_agent_callable:
+            path_str = FlockRegistry.get_callable_path_string(self.agent.next_agent)
+            if path_str:
+                func_name = path_str.split(".")[-1]
+                data["next_agent"] = func_name
+                logger.debug(
+                    f"Added next_agent '{func_name}' (from path '{path_str}') to agent '{self.agent.name}'"
+                )
+            else:
+                logger.warning(
+                    f"Could not get path string for next_agent {self.agent.next_agent} in agent '{self.agent.name}'. Skipping."
+                )
+
+
         logger.info(
             f"Serialization of agent '{self.agent.name}' complete with {len(data)} fields"
         )
@@ -255,9 +227,8 @@ class FlockAgentSerialization:
     @classmethod
     def from_dict(cls, agent_class: type[T], data: dict[str, Any]) -> T:
         """Deserialize the agent from a dictionary, including components, tools, and callables."""
-        from flock.core.flock_registry import (
-            get_registry,  # Import registry locally
-        )
+        from flock.core.component.agent_component_base import AgentComponent
+        from flock.core.flock_registry import get_registry
 
         registry = get_registry()
         logger.debug(
@@ -265,121 +236,46 @@ class FlockAgentSerialization:
         )
 
         # --- Separate Data ---
-        component_configs = {}
+        components_data = data.pop("components", [])
         callable_configs = {}
-        tool_config = []
-        servers_config = []
-        agent_data = {}
+        tool_config = data.pop("tools", [])
+        servers_config = data.pop("mcp_servers", [])
 
-        component_keys = [
-            "evaluator",
-            "handoff_router",
-            "modules",
-            "temporal_activity_config",
-        ]
         callable_keys = [
             "description_callable",
             "input_callable",
             "output_callable",
         ]
-        tool_key = "tools"
 
-        servers_key = "mcp_servers"
-
-        for key, value in data.items():
-            if key in component_keys and value is not None:
-                component_configs[key] = value
-            elif key in callable_keys and value is not None:
-                callable_configs[key] = value
-            elif key == tool_key and value is not None:
-                tool_config = value  # Expecting a list of names
-            elif key == servers_key and value is not None:
-                servers_config = value  # Expecting a list of names
-            elif key not in component_keys + callable_keys + [
-                tool_key,
-                servers_key,
-            ]:  # Avoid double adding
-                agent_data[key] = value
-            # else: ignore keys that are None or already handled
+        for key in callable_keys:
+            if key in data and data[key] is not None:
+                callable_configs[key] = data.pop(key)
 
         # --- Deserialize Base Agent ---
         # Ensure required fields like 'name' are present if needed by __init__
-        if "name" not in agent_data:
+        if "name" not in data:
             raise ValueError(
                 "Agent data must include a 'name' field for deserialization."
             )
-        agent_name_log = agent_data["name"]  # For logging
+        agent_name_log = data["name"]  # For logging
         logger.info(f"Deserializing base agent data for '{agent_name_log}'")
 
         # Pydantic should handle base fields based on type hints in __init__
-        agent = agent_class(**agent_data)
+        agent = agent_class(**data)
         logger.debug(f"Base agent '{agent.name}' instantiated.")
 
         # --- Deserialize Components ---
         logger.debug(f"Deserializing components for '{agent.name}'")
-        # Evaluator
-        if "evaluator" in component_configs:
-            try:
-                agent.evaluator = deserialize_component(
-                    component_configs["evaluator"], FlockEvaluator
-                )
-                logger.debug(f"Deserialized evaluator for '{agent.name}'")
-            except Exception as e:
-                logger.error(
-                    f"Failed to deserialize evaluator for '{agent.name}': {e}",
-                    exc_info=True,
-                )
-
-        # Handoff Router
-        if "handoff_router" in component_configs:
-            try:
-                agent.handoff_router = deserialize_component(
-                    component_configs["handoff_router"], FlockRouter
-                )
-                logger.debug(f"Deserialized handoff_router for '{agent.name}'")
-            except Exception as e:
-                logger.error(
-                    f"Failed to deserialize handoff_router for '{agent.name}': {e}",
-                    exc_info=True,
-                )
-
-        # Modules
-        if "modules" in component_configs:
-            agent.modules = {}  # Initialize
-            for module_name, module_data in component_configs[
-                "modules"
-            ].items():
+        if components_data:
+            for component_data in components_data:
                 try:
-                    module_instance = deserialize_component(
-                        module_data, FlockModule
-                    )
-                    if module_instance:
-                        # Use add_module for potential logic within it
-                        agent._components.add_module(module_instance)
-                        logger.debug(
-                            f"Deserialized and added module '{module_name}' for '{agent.name}'"
-                        )
+                    # Use the existing deserialize_component function
+                    component = deserialize_component(component_data, AgentComponent)
+                    if component:
+                        agent.add_component(component)
+                        logger.debug(f"Deserialized and added component '{component.name}' for '{agent.name}'")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to deserialize module '{module_name}' for '{agent.name}': {e}",
-                        exc_info=True,
-                    )
-
-        # Temporal Activity Config
-        if "temporal_activity_config" in component_configs:
-            try:
-                agent.temporal_activity_config = TemporalActivityConfig(
-                    **component_configs["temporal_activity_config"]
-                )
-                logger.debug(
-                    f"Deserialized temporal_activity_config for '{agent.name}'"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to deserialize temporal_activity_config for '{agent.name}': {e}",
-                    exc_info=True,
-                )
-                agent.temporal_activity_config = None
+                    logger.error(f"Failed to deserialize component: {e}")
 
         # --- Deserialize Tools ---
         agent.tools = []  # Initialize tools list
@@ -431,15 +327,14 @@ class FlockAgentSerialization:
                     # an instance of a server during the deserialization step (however that might be achieved)
                     # check the registry, if the server is already registered, if not, register it
                     # and store the name in the servers list
-                    FlockRegistry = get_registry()
                     server_exists = (
-                        FlockRegistry.get_server(server_name.config.name)
+                        registry.get_server(server_name.config.name)
                         is not None
                     )
                     if server_exists:
                         agent.servers.append(server_name.config.name)
                     else:
-                        FlockRegistry.register_server(
+                        registry.register_server(
                             server=server_name
                         )  # register it.
                         agent.servers.append(server_name.config.name)

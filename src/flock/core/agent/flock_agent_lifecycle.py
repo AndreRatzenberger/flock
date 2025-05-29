@@ -30,15 +30,15 @@ class FlockAgentLifecycle:
                 agent=self.agent.name,
             )
             try:
-                for module in self.agent._components.get_enabled_modules():
-                    await module.on_initialize(self.agent, inputs, self.agent.context)
-            except Exception as module_error:
+                for component in self.agent.get_enabled_components():
+                    await component.on_initialize(self.agent, inputs, self.agent.context)
+            except Exception as component_error:
                 logger.error(
                     "Error during initialize",
                     agent=self.agent.name,
-                    error=str(module_error),
+                    error=str(component_error),
                 )
-                span.record_exception(module_error)
+                span.record_exception(component_error)
 
     async def terminate(
         self, inputs: dict[str, Any], result: dict[str, Any]
@@ -55,48 +55,48 @@ class FlockAgentLifecycle:
             )
             try:
                 current_result = result
-                for module in self.agent._components.get_enabled_modules():
-                    tmp_result = await module.on_terminate(
+                for component in self.agent.get_enabled_components():
+                    tmp_result = await component.on_terminate(
                         self.agent, inputs, self.agent.context, current_result
                     )
-                    # If the module returns a result, use it
+                    # If the component returns a result, use it
                     if tmp_result:
                         current_result = tmp_result
 
                 if self.agent.config.write_to_file:
-                    self.agent._save_output(self.agent.name, current_result)
+                    self.agent._serialization._save_output(self.agent.name, current_result)
 
                 if self.agent.config.wait_for_input:
                     # simple input prompt
                     input("Press Enter to continue...")
 
-            except Exception as module_error:
+            except Exception as component_error:
                 logger.error(
                     "Error during terminate",
                     agent=self.agent.name,
-                    error=str(module_error),
+                    error=str(component_error),
                 )
-                span.record_exception(module_error)
+                span.record_exception(component_error)
 
     async def on_error(self, error: Exception, inputs: dict[str, Any]) -> None:
-        """Handle errors and run module error handlers."""
+        """Handle errors and run component error handlers."""
         logger.error(f"Error occurred in agent '{self.agent.name}': {error}")
         with tracer.start_as_current_span("agent.on_error") as span:
             span.set_attribute("agent.name", self.agent.name)
             span.set_attribute("inputs", str(inputs))
             try:
-                for module in self.agent._components.get_enabled_modules():
-                    await module.on_error(self.agent, inputs, self.agent.context, error)
-            except Exception as module_error:
+                for component in self.agent.get_enabled_components():
+                    await component.on_error(self.agent, inputs, self.agent.context, error)
+            except Exception as component_error:
                 logger.error(
                     "Error during on_error",
                     agent=self.agent.name,
-                    error=str(module_error),
+                    error=str(component_error),
                 )
-                span.record_exception(module_error)
+                span.record_exception(component_error)
 
     async def evaluate(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """Core evaluation logic, calling the assigned evaluator and modules."""
+        """Core evaluation logic, calling the assigned evaluator and components."""
         if not self.agent.evaluator:
             raise RuntimeError(
                 f"Agent '{self.agent.name}' has no evaluator assigned."
@@ -113,8 +113,8 @@ class FlockAgentLifecycle:
             current_inputs = inputs
 
             # Pre-evaluate hooks
-            for module in self.agent._components.get_enabled_modules():
-                current_inputs = await module.on_pre_evaluate(
+            for component in self.agent.get_enabled_components():
+                current_inputs = await component.on_pre_evaluate(
                     self.agent, current_inputs, self.agent.context
                 )
 
@@ -131,10 +131,10 @@ class FlockAgentLifecycle:
                     mcp_tools = await self.agent._integration.get_mcp_tools()
 
                 # --------------------------------------------------
-                # Optional DI middleware pipeline
+                # Use evaluator component's evaluate_core method
                 # --------------------------------------------------
-                result = await self.agent._integration.execute_with_middleware(
-                    current_inputs, registered_tools, mcp_tools
+                result = await self.agent.evaluator.evaluate_core(
+                    self.agent, current_inputs, self.agent.context, registered_tools, mcp_tools
                 )
 
             except Exception as eval_error:
@@ -151,16 +151,27 @@ class FlockAgentLifecycle:
 
             # Post-evaluate hooks
             current_result = result
-            for module in self.agent._components.get_enabled_modules():
-                tmp_result = await module.on_post_evaluate(
+            for component in self.agent.get_enabled_components():
+                tmp_result = await component.on_post_evaluate(
                     self.agent,
                     current_inputs,
                     self.agent.context,
                     current_result,
                 )
-                # If the module returns a result, use it
+                # If the component returns a result, use it
                 if tmp_result:
                     current_result = tmp_result
+
+            # Handle routing logic
+            self.agent.next_agent = None  # Reset
+            router = self.agent.router
+            if router:
+                try:
+                    self.agent.next_agent = await router.determine_next_step(
+                        self.agent, current_result, self.agent.context
+                    )
+                except Exception as e:
+                    logger.error(f"Error in routing: {e}")
 
             logger.debug(f"Evaluation completed for agent '{self.agent.name}'")
             return current_result

@@ -37,6 +37,11 @@ class FlockAgentExecution:
             span.set_attribute("agent.name", self.agent.name)
             span.set_attribute("inputs", str(inputs))
             try:
+                # Initialize lifecycle system if not already present
+                if not hasattr(self.agent, '_lifecycle'):
+                    from flock.core.agent.flock_agent_lifecycle import FlockAgentLifecycle
+                    self.agent._lifecycle = FlockAgentLifecycle(self.agent)
+                    
                 await self.agent._lifecycle.initialize(inputs)
                 result = await self.agent._lifecycle.evaluate(inputs)
                 await self.agent._lifecycle.terminate(inputs, result)

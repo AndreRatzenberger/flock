@@ -79,7 +79,7 @@ flock/
 - `agent.evaluator`: Primary evaluation component (delegates to helper)
 - `agent.router`: Primary routing component (delegates to helper)
 - `agent.next_agent`: Next agent in workflow (string, callable, or None)
-- `agent.components_helper`: Component management helper (lazy-loaded)
+- `agent._components`: Component management helper (lazy-loaded)
 
 ### Execution Flow
 
@@ -183,7 +183,7 @@ agent = FlockAgent(
 )
 
 # Use helper for component management
-helper = agent.components_helper  # Lazy-loaded property
+helper = agent._components  # Lazy-loaded property
 print(f"Evaluation components: {len(helper.get_evaluation_components())}")
 print(f"Primary evaluator: {helper.get_primary_evaluator()}")
 
@@ -201,7 +201,7 @@ The `FlockAgentComponents` class provides convenient methods for managing compon
 
 ```python
 # Access helper through agent property (lazy-loaded)
-helper = agent.components_helper
+helper = agent._components
 
 # Component management
 helper.add_component(my_component)
@@ -344,7 +344,7 @@ The unified architecture completely replaces the legacy system:
 - Easier testing and debugging
 - Unified component registration and discovery
 - Consistent `*ComponentBase` naming convention
-- No code duplication between FlockAgent and component management
+- Full composition pattern with `_components`, `_execution`, `_integration`, `_serialization`, `_lifecycle`
 - Lazy-loaded component helper with rich functionality
 
 This should give you a solid foundation to understand and contribute to the Flock framework efficiently!
