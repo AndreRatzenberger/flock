@@ -99,7 +99,7 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph "FlockAgent (Clean Interface)"
+    subgraph "FlockAgent"
         Agent[FlockAgent]
         Components[components: list]
         Evaluator[evaluator property]
@@ -107,7 +107,7 @@ graph LR
         Helper[components_helper property]
     end
     
-    subgraph "FlockAgentComponents (Rich Functionality)"
+    subgraph "FlockAgentComponents"
         AddComp[add_component]
         RemoveComp[remove_component]
         GetComp[get_component]
