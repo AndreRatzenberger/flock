@@ -1,5 +1,5 @@
-# src/flock/core/flock_agent.py
-"""FlockAgent with unified component architecture."""
+# src/flock/core/flock_agent_unified.py
+"""FlockAgent with unified component architecture - NEXT GENERATION VERSION."""
 
 import uuid
 from abc import ABC
@@ -27,7 +27,7 @@ from flock.core.logging.logging import get_logger
 
 logger = get_logger("agent.unified")
 
-T = TypeVar("T", bound="FlockAgent")
+T = TypeVar("T", bound="FlockAgentUnified")
 
 SignatureType = (
     str
@@ -38,7 +38,7 @@ SignatureType = (
 )
 
 
-class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
+class FlockAgentUnified(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     """Unified FlockAgent using the new component architecture.
     
     This is the next-generation FlockAgent that uses a single components list
@@ -359,139 +359,15 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     # Delegate to the serialization system
     
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary using unified component serialization."""
-        from flock.core.flock_registry import get_registry
-        from flock.core.serialization.serialization_utils import serialize_item
-
-        FlockRegistry = get_registry()
-        
-        # Basic agent data (exclude components and runtime state)
-        exclude = ["components", "context", "next_handoff"]
-        
-        # Handle callable fields
-        if callable(self.description):
-            exclude.append("description")
-        if callable(self.input):
-            exclude.append("input")
-        if callable(self.output):
-            exclude.append("output")
-
-        data = self.model_dump(
-            exclude=exclude,
-            mode="json",
-            exclude_none=True,
-        )
-        
-        # Serialize components list
-        if self.components:
-            serialized_components = []
-            for component in self.components:
-                try:
-                    comp_type = type(component)
-                    type_name = FlockRegistry.get_component_type_name(comp_type)
-                    if type_name:
-                        component_data = serialize_item(component)
-                        if isinstance(component_data, dict):
-                            component_data["type"] = type_name
-                            serialized_components.append(component_data)
-                        else:
-                            logger.warning(f"Component {component.name} serialization failed")
-                    else:
-                        logger.warning(f"Component {component.name} type not registered")
-                except Exception as e:
-                    logger.error(f"Failed to serialize component {component.name}: {e}")
-            
-            if serialized_components:
-                data["components"] = serialized_components
-
-        # Handle other serializable fields (tools, servers, callables)
-        if self.tools:
-            serialized_tools = []
-            for tool in self.tools:
-                if callable(tool):
-                    path_str = FlockRegistry.get_callable_path_string(tool)
-                    if path_str:
-                        func_name = path_str.split(".")[-1]
-                        serialized_tools.append(func_name)
-            if serialized_tools:
-                data["tools"] = serialized_tools
-
-        if self.servers:
-            serialized_servers = []
-            for server in self.servers:
-                if isinstance(server, str):
-                    serialized_servers.append(server)
-                elif hasattr(server, 'config') and hasattr(server.config, 'name'):
-                    serialized_servers.append(server.config.name)
-            if serialized_servers:
-                data["mcp_servers"] = serialized_servers
-
-        return data
+        """Convert to dictionary - will need updates for unified components."""
+        # TODO: Update serialization for unified component model
+        return self._serialization.to_dict()
 
     @classmethod
     def from_dict(cls: type[T], data: dict[str, Any]) -> T:
-        """Deserialize from dictionary using unified component deserialization."""
-        from flock.core.flock_registry import get_registry
-        from flock.core.serialization.serialization_utils import deserialize_component
-
-        registry = get_registry()
-        
-        # Separate component data from agent data
-        components_data = data.pop("components", [])
-        tools_data = data.pop("tools", [])
-        servers_data = data.pop("mcp_servers", [])
-        
-        # Create base agent
-        agent = cls(**data)
-        
-        # Deserialize components
-        if components_data:
-            for component_data in components_data:
-                try:
-                    # Use the existing deserialize_component function
-                    component = deserialize_component(component_data, AgentComponent)
-                    if component:
-                        agent.add_component(component)
-                except Exception as e:
-                    logger.error(f"Failed to deserialize component: {e}")
-
-        # Deserialize tools
-        if tools_data:
-            agent.tools = []
-            for tool_name in tools_data:
-                try:
-                    tool = registry.get_callable(tool_name)
-                    if tool:
-                        agent.tools.append(tool)
-                except Exception as e:
-                    logger.warning(f"Could not resolve tool '{tool_name}': {e}")
-
-        # Deserialize servers
-        if servers_data:
-            agent.servers = servers_data  # Store as names, resolve at runtime
-
-        return agent
-
-    def set_model(self, model: str):
-        """Set the model for the agent and its evaluator.
-        
-        This method updates both the agent's model property and propagates
-        the model to the evaluator component if it has a config with a model field.
-        """
-        self.model = model
-        if self.evaluator and hasattr(self.evaluator, "config"):
-            self.evaluator.config.model = model
-            logger.info(
-                f"Set model to '{model}' for agent '{self.name}' and its evaluator."
-            )
-        elif self.evaluator:
-            logger.warning(
-                f"Evaluator for agent '{self.name}' does not have a standard config to set model."
-            )
-        else:
-            logger.warning(
-                f"Agent '{self.name}' has no evaluator to set model for."
-            )
+        """Deserialize from dictionary - will need updates for unified components."""
+        # TODO: Update deserialization for unified component model
+        return FlockAgentSerialization.from_dict(cls, data)
 
     # --- Pydantic v2 Configuration ---
     class Config:
