@@ -53,7 +53,7 @@ class MemoryUtilityConfig(AgentComponentConfig):
     # Vector store settings
     # ---------------------
 
-    vector_backend: Literal["chroma", "pinecone", "azure"] = Field(
+    vector_backend: Literal["chroma", "pinecone", "azure", "faiss"] = Field(
         default="chroma",
         description="Which vector backend to use (chroma | pinecone | azure)",
     )
