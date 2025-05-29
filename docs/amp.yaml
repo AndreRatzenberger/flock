@@ -1043,7 +1043,7 @@ messages:
 
               215: \r
 
-              216:     def get_enabled_modules(self) -> list[FlockModule]:\r
+              216:     def get_enabled_components(self) -> list[FlockModule]:\r
 
               217:         \"\"\"Get a list of currently enabled modules
               attached to this agent.\"\"\"\r
@@ -1155,7 +1155,7 @@ messages:
 
               262:             try:\r
 
-              263:                 for module in self.get_enabled_modules():\r
+              263:                 for module in self.get_enabled_components():\r
 
               264:                     await module.on_initialize(self, inputs,
               self.context)\r
@@ -1209,7 +1209,7 @@ messages:
 
               287:                 current_result = result\r
 
-              288:                 for module in self.get_enabled_modules():\r
+              288:                 for module in self.get_enabled_components():\r
 
               289:                     tmp_result = await module.on_terminate(\r
 
@@ -1276,7 +1276,7 @@ messages:
 
               317:             try:\r
 
-              318:                 for module in self.get_enabled_modules():\r
+              318:                 for module in self.get_enabled_components():\r
 
               319:                     await module.on_error(self, inputs,
               self.context, error)\r
@@ -1338,7 +1338,7 @@ messages:
 
               345:             # Pre-evaluate hooks\r
 
-              346:             for module in self.get_enabled_modules():\r
+              346:             for module in self.get_enabled_components():\r
 
               347:                 current_inputs = await
               module.on_pre_evaluate(\r
@@ -1611,7 +1611,7 @@ messages:
 
               465:             current_result = result\r
 
-              466:             for module in self.get_enabled_modules():\r
+              466:             for module in self.get_enabled_components():\r
 
               467:                 tmp_result = await module.on_post_evaluate(\r
 
@@ -5926,7 +5926,7 @@ messages:
             4. **Execution Management**: run, run_async, run_temporal
 
             5. **Module Management**: add_module, remove_module, get_module,
-            get_enabled_modules
+            get_enabled_components
 
             6. **Component Registration**: add_component method with registry
             integration
@@ -6048,7 +6048,7 @@ messages:
                     +add_module(module)
                     +remove_module(name)
                     +get_module(name)
-                    +get_enabled_modules()
+                    +get_enabled_components()
                 }
                 
                 class FlockAgentSerialization {
@@ -6354,7 +6354,7 @@ messages:
                     """Get a module by name."""
                     return self.agent.modules.get(module_name)
 
-                def get_enabled_modules(self) -> list[FlockModule]:
+                def get_enabled_components(self) -> list[FlockModule]:
                     """Get a list of currently enabled modules attached to this agent."""
                     return [m for m in self.agent.modules.values() if m.config.enabled]
 
@@ -6642,7 +6642,7 @@ messages:
                             agent=self.agent.name,
                         )
                         try:
-                            for module in self.agent._components.get_enabled_modules():
+                            for module in self.agent._components.get_enabled_components():
                                 await module.on_initialize(self.agent, inputs, self.agent.context)
                         except Exception as module_error:
                             logger.error(
@@ -6667,7 +6667,7 @@ messages:
                         )
                         try:
                             current_result = result
-                            for module in self.agent._components.get_enabled_modules():
+                            for module in self.agent._components.get_enabled_components():
                                 tmp_result = await module.on_terminate(
                                     self.agent, inputs, self.agent.context, current_result
                                 )
@@ -6697,7 +6697,7 @@ messages:
                         span.set_attribute("agent.name", self.agent.name)
                         span.set_attribute("inputs", str(inputs))
                         try:
-                            for module in self.agent._components.get_enabled_modules():
+                            for module in self.agent._components.get_enabled_components():
                                 await module.on_error(self.agent, inputs, self.agent.context, error)
                         except Exception as module_error:
                             logger.error(
@@ -6725,7 +6725,7 @@ messages:
                         current_inputs = inputs
 
                         # Pre-evaluate hooks
-                        for module in self.agent._components.get_enabled_modules():
+                        for module in self.agent._components.get_enabled_components():
                             current_inputs = await module.on_pre_evaluate(
                                 self.agent, current_inputs, self.agent.context
                             )
@@ -6763,7 +6763,7 @@ messages:
 
                         # Post-evaluate hooks
                         current_result = result
-                        for module in self.agent._components.get_enabled_modules():
+                        for module in self.agent._components.get_enabled_components():
                             tmp_result = await module.on_post_evaluate(
                                 self.agent,
                                 current_inputs,
@@ -8277,9 +8277,9 @@ messages:
                     """Get a module by name."""
                     return self._components.get_module(module_name)
 
-                def get_enabled_modules(self) -> list["FlockModule"]:
+                def get_enabled_components(self) -> list["FlockModule"]:
                     """Get a list of currently enabled modules attached to this agent."""
-                    return self._components.get_enabled_modules()
+                    return self._components.get_enabled_components()
 
                 def add_component(
                     self,
@@ -9320,9 +9320,9 @@ messages:
                     """Get a module by name."""
                     return self._components.get_module(module_name)
 
-                def get_enabled_modules(self) -> list[FlockModule]:
+                def get_enabled_components(self) -> list[FlockModule]:
                     """Get a list of currently enabled modules attached to this agent."""
-                    return self._components.get_enabled_modules()
+                    return self._components.get_enabled_components()
 
                 def add_component(
                     self,
@@ -9347,9 +9347,9 @@ messages:
                     """Get a module by name."""
                     return self._components.get_module(module_name)
 
-                def get_enabled_modules(self) -> list["FlockModule"]:
+                def get_enabled_components(self) -> list["FlockModule"]:
                     """Get a list of currently enabled modules attached to this agent."""
-                    return self._components.get_enabled_modules()
+                    return self._components.get_enabled_components()
 
                 def add_component(
                     self,
@@ -9391,10 +9391,10 @@ messages:
                        """Get a module by name."""
                        return self._components.get_module(module_name)
                
-              -    def get_enabled_modules(self) -> list["FlockModule"]:
-              +    def get_enabled_modules(self) -> list[FlockModule]:
+              -    def get_enabled_components(self) -> list["FlockModule"]:
+              +    def get_enabled_components(self) -> list[FlockModule]:
                        """Get a list of currently enabled modules attached to this agent."""
-                       return self._components.get_enabled_modules()
+                       return self._components.get_enabled_components()
                
                    def add_component(
               ```
@@ -14360,7 +14360,7 @@ messages:
                     """Get a module (backward compatibility)."""
                     return self.get_component(module_name)
 
-                def get_enabled_modules(self) -> list[AgentComponent]:
+                def get_enabled_components(self) -> list[AgentComponent]:
                     """Get enabled modules (backward compatibility)."""
                     return self.get_enabled_components()
 
@@ -17042,8 +17042,8 @@ messages:
                     found_module = agent.get_module("compat_test")  # Old API
                     print(f"✅ get_module() works: {found_module.name if found_module else 'None'}")
                     
-                    enabled_modules = agent.get_enabled_modules()  # Old API
-                    print(f"✅ get_enabled_modules() works: {len(enabled_modules)} enabled")
+                    enabled_modules = agent.get_enabled_components()  # Old API
+                    print(f"✅ get_enabled_components() works: {len(enabled_modules)} enabled")
                     
                     agent.remove_module("compat_test")  # Old API
                     print(f"✅ remove_module() works: {len(agent.components)} components")
@@ -39583,7 +39583,7 @@ messages:
 
             \r
 
-            \    def get_enabled_modules(self) -> list[FlockModule]:\r
+            \    def get_enabled_components(self) -> list[FlockModule]:\r
 
             \        \"\"\"Get a list of currently enabled modules attached to
             this agent.\"\"\"\r
@@ -39691,7 +39691,7 @@ messages:
 
             \            try:\r
 
-            \                for module in self.get_enabled_modules():\r
+            \                for module in self.get_enabled_components():\r
 
             \                    await module.on_initialize(self, inputs,
             self.context)\r
@@ -39743,7 +39743,7 @@ messages:
 
             \                current_result = result\r
 
-            \                for module in self.get_enabled_modules():\r
+            \                for module in self.get_enabled_components():\r
 
             \                    tmp_result = await module.on_terminate(\r
 
@@ -39807,7 +39807,7 @@ messages:
 
             \            try:\r
 
-            \                for module in self.get_enabled_modules():\r
+            \                for module in self.get_enabled_components():\r
 
             \                    await module.on_error(self, inputs,
             self.context, error)\r
@@ -39868,7 +39868,7 @@ messages:
 
             \            # Pre-evaluate hooks\r
 
-            \            for module in self.get_enabled_modules():\r
+            \            for module in self.get_enabled_components():\r
 
             \                current_inputs = await module.on_pre_evaluate(\r
 
@@ -40136,7 +40136,7 @@ messages:
 
             \            current_result = result\r
 
-            \            for module in self.get_enabled_modules():\r
+            \            for module in self.get_enabled_components():\r
 
             \                tmp_result = await module.on_post_evaluate(\r
 
@@ -42691,7 +42691,7 @@ messages:
                     """Get a module by name (backward compatibility)."""
                     return self.get_component(module_name)
 
-                def get_enabled_modules(self) -> list[Any]:
+                def get_enabled_components(self) -> list[Any]:
                     """Get a list of currently enabled modules attached to this agent (backward compatibility)."""
                     return [c for c in self.components if hasattr(c, 'config') and getattr(c.config, 'enabled', True)]
 
@@ -42741,7 +42741,7 @@ messages:
               +        """Get a module by name (backward compatibility)."""
               +        return self.get_component(module_name)
               +
-              +    def get_enabled_modules(self) -> list[Any]:
+              +    def get_enabled_components(self) -> list[Any]:
               +        """Get a list of currently enabled modules attached to this agent (backward compatibility)."""
               +        return [c for c in self.components if hasattr(c, 'config') and getattr(c.config, 'enabled', True)]
               +
@@ -42847,7 +42847,7 @@ messages:
                     line: 647
                     character: 8
                 source: Ruff
-                message: Redefinition of unused `get_enabled_modules` from line 233
+                message: Redefinition of unused `get_enabled_components` from line 233
                 severity: warning
               - path: src/flock/core/flock_agent.py
                 range:
@@ -42930,7 +42930,7 @@ messages:
 
               232: 
 
-              233:     def get_enabled_modules(self) -> list[AgentComponent]:
+              233:     def get_enabled_components(self) -> list[AgentComponent]:
 
               234:         """Get enabled modules (backward compatibility)."""
 
@@ -42996,7 +42996,7 @@ messages:
                     """Get a module by name (backward compatibility)."""
                     return self.get_component(module_name)
 
-                def get_enabled_modules(self) -> list[Any]:
+                def get_enabled_components(self) -> list[Any]:
                     """Get a list of currently enabled modules attached to this agent (backward compatibility)."""
                     return [c for c in self.components if hasattr(c, 'config') and getattr(c.config, 'enabled', True)]
 
@@ -43040,7 +43040,7 @@ messages:
               -        """Get a module by name (backward compatibility)."""
               -        return self.get_component(module_name)
               -
-              -    def get_enabled_modules(self) -> list[Any]:
+              -    def get_enabled_components(self) -> list[Any]:
               -        """Get a list of currently enabled modules attached to this agent (backward compatibility)."""
               -        return [c for c in self.components if hasattr(c, 'config') and getattr(c.config, 'enabled', True)]
               -

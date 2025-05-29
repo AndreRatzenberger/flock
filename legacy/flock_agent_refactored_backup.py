@@ -4,7 +4,9 @@
 import uuid
 from abc import ABC
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, Field
 
 from flock.core.agent.flock_agent_components import FlockAgentComponents
 from flock.core.agent.flock_agent_execution import FlockAgentExecution
@@ -12,22 +14,20 @@ from flock.core.agent.flock_agent_integration import FlockAgentIntegration
 from flock.core.agent.flock_agent_lifecycle import FlockAgentLifecycle
 from flock.core.agent.flock_agent_serialization import FlockAgentSerialization
 from flock.core.config.flock_agent_config import FlockAgentConfig
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
-from flock.workflow.temporal_config import TemporalActivityConfig
 
 # Core Flock components (ensure these are importable)
 from flock.core.context.context import FlockContext
 from flock.core.flock_evaluator import FlockEvaluator, FlockEvaluatorConfig
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.flock_router import FlockRouter, FlockRouterConfig
-
-from pydantic import BaseModel, Field
+from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
 
 # Mixins and Serialization components
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
 from flock.core.serialization.serializable import (
     Serializable,  # Import Serializable base
 )
+from flock.workflow.temporal_config import TemporalActivityConfig
 
 T = TypeVar("T", bound="FlockAgent")
 
@@ -226,9 +226,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Get a module by name."""
         return self._components.get_module(module_name)
 
-    def get_enabled_modules(self) -> list[FlockModule]:
+    def get_enabled_components(self) -> list[FlockModule]:
         """Get a list of currently enabled modules attached to this agent."""
-        return self._components.get_enabled_modules()
+        return self._components.get_enabled_components()
 
     def add_component(
         self,

@@ -264,7 +264,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.pre_init") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_pre_server_init(self)
             except Exception as module_error:
                 logger.error(
@@ -282,7 +282,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.post_init") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_post_server_init(self)
             except Exception as module_error:
                 logger.error(
@@ -300,7 +300,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.pre_terminate") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_pre_server_terminate(self)
             except Exception as module_error:
                 logger.error(
@@ -318,7 +318,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.post_terminate") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_post_server_terminate(server=self)
             except Exception as module_error:
                 logger.error(
@@ -336,7 +336,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.on_error") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_server_error(server=self, error=error)
             except Exception as module_error:
                 logger.error(
@@ -354,7 +354,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.pre_mcp_call") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_pre_mcp_call(
                         server=self, arguments=arguments
                     )
@@ -374,7 +374,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         with tracer.start_as_current_span("server.post_mcp_call") as span:
             span.set_attribute("server.name", self.config.name)
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_post_mcp_call(server=self, result=result)
             except Exception as module_error:
                 logger.error(

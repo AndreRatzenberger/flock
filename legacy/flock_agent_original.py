@@ -213,7 +213,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Get a module by name."""
         return self.modules.get(module_name)
 
-    def get_enabled_modules(self) -> list[FlockModule]:
+    def get_enabled_components(self) -> list[FlockModule]:
         """Get a list of currently enabled modules attached to this agent."""
         return [m for m in self.modules.values() if m.config.enabled]
 
@@ -260,7 +260,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 agent=self.name,
             )
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_initialize(self, inputs, self.context)
             except Exception as module_error:
                 logger.error(
@@ -285,7 +285,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             )
             try:
                 current_result = result
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     tmp_result = await module.on_terminate(
                         self, inputs, self.context, current_result
                     )
@@ -315,7 +315,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             span.set_attribute("agent.name", self.name)
             span.set_attribute("inputs", str(inputs))
             try:
-                for module in self.get_enabled_modules():
+                for module in self.get_enabled_components():
                     await module.on_error(self, inputs, self.context, error)
             except Exception as module_error:
                 logger.error(
@@ -343,7 +343,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             current_inputs = inputs
 
             # Pre-evaluate hooks
-            for module in self.get_enabled_modules():
+            for module in self.get_enabled_components():
                 current_inputs = await module.on_pre_evaluate(
                     self, current_inputs, self.context
                 )
@@ -463,7 +463,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
             # Post-evaluate hooks
             current_result = result
-            for module in self.get_enabled_modules():
+            for module in self.get_enabled_components():
                 tmp_result = await module.on_post_evaluate(
                     self,
                     current_inputs,

@@ -66,7 +66,7 @@ class FlockAgentSerialization:
         is_description_callable = False
         is_input_callable = False
         is_output_callable = False
-
+        is_next_agent_callable = False
         # if self.agent.description is a callable, exclude it
         if callable(self.agent.description):
             is_description_callable = True
