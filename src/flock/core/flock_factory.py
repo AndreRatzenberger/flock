@@ -8,7 +8,13 @@ from typing import Any, Literal
 import httpx
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, FileUrl
 
+from flock.components.utility.metrics_utility_component import (
+    MetricsUtilityComponent,
+    MetricsUtilityConfig,
+)
+
 # New unified components imported locally to avoid circular imports
+from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.config.scheduled_agent_config import ScheduledAgentConfig
 from flock.core.flock_agent import FlockAgent, SignatureType
 from flock.core.logging.formatters.themes import OutputTheme
@@ -48,10 +54,6 @@ from flock.mcp.servers.websockets.flock_websocket_server import (
     FlockWSConfig,
     FlockWSConnectionConfig,
     FlockWSServer,
-)
-from flock.components.utility.metrics_utility_component import (
-    MetricsUtilityComponent,
-    MetricsUtilityConfig,
 )
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -430,7 +432,7 @@ class FlockFactory:
             OutputUtilityComponent,
             OutputUtilityConfig,
         )
-        
+
         # Create evaluation component
         eval_config = DeclarativeEvaluationConfig(
             model=model,
@@ -475,8 +477,9 @@ class FlockFactory:
             model=model,
             description=description,
             components=[evaluator, output_component, metrics_component],
-            write_to_file=write_to_file,
-            wait_for_input=wait_for_input,
+            config=FlockAgentConfig(write_to_file=write_to_file,
+                                    wait_for_input=wait_for_input),
+            next_agent=None,  # No next agent by default
             temporal_activity_config=temporal_activity_config,
         )
 

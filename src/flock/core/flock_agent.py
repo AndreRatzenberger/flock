@@ -190,24 +190,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Get a component by name."""
         return self.components_helper.get_component(component_name)
 
-    # --- BACKWARD COMPATIBILITY METHODS ---
-    # These maintain the old API while using the new architecture
 
-    def add_module(self, module: AgentComponent) -> None:
-        """Add a module (backward compatibility)."""
-        self.add_component(module)
-
-    def remove_module(self, module_name: str) -> None:
-        """Remove a module (backward compatibility)."""
-        self.remove_component(module_name)
-
-    def get_module(self, module_name: str) -> AgentComponent | None:
-        """Get a module (backward compatibility)."""
-        return self.get_component(module_name)
-
-    def get_enabled_modules(self) -> list[AgentComponent]:
-        """Get enabled modules (backward compatibility)."""
-        return self.get_enabled_components()
+    def get_enabled_components(self) -> list[AgentComponent]:
+        """Get enabled components (backward compatibility)."""
+        return self.components_helper.get_enabled_components()
 
     # --- UNIFIED LIFECYCLE EXECUTION ---
 
