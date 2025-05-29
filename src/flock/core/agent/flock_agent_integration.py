@@ -30,6 +30,20 @@ class FlockAgentIntegration:
         if callable(self.agent.output):
             self.agent.output = self.agent.output(context)
 
+    def resolve_description(self, context: FlockContext | None = None) -> str:
+        if callable(self.agent.description):
+            try:
+                # Attempt to call without context first.
+                return self.agent.description(context)
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable description for agent '{self.agent.name}': {e}"
+                )
+                return None
+        elif isinstance(self.agent.description, str):
+            return self.agent.description
+        return None
+
     async def get_mcp_tools(self) -> list[Any]:
         """Get tools from registered MCP servers."""
         mcp_tools = []
@@ -64,9 +78,9 @@ class FlockAgentIntegration:
         return mcp_tools
 
     async def execute_with_middleware(
-        self, 
-        current_inputs: dict[str, Any], 
-        registered_tools: list[Any], 
+        self,
+        current_inputs: dict[str, Any],
+        registered_tools: list[Any],
         mcp_tools: list[Any]
     ) -> dict[str, Any]:
         """Execute evaluator with optional DI middleware pipeline."""
@@ -129,5 +143,5 @@ class FlockAgentIntegration:
                 registered_tools,
                 mcp_tools,
             )
-        
+
         return result

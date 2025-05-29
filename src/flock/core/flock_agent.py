@@ -272,7 +272,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     def resolve_callables(self, context: FlockContext | None = None) -> None:
         """Resolves callable fields (description, input, output) using context."""
-        return self._integration.resolve_callables(context)
+        self.context = context or self.context
+        return self._integration.resolve_callables(self.context)
 
     @property
     def resolved_description(self) -> str | None:
@@ -280,26 +281,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         If the description is a callable, it attempts to call it.
         Returns None if the description is None or a callable that fails.
         """
-        if callable(self.description):
-            try:
-                # Attempt to call without context first.
-                return self.description()
-            except TypeError:
-                # Log a warning that context might be needed
-                logger.warning(
-                    f"Callable description for agent '{self.name}' could not be resolved "
-                    f"without context via the simple 'resolved_description' property. "
-                    f"Consider calling 'agent.resolve_callables(context)' beforehand if context is required."
-                )
-                return None  # Or a placeholder like "[Callable Description]"
-            except Exception as e:
-                logger.error(
-                    f"Error resolving callable description for agent '{self.name}': {e}"
-                )
-                return None
-        elif isinstance(self.description, str):
-            return self.description
-        return None
+        return self._integration.resolve_description(self.context)
 
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
         """Save output to file if configured (delegated to serialization)."""
