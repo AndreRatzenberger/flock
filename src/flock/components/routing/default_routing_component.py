@@ -10,7 +10,6 @@ from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_registry import flock_component
-
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -22,7 +21,7 @@ logger = get_logger("components.routing.default")
 class DefaultRoutingConfig(AgentComponentConfig):
     """Configuration for the default routing component."""
 
-    hand_off: str | Callable[..., str] = Field(
+    next_agent: str | Callable[..., str] = Field(
         default="", description="Next agent to hand off to"
     )
 
@@ -76,7 +75,7 @@ class DefaultRoutingComponent(RoutingComponentBase):
         Returns:
             String agent name to route to, or None to end workflow
         """
-        handoff = self.config.hand_off
+        handoff = self.config.next_agent
 
         # If empty string, end the workflow
         if handoff == "":

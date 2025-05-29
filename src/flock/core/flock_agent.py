@@ -127,8 +127,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         config: FlockAgentConfig | None = None,
         next_agent: str | Callable[..., str] | None = None,
         temporal_activity_config: TemporalActivityConfig | None = None,
-        **kwargs,
     ):
+        """Initialize the unified FlockAgent with components and configuration."""
+        if config is None:
+            config = FlockAgentConfig()
         super().__init__(
             name=name,
             model=model,
@@ -141,7 +143,6 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             config=config,
             temporal_activity_config=temporal_activity_config,
             next_agent=next_agent,
-            **kwargs,
         )
 
         # Initialize helper systems (reuse existing logic)

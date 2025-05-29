@@ -33,7 +33,7 @@ def test_unified_serialization():
     router = DefaultRoutingComponent(
         name="test_router",
         config=DefaultRoutingConfig(
-            hand_off=HandOffRequest(next_agent="next_test_agent")
+            next_agent=HandOffRequest(next_agent="next_test_agent")
         )
     )
     
@@ -112,7 +112,7 @@ def test_component_compatibility():
         # Test router methods
         router = DefaultRoutingComponent(
             name="compat_router",
-            config=DefaultRoutingConfig(hand_off="test_agent")
+            config=DefaultRoutingConfig(next_agent="test_agent")
         )
         
         router_methods = ['determine_next_step']

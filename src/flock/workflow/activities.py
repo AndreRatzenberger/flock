@@ -7,14 +7,27 @@ from temporalio import activity
 
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_CURRENT_AGENT, FLOCK_MODEL
-from flock.core.flock_agent import FlockAgent
 from flock.core.flock_registry import get_registry
+
 # HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
 from flock.core.util.input_resolver import resolve_inputs
 
 logger = get_logger("activities")
 tracer = trace.get_tracer(__name__)
+
+def apply_handoff_strategy(previous_agent_output:str, next_agent_input:str, previous_agent_handoff_strategy:str, previous_agent_handoff_map:dict[str, str]) -> str:
+    if previous_agent_handoff_strategy == "append":
+        return next_agent_input + previous_agent_output
+    elif previous_agent_handoff_strategy == "override":
+        return previous_agent_output
+    elif previous_agent_handoff_strategy == "static":
+        return next_agent_input
+    elif previous_agent_handoff_strategy == "map":
+        for key, value in previous_agent_handoff_map.items():
+            next_agent_input = next_agent_input.replace(key, value)
+        return next_agent_input
+    raise NotImplementedError
 
 
 @activity.defn
@@ -29,6 +42,9 @@ async def run_agent(context: FlockContext) -> dict:
         registry = get_registry()
 
         previous_agent_name = ""
+        previous_agent_output = ""
+        previous_agent_handoff_strategy = ""
+        previous_agent_handoff_map = {}
         if isinstance(context, dict):
             context = FlockContext.from_dict(context)
         current_agent_name = context.get_variable(FLOCK_CURRENT_AGENT)
@@ -53,8 +69,14 @@ async def run_agent(context: FlockContext) -> dict:
                 iter_span.set_attribute("agent.name", agent.name)
                 agent.context = context
                 # Resolve inputs for the agent.
+                # Gets values from context, previous agent output, and handoff strategy.
                 agent_inputs = resolve_inputs(
-                    agent.input, context, previous_agent_name
+                    agent.input,
+                    context,
+                    previous_agent_name,
+                    previous_agent_output,
+                    previous_agent_handoff_strategy,
+                    previous_agent_handoff_map
                 )
                 iter_span.add_event(
                     "resolved inputs", attributes={"inputs": str(agent_inputs)}
@@ -91,10 +113,10 @@ async def run_agent(context: FlockContext) -> dict:
                         next_agent_name = await agent.router.determine_next_step(
                             agent, result, context
                         )
-                        
+
                         # Set next_agent on the agent instance
                         agent.next_agent = next_agent_name
-                        
+
                     except Exception as e:
                         logger.error(
                             f"Router error: {e}",
@@ -136,10 +158,13 @@ async def run_agent(context: FlockContext) -> dict:
                     hand_off={"next_agent": next_agent_name} if next_agent_name else None,
                     called_from=previous_agent_name,
                 )
+                # Remember the current agent's details for the next iteration.
                 previous_agent_name = agent.name
                 previous_agent_output = agent.output
+                previous_agent_handoff_strategy = agent.config.handoff_strategy
+                previous_agent_handoff_map = agent.config.handoff_map
 
-                # Prepare the next agent.
+                # Activate the next agent.
                 try:
                     agent = registry.get_agent(next_agent_name)
                     if not agent:

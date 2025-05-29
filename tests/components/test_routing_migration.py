@@ -27,13 +27,13 @@ async def test_default_routing_component():
     test_cases = [
         {
             "name": "String routing",
-            "config": DefaultRoutingConfig(hand_off="next_agent"),
+            "config": DefaultRoutingConfig(next_agent="next_agent"),
             "expected_next": "next_agent"
         },
         {
             "name": "HandOffRequest routing", 
             "config": DefaultRoutingConfig(
-                hand_off=HandOffRequest(
+                next_agent=HandOffRequest(
                     next_agent="custom_agent",
                     output_to_input_merge_strategy="add"
                 )
@@ -43,7 +43,7 @@ async def test_default_routing_component():
         {
             "name": "Callable routing",
             "config": DefaultRoutingConfig(
-                hand_off=lambda context, result: HandOffRequest(
+                next_agent=lambda context, result: HandOffRequest(
                     next_agent="dynamic_agent",
                     output_to_input_merge_strategy="match"
                 )
@@ -52,7 +52,7 @@ async def test_default_routing_component():
         },
         {
             "name": "Empty routing (end workflow)",
-            "config": DefaultRoutingConfig(hand_off=""),
+            "config": DefaultRoutingConfig(next_agent=""),
             "expected_next": None
         }
     ]
@@ -121,7 +121,7 @@ async def test_default_routing_component():
     # Create agent with routing that goes to "summary_agent"
     router = DefaultRoutingComponent(
         name="integration_router",
-        config=DefaultRoutingConfig(hand_off="summary_agent")
+        config=DefaultRoutingConfig(next_agent="summary_agent")
     )
     
     evaluator = DeclarativeEvaluationComponent(

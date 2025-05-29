@@ -45,7 +45,12 @@ def top_level_to_keys(s: str) -> list[str]:
 
 
 def resolve_inputs(
-    input_spec: str, context: FlockContext, previous_agent_name: str
+    input_spec: str,
+    context: FlockContext,
+    previous_agent_name: str,
+    previous_agent_output:str,
+    previous_agent_handoff_strategy:str,
+    previous_agent_handoff_map:dict[str, str]
 ) -> dict:
     """Build a dictionary of inputs based on the input specification string and the provided context.
 
