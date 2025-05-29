@@ -69,6 +69,27 @@ def resolve_inputs(
         - or set hand off mode to strict to avoid conflicts.
         with strict mode, the agent will only accept inputs from the previous agent.
 
+    Strategy for passing data to the next agent.
+
+    Example:
+    ReviewAgent.next_agent = SummaryAgent
+    ReviewAgent(output = "text:str, keywords:list[str], rating:int")
+    SummaryAgent(input = "text:str, title:str")
+
+    'append' means the difference in signature is appended to the next agent's input signature.
+    SummaryAgent(input = "text:str, title:str, keywords:list[str], rating:int")
+
+    'override' means the target agent's signature is getting overriden.
+    SummaryAgent(input = "text:str, keywords:list[str], rating:int")
+
+    'static' means the the target agent's signature is not changed at all.
+    If source agent has no output fields that match the target agent's input,
+    there will be no data passed to the next agent.
+    SummaryAgent(input = "text:str, title:str")
+
+    'map' means the source agent's output is mapped to the target agent's input
+    based on 'handoff_map' configuration.
+
     Args:
         input_spec: Comma-separated input keys (e.g., "query" or "agent_name.property").
         context: A FlockContext instance.
@@ -125,7 +146,7 @@ def resolve_inputs(
                 inputs[key] = context.get_agent_definition(property_name)
                 continue
 
-            # Otherwise, attempt to look up a state variable with the key "agent_name.property"
+            # Otherwise, attempt to look up a state variable with the key "entity_name.property_name"
             inputs[key] = context.get_variable(f"{entity_name}.{property_name}")
             continue
 
