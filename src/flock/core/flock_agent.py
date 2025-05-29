@@ -4,26 +4,27 @@
 import uuid
 from abc import ABC
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, Field
 
 from flock.core.agent.flock_agent_execution import FlockAgentExecution
 from flock.core.agent.flock_agent_integration import FlockAgentIntegration
 from flock.core.agent.flock_agent_serialization import FlockAgentSerialization
 from flock.core.component.agent_component_base import AgentComponent
-from flock.core.component.evaluation_component_base import EvaluationComponentBase
+from flock.core.component.evaluation_component_base import (
+    EvaluationComponentBase,
+)
 from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.context.context import FlockContext
-
+from flock.core.logging.logging import get_logger
 from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
-from flock.workflow.temporal_config import TemporalActivityConfig
-
-from pydantic import BaseModel, Field
 
 # Mixins and Serialization components
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
 from flock.core.serialization.serializable import Serializable
-from flock.core.logging.logging import get_logger
+from flock.workflow.temporal_config import TemporalActivityConfig
 
 logger = get_logger("agent.unified")
 
@@ -88,11 +89,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         default_factory=list,
         description="List of all agent components (evaluators, routers, modules).",
     )
-    
+
     # --- EXPLICIT WORKFLOW STATE ---
     next_agent: str | Callable[..., str] | None = Field(
         default=None,
-        exclude=True,  # Runtime state, don't serialize
+       # exclude=True,  # Runtime state, don't serialize
         description="Next agent in workflow - set by user or routing components.",
     )
 
@@ -123,8 +124,8 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         tools: list[Callable[..., Any]] | None = None,
         servers: list[str | FlockMCPServerBase] | None = None,
         components: list[AgentComponent] | None = None,
-        write_to_file: bool = False,
-        wait_for_input: bool = False,
+        config: FlockAgentConfig | None = None,
+        next_agent: str | Callable[..., str] | None = None,
         temporal_activity_config: TemporalActivityConfig | None = None,
         **kwargs,
     ):
@@ -137,11 +138,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             tools=tools,
             servers=servers,
             components=components if components is not None else [],
-            config=FlockAgentConfig(
-                write_to_file=write_to_file,
-                wait_for_input=wait_for_input,
-            ),
+            config=config,
             temporal_activity_config=temporal_activity_config,
+            next_agent=next_agent,
             **kwargs,
         )
 
@@ -152,30 +151,32 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     # --- CONVENIENCE PROPERTIES ---
     # These provide familiar access patterns while using the unified model
-    
+
     @property
     def evaluator(self) -> EvaluationComponentBase | None:
         """Get the primary evaluation component for this agent."""
         return self.components_helper.get_primary_evaluator()
-    
+
     @property
     def router(self) -> RoutingComponentBase | None:
         """Get the primary routing component for this agent."""
         return self.components_helper.get_primary_router()
-    
-    @property 
+
+    @property
     def modules(self) -> list[AgentComponent]:
         """Get all components (for backward compatibility with module-style access)."""
         return self.components.copy()
-    
+
     @property
     def components_helper(self):
         """Get the component management helper."""
         if not hasattr(self, '_components_helper'):
-            from flock.core.agent.flock_agent_components import FlockAgentComponents
+            from flock.core.agent.flock_agent_components import (
+                FlockAgentComponents,
+            )
             self._components_helper = FlockAgentComponents(self)
         return self._components_helper
-    
+
     # Component management delegated to components_helper
     def add_component(self, component: AgentComponent) -> None:
         """Add a component to this agent."""
@@ -191,7 +192,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     # --- BACKWARD COMPATIBILITY METHODS ---
     # These maintain the old API while using the new architecture
-    
+
     def add_module(self, module: AgentComponent) -> None:
         """Add a module (backward compatibility)."""
         self.add_component(module)
@@ -209,11 +210,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         return self.get_enabled_components()
 
     # --- UNIFIED LIFECYCLE EXECUTION ---
-    
+
     async def initialize(self, inputs: dict[str, Any]) -> None:
         """Initialize agent and run component initializers."""
         logger.debug(f"Initializing unified agent '{self.name}'")
-        
+
         for component in self.get_enabled_components():
             try:
                 await component.on_initialize(self, inputs, self.context)
@@ -223,9 +224,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     async def evaluate(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Core evaluation logic using unified component system."""
         logger.debug(f"Evaluating unified agent '{self.name}'")
-        
+
         current_inputs = inputs
-        
+
         # 1. Pre-evaluate hooks (all components)
         for component in self.get_enabled_components():
             try:
@@ -235,14 +236,14 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         # 2. Core evaluation (primary evaluator component)
         result = current_inputs  # Default if no evaluator
-        
+
         evaluator = self.evaluator
         if evaluator:
             try:
                 # Get tools through integration system
                 registered_tools = self.tools or []
                 mcp_tools = await self._integration.get_mcp_tools() if self.servers else []
-                
+
                 result = await evaluator.evaluate_core(
                     self, current_inputs, self.context, registered_tools, mcp_tools
                 )
@@ -266,7 +267,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
         # 4. Determine next step (routing components)
         self.next_agent = None  # Reset
-        
+
         router = self.router
         if router:
             try:
@@ -281,9 +282,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     async def terminate(self, inputs: dict[str, Any], result: dict[str, Any]) -> None:
         """Terminate agent and run component terminators."""
         logger.debug(f"Terminating unified agent '{self.name}'")
-        
+
         current_result = result
-        
+
         for component in self.get_enabled_components():
             try:
                 tmp_result = await component.on_terminate(self, inputs, self.context, current_result)
@@ -302,7 +303,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     async def on_error(self, error: Exception, inputs: dict[str, Any]) -> None:
         """Handle errors and run component error handlers."""
         logger.error(f"Error occurred in unified agent '{self.name}': {error}")
-        
+
         for component in self.get_enabled_components():
             try:
                 await component.on_error(self, inputs, self.context, error)
@@ -311,7 +312,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     # --- EXECUTION METHODS ---
     # Delegate to the execution system
-    
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Synchronous wrapper for run_async."""
         return self._execution.run(inputs)
@@ -331,17 +332,17 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
     # --- SERIALIZATION ---
     # Delegate to the serialization system
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary using unified component serialization."""
         from flock.core.flock_registry import get_registry
         from flock.core.serialization.serialization_utils import serialize_item
 
         FlockRegistry = get_registry()
-        
+
         # Basic agent data (exclude components and runtime state)
         exclude = ["components", "context", "next_agent", "tools", "servers"]
-        
+
         # Handle callable fields
         if callable(self.description):
             exclude.append("description")
@@ -355,7 +356,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             mode="json",
             exclude_none=True,
         )
-        
+
         # Serialize components list
         if self.components:
             serialized_components = []
@@ -374,7 +375,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                         logger.warning(f"Component {component.name} type not registered")
                 except Exception as e:
                     logger.error(f"Failed to serialize component {component.name}: {e}")
-            
+
             if serialized_components:
                 data["components"] = serialized_components
 
@@ -406,18 +407,20 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         """Deserialize from dictionary using unified component deserialization."""
         from flock.core.flock_registry import get_registry
-        from flock.core.serialization.serialization_utils import deserialize_component
+        from flock.core.serialization.serialization_utils import (
+            deserialize_component,
+        )
 
         registry = get_registry()
-        
+
         # Separate component data from agent data
         components_data = data.pop("components", [])
         tools_data = data.pop("tools", [])
         servers_data = data.pop("mcp_servers", [])
-        
+
         # Create base agent
         agent = cls(**data)
-        
+
         # Deserialize components
         if components_data:
             for component_data in components_data:
@@ -510,9 +513,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         if not self.config.write_to_file:
             return
 
-        from datetime import datetime
-        import os
         import json
+        import os
+        from datetime import datetime
+
         from flock.core.serialization.json_encoder import FlockJSONEncoder
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
