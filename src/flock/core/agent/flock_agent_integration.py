@@ -31,9 +31,9 @@ class FlockAgentIntegration:
             self.agent.output = self.agent.output(context)
 
     def resolve_description(self, context: FlockContext | None = None) -> str:
+        """Resolve the agent's description, handling callable descriptions."""
         if callable(self.agent.description):
             try:
-                # Attempt to call without context first.
                 return self.agent.description(context)
             except Exception as e:
                 logger.error(
@@ -42,6 +42,48 @@ class FlockAgentIntegration:
                 return None
         elif isinstance(self.agent.description, str):
             return self.agent.description
+        return None
+
+    def resolve_input(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the agent's input, handling callable inputs."""
+        if callable(self.agent._input):
+            try:
+                return self.agent._input(context)
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable input for agent '{self.agent.name}': {e}"
+                )
+                return None
+        elif isinstance(self.agent._input, str):
+            return self.agent._input
+        return None
+
+    def resolve_output(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the agent's output, handling callable outputs."""
+        if callable(self.agent._output):
+            try:
+                return self.agent._output(context)
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable output for agent '{self.agent.name}': {e}"
+                )
+                return None
+        elif isinstance(self.agent._output, str):
+            return self.agent._output
+        return None
+
+    def resolve_next_agent(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the next agent, handling callable next agents."""
+        if callable(self.agent._next_agent):
+            try:
+                return self.agent._next_agent(context)
+            except Exception as e:
+                logger.error(
+                    f"Error resolving callable next agent for agent '{self.agent.name}': {e}"
+                )
+                return None
+        elif isinstance(self.agent._next_agent, str):
+            return self.agent._next_agent
         return None
 
     async def get_mcp_tools(self) -> list[Any]:

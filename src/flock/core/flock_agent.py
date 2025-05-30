@@ -61,15 +61,15 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         None,
         description="The model identifier to use (e.g., 'openai/gpt-4o'). If None, uses Flock's default.",
     )
-    description: str | Callable[..., str] | None = Field(
+    _description: str | Callable[..., str] | None = Field(
         "",
         description="A human-readable description or a callable returning one.",
     )
-    input: str | Callable[..., str] | None = Field(
+    _input: str | Callable[..., str] | None = Field(
         None,
         description="Signature for input keys. Supports type hints (:) and descriptions (|).",
     )
-    output: str | Callable[..., str] | None = Field(
+    _output: str | Callable[..., str] | None = Field(
         None,
         description="Signature for output keys. Supports type hints (:) and descriptions (|).",
     )
@@ -89,7 +89,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     )
 
     # --- EXPLICIT WORKFLOW STATE ---
-    next_agent: str | Callable[..., str] | None = Field(
+    _next_agent: str | Callable[..., str] | None = Field(
         default=None,
        # exclude=True,  # Runtime state, don't serialize
         description="Next agent in workflow - set by user or routing components.",
@@ -274,12 +274,24 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         return self._integration.resolve_callables(self.context)
 
     @property
-    def resolved_description(self) -> str | None:
-        """Returns the resolved agent description.
-        If the description is a callable, it attempts to call it.
-        Returns None if the description is None or a callable that fails.
-        """
+    def description(self) -> str | None:
+        """Returns the resolved agent description."""
         return self._integration.resolve_description(self.context)
+
+    @property
+    def input(self) -> str | None:
+        """Returns the resolved agent input."""
+        return self._integration.resolve_input(self.context)
+
+    @property
+    def output(self) -> str | None:
+        """Returns the resolved agent output."""
+        return self._integration.resolve_output(self.context)
+
+    @property
+    def next_agent(self) -> str | None:
+        """Returns the resolved agent next agent."""
+        return self._integration.resolve_next_agent(self.context)
 
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
         """Save output to file if configured (delegated to serialization)."""
