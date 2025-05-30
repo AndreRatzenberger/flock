@@ -432,9 +432,9 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     # --- Serialization Implementation ---
     def to_dict(self, path_type: str = "relative") -> dict[str, Any]:
         """Convert instance to dictionary representation suitable for serialization."""
-        from flock.core.flock_registry import get_registry
+        from flock.core.registry import get_registry
 
-        FlockRegistry = get_registry()
+        registry = get_registry()
 
         exclude = ["modules", "config"]
 
@@ -498,7 +498,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         def add_serialized_component(component: Any, field_name: str):
             if component:
                 comp_type = type(component)
-                type_name = FlockRegistry.get_component_type_name(
+                type_name = registry.get_component_type_name(
                     comp_type
                 )  # Get registered name
 

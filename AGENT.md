@@ -23,7 +23,7 @@ flock/
 │   ├── core/                   # Framework foundation
 │   │   ├── flock.py           # Main orchestrator class
 │   │   ├── flock_agent.py     # Base agent class (~500 lines)
-│   │   ├── flock_registry.py  # Component discovery & registration
+│   │   ├── registry/          # Thread-safe component discovery & registration
 │   │   ├── context/           # State management
 │   │   ├── execution/         # Local & Temporal executors
 │   │   ├── serialization/     # Save/load functionality
@@ -56,10 +56,10 @@ flock/
    - **Workflow State**: `next_agent` property for explicit workflow control
    - Composition-based architecture with focused components
 
-3. **`FlockRegistry`** (`src/flock/core/flock_registry.py`)
-   - Singleton for component discovery
-   - Manages agents, callables, types, servers
-   - Auto-registration capabilities
+3. **`RegistryHub`** (`src/flock/core/registry/`)
+   - Thread-safe registry system using composition pattern
+   - Manages agents, callables, types, servers with specialized helpers
+   - Auto-registration capabilities with component discovery
 
 4. **`FlockContext`** (`src/flock/core/context/context.py`)
    - State management between agent executions
@@ -121,8 +121,7 @@ uv run python -c "from flock.core import Flock; print('OK')" # Quick import test
 
 ### Current Problems
 1. **Logging conflicts**: `exc_info` parameter duplication causing test failures
-2. **Registry state**: Global singleton causes test isolation issues
-3. **Test brittleness**: Some tests depend on external services or configuration
+2. **Test brittleness**: Some tests depend on external services or configuration
 
 ### Code Quality Issues Found
 - Bare `except:` handlers in multiple files
@@ -134,7 +133,7 @@ uv run python -c "from flock.core import Flock; print('OK')" # Quick import test
 
 ### Component Registration
 ```python
-from flock.core.flock_registry import flock_component
+from flock.core.registry import flock_component
 from flock.core.component.evaluation_component_base import EvaluationComponentBase
 
 @flock_component(config_class=MyComponentConfig)
@@ -324,9 +323,9 @@ Start with: `flock.serve()` method on any Flock instance.
 
 Based on the review, focus on:
 1. **Fixing logging conflicts** in test suite
-2. **Improving error handling** patterns
+2. **Improving error handling** patterns  
 3. **Adding security guidelines** for component development
-4. **Thread safety** for registry operations
+4. **Performance optimization** for component operations
 
 ## Migration Notes
 
@@ -346,5 +345,7 @@ The unified architecture completely replaces the legacy system:
 - Consistent `*ComponentBase` naming convention
 - Full composition pattern with `_components`, `_execution`, `_integration`, `_serialization`, `_lifecycle`
 - Lazy-loaded component helper with rich functionality
+- Thread-safe registry system with specialized helpers
+- Zero code duplication in registry operations
 
 This should give you a solid foundation to understand and contribute to the Flock framework efficiently!

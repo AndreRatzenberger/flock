@@ -182,9 +182,9 @@ class FlockExecution:
     def _resolve_start_agent(self, start_agent: "FlockAgent | str | None") -> str:
         """Resolve the start agent name from various input types."""
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
-        from flock.core.flock_registry import get_registry
+        from flock.core.registry import get_registry
 
-        FlockRegistry = get_registry()
+        registry = get_registry()
 
         # Determine starting agent name
         start_agent_name: str | None = None
@@ -208,7 +208,7 @@ class FlockExecution:
         # Check if start_agent is in agents
         if start_agent_name not in self.flock._agents:
             # Try loading from registry if not found locally yet
-            reg_agent = FlockRegistry.get_agent(start_agent_name)
+            reg_agent = registry.get_agent(start_agent_name)
             if reg_agent:
                 self.flock.add_agent(reg_agent)
                 logger.info(f"Loaded start agent '{start_agent_name}' from registry.")

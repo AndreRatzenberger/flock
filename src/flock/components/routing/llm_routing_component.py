@@ -10,7 +10,7 @@ from pydantic import Field
 from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.routing_component_base import RoutingComponentBase
 from flock.core.context.context import FlockContext
-from flock.core.flock_registry import flock_component
+from flock.core.registry import flock_component
 # HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
 

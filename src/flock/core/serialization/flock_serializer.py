@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, create_model
 
 # Need registry access
-from flock.core.flock_registry import get_registry
+from flock.core.registry import get_registry
 from flock.core.logging.logging import get_logger
 from flock.core.serialization.serialization_utils import (
     # Assuming this handles basic serialization needs
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 logger = get_logger("serialization.flock")
-FlockRegistry = get_registry()
+registry = get_registry()
 
 
 class FlockSerializer:
@@ -185,7 +185,7 @@ class FlockSerializer:
                         "description_callable"
                     ]
                     description_callable = agent_instance.description
-                    path_str = FlockRegistry.get_callable_path_string(
+                    path_str = registry.get_callable_path_string(
                         description_callable
                     )
                     if path_str:
@@ -204,7 +204,7 @@ class FlockSerializer:
                     )
                     input_callable_name = agent_data["input_callable"]
                     input_callable = agent_instance.input
-                    path_str = FlockRegistry.get_callable_path_string(
+                    path_str = registry.get_callable_path_string(
                         input_callable
                     )
                     if path_str:
@@ -223,7 +223,7 @@ class FlockSerializer:
                     )
                     output_callable_name = agent_data["output_callable"]
                     output_callable = agent_instance.output
-                    path_str = FlockRegistry.get_callable_path_string(
+                    path_str = registry.get_callable_path_string(
                         output_callable
                     )
                     if path_str:
@@ -249,7 +249,7 @@ class FlockSerializer:
                             tool = tool_objs[i]
                             if callable(tool) and not isinstance(tool, type):
                                 path_str = (
-                                    FlockRegistry.get_callable_path_string(tool)
+                                    registry.get_callable_path_string(tool)
                                 )
                                 if path_str:
                                     logger.debug(
@@ -414,7 +414,7 @@ class FlockSerializer:
         type_definitions = {}
         for type_name in type_names:
             try:
-                type_obj = FlockRegistry.get_type(
+                type_obj = registry.get_type(
                     type_name
                 )  # Throws KeyError if not found
                 type_def = FlockSerializer._extract_type_definition(
@@ -489,7 +489,7 @@ class FlockSerializer:
             "file_path": None,
         }
         try:
-            component_class = FlockRegistry.get_component(
+            component_class = registry.get_component(
                 component_type_name
             )  # Raises KeyError if not found
             component_def["module_path"] = getattr(
@@ -539,7 +539,7 @@ class FlockSerializer:
             "file_path": None,
         }
         try:
-            func = FlockRegistry.get_callable(
+            func = registry.get_callable(
                 callable_path
             )  # Raises KeyError if not found
             callable_def["module_path"] = getattr(func, "__module__", "unknown")
@@ -595,7 +595,7 @@ class FlockSerializer:
                     module = importlib.import_module(module_path)
                     if hasattr(module, type_name):
                         type_obj = getattr(module, type_name)
-                        FlockRegistry.register_type(type_obj, type_name)
+                        registry.register_type(type_obj, type_name)
                         logger.info(
                             f"Registered type '{type_name}' from module '{module_path}'"
                         )
@@ -628,7 +628,7 @@ class FlockSerializer:
         type_name: str, type_def: dict[str, Any]
     ) -> None:
         """Dynamically create and register a Pydantic model from schema."""
-        # (Logic remains the same, ensure it uses FlockRegistry.register_type)
+        # (Logic remains the same, ensure it uses registry.register_type)
         schema = type_def.get("schema", {})
         try:
             fields = {}
@@ -640,7 +640,7 @@ class FlockSerializer:
                 fields[field_name] = (field_type, default)
 
             DynamicModel = create_model(type_name, **fields)
-            FlockRegistry.register_type(DynamicModel, type_name)
+            registry.register_type(DynamicModel, type_name)
             logger.info(
                 f"Dynamically created and registered Pydantic model: {type_name}"
             )
@@ -671,7 +671,7 @@ class FlockSerializer:
     @staticmethod
     def _create_dataclass(type_name: str, type_def: dict[str, Any]) -> None:
         """Dynamically create and register a dataclass."""
-        # (Logic remains the same, ensure it uses FlockRegistry.register_type)
+        # (Logic remains the same, ensure it uses registry.register_type)
         from dataclasses import make_dataclass
 
         fields_def = type_def.get("fields", {})
@@ -695,7 +695,7 @@ class FlockSerializer:
                 fields.append((field_name, field_type))
 
             DynamicDataclass = make_dataclass(type_name, fields)
-            FlockRegistry.register_type(DynamicDataclass, type_name)
+            registry.register_type(DynamicDataclass, type_name)
             logger.info(
                 f"Dynamically created and registered dataclass: {type_name}"
             )
@@ -708,7 +708,7 @@ class FlockSerializer:
         path_type: Literal["absolute", "relative"],
     ) -> None:
         """Register component/callable definitions from serialized data."""
-        # (Logic remains the same, ensure it uses FlockRegistry.register_component/register_callable)
+        # (Logic remains the same, ensure it uses registry.register_component/register_callable)
         # Key change: Ensure file_path is handled correctly based on path_type from metadata
         for name, comp_def in component_defs.items():
             logger.debug(
@@ -738,13 +738,13 @@ class FlockSerializer:
                     if hasattr(module, name):
                         obj = getattr(module, name)
                         if kind == "flock_callable" and callable(obj):
-                            FlockRegistry.register_callable(
+                            registry.register_callable(
                                 obj, name
                             )  # Register by simple name
                             # Also register by full path if possible
                             full_path = f"{module_path}.{name}"
                             if full_path != name:
-                                FlockRegistry.register_callable(obj, full_path)
+                                registry.register_callable(obj, full_path)
                             logger.info(
                                 f"Registered callable '{name}' from module '{module_path}'"
                             )
@@ -752,7 +752,7 @@ class FlockSerializer:
                         elif kind == "flock_component" and isinstance(
                             obj, type
                         ):
-                            FlockRegistry.register_component(obj, name)
+                            registry.register_component(obj, name)
                             logger.info(
                                 f"Registered component '{name}' from module '{module_path}'"
                             )
@@ -788,14 +788,14 @@ class FlockSerializer:
                         if hasattr(module, name):
                             obj = getattr(module, name)
                             if kind == "flock_callable" and callable(obj):
-                                FlockRegistry.register_callable(obj, name)
+                                registry.register_callable(obj, name)
                                 logger.info(
                                     f"Registered callable '{name}' from file '{file_path}'"
                                 )
                             elif kind == "flock_component" and isinstance(
                                 obj, type
                             ):
-                                FlockRegistry.register_component(obj, name)
+                                registry.register_component(obj, name)
                                 logger.info(
                                     f"Registered component '{name}' from file '{file_path}'"
                                 )

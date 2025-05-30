@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 
 # Registry
-from flock.core.flock_registry import get_registry
+from flock.core.registry import get_registry
 
 try:
     import pandas as pd  # type: ignore
@@ -56,7 +56,7 @@ except ImportError:
 logger = get_logger("flock.api")
 TELEMETRY.setup_tracing()  # Setup OpenTelemetry
 tracer = trace.get_tracer(__name__)
-FlockRegistry = get_registry()  # Get the registry instance
+registry = get_registry()  # Get the registry instance
 
 # Define TypeVar for generic class methods like from_dict
 T = TypeVar("T", bound="Flock")
@@ -132,8 +132,8 @@ class Flock(BaseModel, Serializable):
     # Pydantic v2 model config
     model_config = {
         "arbitrary_types_allowed": True,
-        # Assuming FlockRegistry type might not be serializable by default
-        "ignored_types": (type(FlockRegistry),),
+        # Assuming registry type might not be serializable by default
+        "ignored_types": (type(registry),),
     }
 
     # --- COMPOSITION HELPERS (Lazy-Loaded) ---
@@ -326,7 +326,7 @@ class Flock(BaseModel, Serializable):
                 return agent  # Return existing agent
 
         self._agents[agent.name] = agent
-        FlockRegistry.register_agent(agent)  # Register globally
+        registry.register_agent(agent)  # Register globally
 
         # Set default model if agent doesn't have one
         if agent.model is None:

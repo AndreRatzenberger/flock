@@ -23,12 +23,12 @@ class FlockServerManager:
 
     def add_server(self, server: "FlockMCPServerBase") -> "FlockMCPServerBase":
         """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by internal manager."""
-        from flock.core.flock_registry import get_registry
+        from flock.core.registry import get_registry
         from flock.core.mcp.flock_mcp_server import (
             FlockMCPServerBase as ConcreteFlockMCPServer,
         )
 
-        FlockRegistry = get_registry()
+        registry = get_registry()
 
         if not isinstance(server, ConcreteFlockMCPServer):
             raise TypeError("Provided object is not a FlockMCPServer instance.")
@@ -41,7 +41,7 @@ class FlockServerManager:
             )
 
         self.flock._servers[server.config.name] = server
-        FlockRegistry.register_server(server)  # Register globally.
+        registry.register_server(server)  # Register globally.
 
         # Prepare server to be managed by the FlockServerManager
         logger.info(f"Adding server '{server.config.name}' to managed list.")

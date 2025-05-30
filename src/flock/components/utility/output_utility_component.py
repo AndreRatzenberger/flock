@@ -10,7 +10,7 @@ from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.utility_component_base import UtilityComponentBase
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_BATCH_SILENT_MODE
-from flock.core.flock_registry import flock_component
+from flock.core.registry import flock_component
 from flock.core.logging.formatters.themed_formatter import ThemedAgentResultFormatter
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.core.logging.logging import get_logger

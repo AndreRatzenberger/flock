@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from opentelemetry.baggage import get_baggage, set_baggage
 
-from flock.core.flock_registry import get_registry
+from flock.core.registry import get_registry
 from flock.core.logging.logging import get_logger
 from flock.core.util.cli_helper import init_console
 
@@ -50,8 +50,8 @@ class FlockInitialization:
         self._ensure_session_id()
 
         # Auto-discover components
-        FlockRegistry = get_registry()
-        FlockRegistry.discover_and_register_components()
+        registry = get_registry()
+        registry.discover_and_register_components()
 
         # Setup Opik if enabled
         if self.flock.enable_opik:

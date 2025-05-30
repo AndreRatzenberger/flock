@@ -32,7 +32,7 @@ from flock.adapter.vector_base import VectorAdapter
 from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.utility_component_base import UtilityComponentBase
 from flock.core.context.context import FlockContext
-from flock.core.flock_registry import flock_component
+from flock.core.registry import flock_component
 from flock.core.logging.logging import get_logger
 
 # Conditional import for MetricsUtilityComponent to avoid circular imports

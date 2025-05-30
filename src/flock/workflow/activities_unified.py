@@ -8,7 +8,7 @@ from temporalio import activity
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_CURRENT_AGENT, FLOCK_MODEL
 from flock.core.flock_agent_unified import FlockAgentUnified
-from flock.core.flock_registry import get_registry
+from flock.core.registry import get_registry
 # HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
 from flock.core.util.input_resolver import resolve_inputs

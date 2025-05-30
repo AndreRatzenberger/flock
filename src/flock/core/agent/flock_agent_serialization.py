@@ -52,9 +52,9 @@ class FlockAgentSerialization:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert instance to dictionary representation suitable for serialization."""
-        from flock.core.flock_registry import get_registry
+        from flock.core.registry import get_registry
 
-        FlockRegistry = get_registry()
+        registry = get_registry()
 
         exclude = [
             "context",
@@ -98,7 +98,7 @@ class FlockAgentSerialization:
             for component in self.agent.components:
                 try:
                     comp_type = type(component)
-                    type_name = FlockRegistry.get_component_type_name(comp_type)
+                    type_name = registry.get_component_type_name(comp_type)
                     if type_name:
                         component_data = serialize_item(component)
                         if isinstance(component_data, dict):
@@ -142,7 +142,7 @@ class FlockAgentSerialization:
             serialized_tools = []
             for tool in self.agent.tools:
                 if callable(tool) and not isinstance(tool, type):
-                    path_str = FlockRegistry.get_callable_path_string(tool)
+                    path_str = registry.get_callable_path_string(tool)
                     if path_str:
                         # Get just the function name from the path string
                         # If it's a namespaced path like module.submodule.function_name
@@ -167,7 +167,7 @@ class FlockAgentSerialization:
                 )
 
         if is_description_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.agent.description)
+            path_str = registry.get_callable_path_string(self.agent.description)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["description_callable"] = func_name
@@ -180,7 +180,7 @@ class FlockAgentSerialization:
                 )
 
         if is_input_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.agent.input)
+            path_str = registry.get_callable_path_string(self.agent.input)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["input_callable"] = func_name
@@ -193,7 +193,7 @@ class FlockAgentSerialization:
                 )
 
         if is_output_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.agent.output)
+            path_str = registry.get_callable_path_string(self.agent.output)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["output_callable"] = func_name
@@ -206,7 +206,7 @@ class FlockAgentSerialization:
                 )
 
         if is_next_agent_callable:
-            path_str = FlockRegistry.get_callable_path_string(self.agent.next_agent)
+            path_str = registry.get_callable_path_string(self.agent.next_agent)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["next_agent"] = func_name
@@ -228,7 +228,7 @@ class FlockAgentSerialization:
     def from_dict(cls, agent_class: type[T], data: dict[str, Any]) -> T:
         """Deserialize the agent from a dictionary, including components, tools, and callables."""
         from flock.core.component.agent_component_base import AgentComponent
-        from flock.core.flock_registry import get_registry
+        from flock.core.registry import get_registry
 
         registry = get_registry()
         logger.debug(

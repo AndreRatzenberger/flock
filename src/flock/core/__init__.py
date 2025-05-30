@@ -4,8 +4,8 @@ from flock.core.context.context import FlockContext
 from flock.core.flock import Flock
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_factory import FlockFactory
-from flock.core.flock_registry import (
-    FlockRegistry,
+from flock.core.registry import (
+    RegistryHub as FlockRegistry,  # Keep FlockRegistry name for API compatibility
     flock_callable,
     flock_component,
     flock_tool,

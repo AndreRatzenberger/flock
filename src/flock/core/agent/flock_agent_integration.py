@@ -48,21 +48,21 @@ class FlockAgentIntegration:
         """Get tools from registered MCP servers."""
         mcp_tools = []
         if self.agent.servers:
-            from flock.core.flock_registry import get_registry
+            from flock.core.registry import get_registry
 
-            FlockRegistry = get_registry()  # Get the registry
+            registry = get_registry()  # Get the registry
             for server in self.agent.servers:
                 registered_server: FlockMCPServerBase | None = None
                 server_tools = []
                 if isinstance(server, FlockMCPServerBase):
                     # check if registered
                     server_name = server.config.name
-                    registered_server = FlockRegistry.get_server(
+                    registered_server = registry.get_server(
                         server_name
                     )
                 else:
                     # servers must be registered.
-                    registered_server = FlockRegistry.get_server(
+                    registered_server = registry.get_server(
                         name=server
                     )
                 if registered_server:

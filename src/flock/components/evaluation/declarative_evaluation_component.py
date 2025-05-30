@@ -14,7 +14,7 @@ from pydantic import Field, PrivateAttr
 from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.component.evaluation_component_base import EvaluationComponentBase
 from flock.core.context.context import FlockContext
-from flock.core.flock_registry import flock_component
+from flock.core.registry import flock_component
 from flock.core.logging.logging import get_logger
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
 from flock.core.mixin.prompt_parser import PromptParserMixin
