@@ -4,6 +4,7 @@
 from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
+
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
@@ -163,7 +164,6 @@ class FlockAgentLifecycle:
                     current_result = tmp_result
 
             # Handle routing logic
-            self.agent.next_agent = None  # Reset
             router = self.agent.router
             if router:
                 try:

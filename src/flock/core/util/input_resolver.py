@@ -68,6 +68,7 @@ def resolve_inputs(
         eg. agent name: "idea_agent", variable: "ia_idea" (ia = idea agent)
         - or set hand off mode to strict to avoid conflicts.
         with strict mode, the agent will only accept inputs from the previous agent.
+        
 
     Strategy for passing data to the next agent.
 
