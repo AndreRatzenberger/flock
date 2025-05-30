@@ -30,12 +30,8 @@ logger = get_logger("agent.unified")
 
 T = TypeVar("T", bound="FlockAgent")
 
-SignatureType = (
-    str
-    | Callable[..., str]
-    | None
-)
 
+DynamicStr = str | Callable[[FlockContext], str]
 
 class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     """Unified FlockAgent using the new component architecture.
@@ -61,16 +57,22 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         None,
         description="The model identifier to use (e.g., 'openai/gpt-4o'). If None, uses Flock's default.",
     )
-    _description: str | Callable[..., str] | None = Field(
-        "",
+    description_spec: DynamicStr | None = Field(
+        default="",
+        alias="description",
+        validation_alias="description",
         description="A human-readable description or a callable returning one.",
     )
-    _input: str | Callable[..., str] | None = Field(
-        None,
+    input_spec: DynamicStr | None = Field(
+        default="",
+        alias="input",
+        validation_alias="input",
         description="Signature for input keys. Supports type hints (:) and descriptions (|).",
     )
-    _output: str | Callable[..., str] | None = Field(
-        None,
+    output_spec: DynamicStr | None = Field(
+        default="",
+        alias="output",
+        validation_alias="output",
         description="Signature for output keys. Supports type hints (:) and descriptions (|).",
     )
     tools: list[Callable[..., Any]] | None = Field(
@@ -89,9 +91,10 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     )
 
     # --- EXPLICIT WORKFLOW STATE ---
-    _next_agent: str | Callable[..., str] | None = Field(
+    next_agent_spec: DynamicStr | None = Field(
         default=None,
-       # exclude=True,  # Runtime state, don't serialize
+        alias="next_agent",
+        validation_alias="next_agent",
         description="Next agent in workflow - set by user or routing components.",
     )
 
@@ -116,14 +119,14 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         self,
         name: str,
         model: str | None = None,
-        description: str | Callable[..., str] | None = "",
-        input: SignatureType = None,
-        output: SignatureType = None,
+        description: DynamicStr | None = None,
+        input: DynamicStr | None = None,
+        output: DynamicStr | None = None,
         tools: list[Callable[..., Any]] | None = None,
         servers: list[str | FlockMCPServer] | None = None,
         components: list[AgentComponent] | None = None,
         config: FlockAgentConfig | None = None,
-        next_agent: str | Callable[..., str] | None = None,
+        next_agent: DynamicStr | None = None,
         temporal_activity_config: TemporalActivityConfig | None = None,
     ):
         """Initialize the unified FlockAgent with components and configuration."""
@@ -268,11 +271,6 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 f"Agent '{self.name}' has no evaluator to set model for."
             )
 
-    def resolve_callables(self, context: FlockContext | None = None) -> None:
-        """Resolves callable fields (description, input, output) using context."""
-        self.context = context or self.context
-        return self._integration.resolve_callables(self.context)
-
     @property
     def description(self) -> str | None:
         """Returns the resolved agent description."""
@@ -293,9 +291,31 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         """Returns the resolved agent next agent."""
         return self._integration.resolve_next_agent(self.context)
 
+    @description.setter
+    def description(self, value: DynamicStr) -> None:
+        self.description_spec = value
+
+    @input.setter
+    def input(self, value: DynamicStr) -> None:
+        self.input_spec = value
+
+    @output.setter
+    def output(self, value: DynamicStr) -> None:
+        self.output_spec = value
+
+    @next_agent.setter
+    def next_agent(self, value: DynamicStr) -> None:
+        self.next_agent_spec = value
+
     def _save_output(self, agent_name: str, result: dict[str, Any]) -> None:
         """Save output to file if configured (delegated to serialization)."""
         return self._serialization._save_output(agent_name, result)
 
     # --- Pydantic v2 Configuration ---
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "populate_by_name": True,
+        # "json_encoders": {
+        #     Callable: lambda f: f"{f.__module__}.{f.__qualname__}",
+        # },
+    }
