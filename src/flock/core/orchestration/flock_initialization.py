@@ -3,18 +3,18 @@
 
 import os
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from opentelemetry.baggage import get_baggage, set_baggage
 
-from flock.core.registry import get_registry
 from flock.core.logging.logging import get_logger
+from flock.core.registry import get_registry
 from flock.core.util.cli_helper import init_console
 
 if TYPE_CHECKING:
     from flock.core.flock import Flock
     from flock.core.flock_agent import FlockAgent
-    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+    from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 logger = get_logger("flock.initialization")
 
@@ -28,7 +28,7 @@ class FlockInitialization:
     def setup(
         self,
         agents: list["FlockAgent"] | None = None,
-        servers: list["FlockMCPServerBase"] | None = None,
+        servers: list["FlockMCPServer"] | None = None,
     ) -> None:
         """Handle all initialization side effects and setup."""
         # Register passed servers first (agents may depend on them)
@@ -64,10 +64,10 @@ class FlockInitialization:
             enable_temporal=self.flock.enable_temporal,
         )
 
-    def _register_servers(self, servers: list["FlockMCPServerBase"]) -> None:
+    def _register_servers(self, servers: list["FlockMCPServer"]) -> None:
         """Register servers with the Flock instance."""
         from flock.core.mcp.flock_mcp_server import (
-            FlockMCPServerBase as ConcreteFlockMCPServer,
+            FlockMCPServer as ConcreteFlockMCPServer,
         )
 
         for server in servers:

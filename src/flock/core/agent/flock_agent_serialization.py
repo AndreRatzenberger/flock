@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 # Legacy component imports removed
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.core.serialization.serialization_utils import (
     deserialize_component,
@@ -122,7 +122,7 @@ class FlockAgentSerialization:
             )
             serialized_servers = []
             for server in self.agent.servers:
-                if isinstance(server, FlockMCPServerBase):
+                if isinstance(server, FlockMCPServer):
                     serialized_servers.append(server.config.name)
                 else:
                     # Write it down as a list of server names.
@@ -322,7 +322,7 @@ class FlockAgentSerialization:
                 if isinstance(server_name, str):
                     # Case 1 (default behavior): A server name is passed.
                     agent.servers.append(server_name)
-                elif isinstance(server_name, FlockMCPServerBase):
+                elif isinstance(server_name, FlockMCPServer):
                     # Case 2 (highly unlikely): If someone somehow manages to pass
                     # an instance of a server during the deserialization step (however that might be achieved)
                     # check the registry, if the server is already registered, if not, register it

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
-    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+    from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 logger = get_logger("registry.servers")
 
@@ -17,9 +17,9 @@ class ServerRegistry:
 
     def __init__(self, lock: threading.RLock):
         self._lock = lock
-        self._servers: dict[str, "FlockMCPServerBase"] = {}
+        self._servers: dict[str, FlockMCPServer] = {}
 
-    def register_server(self, server: "FlockMCPServerBase") -> None:
+    def register_server(self, server: "FlockMCPServer") -> None:
         """Register a flock mcp server by its name."""
         if not hasattr(server.config, "name") or not server.config.name:
             logger.error("Attempted to register a server without a valid 'name' attribute.")
@@ -28,11 +28,11 @@ class ServerRegistry:
         with self._lock:
             if server.config.name in self._servers and self._servers[server.config.name] != server:
                 logger.warning(f"Server '{server.config.name}' already registered. Overwriting.")
-            
+
             self._servers[server.config.name] = server
             logger.debug(f"Registered server: {server.config.name}")
 
-    def get_server(self, name: str) -> "FlockMCPServerBase | None":
+    def get_server(self, name: str) -> "FlockMCPServer | None":
         """Retrieve a registered FlockMCPServer instance by name."""
         with self._lock:
             server = self._servers.get(name)
@@ -45,7 +45,7 @@ class ServerRegistry:
         with self._lock:
             return list(self._servers.keys())
 
-    def get_all_servers(self) -> dict[str, "FlockMCPServerBase"]:
+    def get_all_servers(self) -> dict[str, "FlockMCPServer"]:
         """Get all registered servers."""
         with self._lock:
             return self._servers.copy()

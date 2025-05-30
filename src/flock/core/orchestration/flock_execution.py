@@ -95,7 +95,7 @@ class FlockExecution:
         # Import here to allow forward reference resolution
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
         from flock.core.mcp.flock_mcp_server import (
-            FlockMCPServerBase as ConcreteFlockServer,
+            FlockMCPServer as ConcreteFlockServer,
         )
 
         with tracer.start_as_current_span("flock.run_async") as span:
@@ -131,7 +131,7 @@ class FlockExecution:
             span.set_attribute("input", str(run_input))
             span.set_attribute("run_id", effective_run_id)
             span.set_attribute("enable_temporal", self.flock.enable_temporal)
-            
+
             logger.info(
                 f"Initiating Flock run '{self.flock.name}'. Start Agent: '{start_agent_name}'. Temporal: {self.flock.enable_temporal}."
             )
@@ -169,7 +169,7 @@ class FlockExecution:
                 logger.error(f"Flock run '{self.flock.name}' failed: {e}", exc_info=True)
                 span.record_exception(e)
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                
+
                 # Return a consistent error structure
                 error_output = {
                     "error": str(e),

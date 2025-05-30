@@ -8,8 +8,9 @@ from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from flock.core.flock_agent import FlockAgent
-    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+    from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 logger = get_logger("registry.hub")
 
@@ -83,7 +84,9 @@ class RegistryHub:
     def discovery(self):
         """Component discovery helper."""
         if not hasattr(self, '_discovery_helper'):
-            from flock.core.registry.component_discovery import ComponentDiscovery
+            from flock.core.registry.component_discovery import (
+                ComponentDiscovery,
+            )
             self._discovery_helper = ComponentDiscovery(self)
         return self._discovery_helper
 
@@ -101,11 +104,11 @@ class RegistryHub:
         """Get all registered agent names."""
         return self.agents.get_all_agent_names()
 
-    def register_server(self, server: "FlockMCPServerBase") -> None:
+    def register_server(self, server: "FlockMCPServer") -> None:
         """Register a FlockMCPServer instance."""
         self.servers.register_server(server)
 
-    def get_server(self, name: str) -> "FlockMCPServerBase | None":
+    def get_server(self, name: str) -> "FlockMCPServer | None":
         """Get a registered FlockMCPServer instance by name."""
         return self.servers.get_server(name)
 

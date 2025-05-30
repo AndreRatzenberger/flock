@@ -26,11 +26,11 @@ from typing import (  # Add TYPE_CHECKING
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from flock.core.component.agent_component_base import AgentComponent
     from flock.core.flock_agent import (
         FlockAgent,  # Import only for type checking
     )
-    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
-    from flock.core.component.agent_component_base import AgentComponent
+    from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
     COMPONENT_BASE_TYPES = (AgentComponent,)
 
@@ -62,7 +62,7 @@ class FlockRegistry:
     _instance = None
 
     _agents: dict[str, FlockAgent]
-    _servers: dict[str, FlockMCPServerBase]
+    _servers: dict[str, FlockMCPServer]
     _callables: dict[str, Callable]
     _types: dict[str, type]
     _components: dict[str, type]  # For Module, Evaluator, Router classes
@@ -159,7 +159,7 @@ class FlockRegistry:
             return None
 
     # --- Server Registration ---
-    def register_server(self, server: FlockMCPServerBase) -> None:
+    def register_server(self, server: FlockMCPServer) -> None:
         """Registers a flock mcp server by its name."""
         if not hasattr(server.config, "name") or not server.config.name:
             logger.error(
@@ -176,7 +176,7 @@ class FlockRegistry:
         self._servers[server.config.name] = server
         logger.debug(f"Registered server: {server.config.name}")
 
-    def get_server(self, name: str) -> FlockMCPServerBase | None:
+    def get_server(self, name: str) -> FlockMCPServer | None:
         """Retrieves a registered FlockMCPServer instance by name."""
         server = self._servers.get(name)
         if not server:

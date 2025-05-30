@@ -5,9 +5,9 @@ import asyncio
 from typing import Any
 
 from flock.core.component.agent_component_base import AgentComponent, AgentComponentConfig
-from flock.core.component.evaluation_component_base import EvaluationComponentBase
-from flock.core.component.routing_component_base import RoutingModuleBase
-from flock.core.component.utility_component_base import UtilityModuleBase
+from flock.core.component.evaluation_component import EvaluationComponent
+from flock.core.component.routing_component import RoutingModuleBase
+from flock.core.component.utility_component import UtilityModuleBase
 from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_router import HandOffRequest
@@ -19,7 +19,7 @@ class SimpleEvaluationConfig(AgentComponentConfig):
     response_template: str = "Processed: {input}"
 
 
-class SimpleEvaluationComponent(EvaluationComponentBase):
+class SimpleEvaluationComponent(EvaluationComponent):
     """Simple evaluation component for testing."""
     
     config: SimpleEvaluationConfig

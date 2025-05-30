@@ -12,12 +12,12 @@ with workflow.unsafe.imports_passed_through():
 from pydantic import Field, PrivateAttr
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.evaluation_component_base import EvaluationComponentBase
+from flock.core.component.evaluation_component import EvaluationComponent
 from flock.core.context.context import FlockContext
-from flock.core.registry import flock_component
 from flock.core.logging.logging import get_logger
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
 from flock.core.mixin.prompt_parser import PromptParserMixin
+from flock.core.registry import flock_component
 
 logger = get_logger("components.evaluation.declarative")
 
@@ -45,7 +45,7 @@ class DeclarativeEvaluationConfig(AgentComponentConfig):
 
 @flock_component(config_class=DeclarativeEvaluationConfig)
 class DeclarativeEvaluationComponent(
-    EvaluationComponentBase, DSPyIntegrationMixin, PromptParserMixin
+    EvaluationComponent, DSPyIntegrationMixin, PromptParserMixin
 ):
     """Evaluation component that uses DSPy for generation.
     
@@ -58,7 +58,7 @@ class DeclarativeEvaluationComponent(
         default_factory=DeclarativeEvaluationConfig,
         description="Evaluation configuration",
     )
-    
+
     _cost: float = PrivateAttr(default=0.0)
     _lm_history: list = PrivateAttr(default_factory=list)
 
@@ -75,7 +75,7 @@ class DeclarativeEvaluationComponent(
     ) -> dict[str, Any]:
         """Core evaluation logic using DSPy - migrated from DeclarativeEvaluator."""
         logger.debug(f"Starting declarative evaluation for component '{self.name}'")
-        
+
         # Setup DSPy context with LM (directly from original implementation)
         with dspy.context(
             lm=dspy.LM(
@@ -89,14 +89,14 @@ class DeclarativeEvaluationComponent(
             try:
                 from rich.console import Console
                 console = Console()
-                
+
                 # Create DSPy signature from agent definition
                 _dspy_signature = self.create_dspy_signature_class(
                     agent.name,
                     agent.description,
                     f"{agent.input} -> {agent.output}",
                 )
-                
+
                 # Get output field names for streaming
                 output_field_names = list(_dspy_signature.output_fields.keys())
                 if not output_field_names:
@@ -113,7 +113,7 @@ class DeclarativeEvaluationComponent(
                     mcp_tools=mcp_tools or [],
                     kwargs=self.config.kwargs,
                 )
-                
+
             except Exception as setup_error:
                 logger.error(
                     f"Error setting up DSPy task for agent '{agent.name}': {setup_error}",
@@ -132,7 +132,7 @@ class DeclarativeEvaluationComponent(
     async def _execute_streaming(self, agent_task, inputs: dict[str, Any], agent: Any, console) -> dict[str, Any]:
         """Execute DSPy program in streaming mode (from original implementation)."""
         logger.info(f"Evaluating agent '{agent.name}' with async streaming.")
-        
+
         if not callable(agent_task):
             logger.error("agent_task is not callable, cannot stream.")
             raise TypeError("DSPy task could not be created or is not callable.")
@@ -167,7 +167,7 @@ class DeclarativeEvaluationComponent(
     async def _execute_standard(self, agent_task, inputs: dict[str, Any], agent: Any) -> dict[str, Any]:
         """Execute DSPy program in standard mode (from original implementation)."""
         logger.info(f"Evaluating agent '{agent.name}' without streaming.")
-        
+
         try:
             # Ensure the call is awaited if the underlying task is async
             result_obj = await agent_task.acall(**inputs)

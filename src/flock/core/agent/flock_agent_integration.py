@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from flock.core.context.context import FlockContext
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 if TYPE_CHECKING:
     from flock.core.flock_agent import FlockAgent
@@ -52,9 +52,9 @@ class FlockAgentIntegration:
 
             registry = get_registry()  # Get the registry
             for server in self.agent.servers:
-                registered_server: FlockMCPServerBase | None = None
+                registered_server: FlockMCPServer | None = None
                 server_tools = []
-                if isinstance(server, FlockMCPServerBase):
+                if isinstance(server, FlockMCPServer):
                     # check if registered
                     server_name = server.config.name
                     registered_server = registry.get_server(
@@ -72,7 +72,7 @@ class FlockAgentIntegration:
                     )
                 else:
                     logger.warning(
-                        f"No Server with name '{server.config.name if isinstance(server, FlockMCPServerBase) else server}' registered! Skipping."
+                        f"No Server with name '{server.config.name if isinstance(server, FlockMCPServer) else server}' registered! Skipping."
                     )
                 mcp_tools = mcp_tools + server_tools
         return mcp_tools

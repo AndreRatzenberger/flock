@@ -17,9 +17,9 @@ from pydantic import (
 
 from flock.core.component.agent_component_base import AgentComponent
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_tool_base import FlockMCPToolBase
-from flock.core.mcp.mcp_client_manager import FlockMCPClientManagerBase
-from flock.core.mcp.mcp_config import FlockMCPConfigurationBase
+from flock.core.mcp.flock_mcp_tool import FlockMCPTool
+from flock.core.mcp.mcp_client_manager import FlockMCPClientManager
+from flock.core.mcp.mcp_config import FlockMCPConfiguration
 from flock.core.serialization.serializable import Serializable
 from flock.core.serialization.serialization_utils import (
     deserialize_component,
@@ -28,7 +28,7 @@ from flock.core.serialization.serialization_utils import (
 
 logger = get_logger("mcp.server")
 tracer = trace.get_tracer(__name__)
-T = TypeVar("T", bound="FlockMCPServerBase")
+T = TypeVar("T", bound="FlockMCPServer")
 
 LoggingLevel = Literal[
     "debug",
@@ -42,7 +42,7 @@ LoggingLevel = Literal[
 ]
 
 
-class FlockMCPServerBase(BaseModel, Serializable, ABC):
+class FlockMCPServer(BaseModel, Serializable, ABC):
     """Base class for all Flock MCP Server Types.
 
     Servers serve as an abstraction-layer between the underlying MCPClientSession
@@ -64,7 +64,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     2. Using FlockMCPServerConfig.with_fields() to create a config class.
     """
 
-    config: FlockMCPConfigurationBase = Field(
+    config: FlockMCPConfiguration = Field(
         ..., description="Config for clients connecting to the server."
     )
 
@@ -82,7 +82,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
     # --- Underlying ConnectionManager ---
     # (Manages a pool of ClientConnections and does the actual talking to the MCP Server)
     # (Excluded from Serialization)
-    client_manager: FlockMCPClientManagerBase | None = Field(
+    client_manager: FlockMCPClientManager | None = Field(
         default=None,
         exclude=True,
         description="Underlying Connection Manager. Handles the actual underlying connections to the server.",
@@ -134,7 +134,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
         return [c for c in self.components.values() if c.config.enabled]
 
     @abstractmethod
-    async def initialize(self) -> FlockMCPClientManagerBase:
+    async def initialize(self) -> FlockMCPClientManager:
         """Called when initializing the server."""
         pass
 
@@ -211,7 +211,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                         additional_params=additional_params
                     )
                     result: list[
-                        FlockMCPToolBase
+                        FlockMCPTool
                     ] = await self.client_manager.get_tools(
                         agent_id=agent_id,
                         run_id=run_id,
@@ -385,7 +385,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 span.record_exception(module_error)
 
     # --- Async Methods ---
-    async def __aenter__(self) -> "FlockMCPServerBase":
+    async def __aenter__(self) -> "FlockMCPServer":
         """Enter the asynchronous context for the server."""
         # Spin up the client-manager
         with tracer.start_as_current_span("server.__aenter__") as span:
@@ -614,7 +614,7 @@ class FlockMCPServerBase(BaseModel, Serializable, ABC):
                 config_cls = config_field.annotation
             except (AttributeError, KeyError):
                 # fallback if Pydantic v1 or missing
-                config_cls = FlockMCPConfigurationBase
+                config_cls = FlockMCPConfiguration
             config_object = config_cls.from_dict(config_data)
             data["config"] = config_object
 

@@ -6,11 +6,10 @@ from typing import Any
 
 from flock.core.context.context import FlockContext
 
-
 from .agent_component_base import AgentComponent
 
 
-class RoutingComponentBase(AgentComponent):
+class RoutingComponent(AgentComponent):
     """Base class for routing components.
     
     Routing components determine the next step in a workflow based on the
@@ -26,7 +25,7 @@ class RoutingComponentBase(AgentComponent):
     - DefaultRoutingModule (simple next-agent routing)
     - ListGeneratorRoutingModule (dynamic agent creation)
     """
-    
+
     @abstractmethod
     async def determine_next_step(
         self,
@@ -54,7 +53,7 @@ class RoutingComponentBase(AgentComponent):
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement determine_next_step()"
         )
-        
+
     async def evaluate_core(
         self,
         agent: Any,

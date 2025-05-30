@@ -2,14 +2,14 @@
 
 from typing import TYPE_CHECKING, Any
 
-from flock.core.component.evaluation_component_base import EvaluationComponentBase
-from flock.core.component.routing_component_base import RoutingComponentBase
-from flock.core.component.utility_component_base import UtilityComponentBase
+from flock.core.component.evaluation_component import EvaluationComponent
+from flock.core.component.routing_component import RoutingComponent
+from flock.core.component.utility_component import UtilityComponent
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
-    from flock.core.flock_agent import FlockAgent
     from flock.core.component.agent_component_base import AgentComponent
+    from flock.core.flock_agent import FlockAgent
 
 logger = get_logger("agent.components")
 
@@ -25,7 +25,7 @@ class FlockAgentComponents:
         if not component.name:
             logger.error("Component must have a name to be added.")
             return
-        
+
         # Check if component with same name already exists
         existing = self.get_component(component.name)
         if existing:
@@ -54,29 +54,29 @@ class FlockAgentComponents:
     def get_enabled_components(self) -> list["AgentComponent"]:
         """Get a list of currently enabled components attached to this agent."""
         return [c for c in self.agent.components if c.config.enabled]
-        
+
     def get_components_by_type(self, component_type: type) -> list["AgentComponent"]:
         """Get all components of a specific type."""
         return [c for c in self.agent.components if isinstance(c, component_type)]
 
-    def get_evaluation_components(self) -> list[EvaluationComponentBase]:
+    def get_evaluation_components(self) -> list[EvaluationComponent]:
         """Get all evaluation components."""
-        return self.get_components_by_type(EvaluationComponentBase)
+        return self.get_components_by_type(EvaluationComponent)
 
-    def get_routing_components(self) -> list[RoutingComponentBase]:
+    def get_routing_components(self) -> list[RoutingComponent]:
         """Get all routing components."""
-        return self.get_components_by_type(RoutingComponentBase)
-        
-    def get_utility_components(self) -> list[UtilityComponentBase]:
-        """Get all utility components."""
-        return self.get_components_by_type(UtilityComponentBase)
+        return self.get_components_by_type(RoutingComponent)
 
-    def get_primary_evaluator(self) -> EvaluationComponentBase | None:
+    def get_utility_components(self) -> list[UtilityComponent]:
+        """Get all utility components."""
+        return self.get_components_by_type(UtilityComponent)
+
+    def get_primary_evaluator(self) -> EvaluationComponent | None:
         """Get the primary evaluation component (first one found)."""
         evaluators = self.get_evaluation_components()
         return evaluators[0] if evaluators else None
-        
-    def get_primary_router(self) -> RoutingComponentBase | None:
+
+    def get_primary_router(self) -> RoutingComponent | None:
         """Get the primary routing component (first one found)."""
         routers = self.get_routing_components()
         return routers[0] if routers else None

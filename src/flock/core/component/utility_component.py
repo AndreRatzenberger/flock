@@ -4,12 +4,12 @@
 from typing import Any
 
 from flock.core.context.context import FlockContext
-# HandOffRequest removed - using agent.next_agent directly
 
+# HandOffRequest removed - using agent.next_agent directly
 from .agent_component_base import AgentComponent
 
 
-class UtilityComponentBase(AgentComponent):
+class UtilityComponent(AgentComponent):
     """Base class for utility/enhancement components.
     
     Utility components add cross-cutting concerns to agents without being
@@ -32,7 +32,7 @@ class UtilityComponentBase(AgentComponent):
     - MetricsUtilityModule (performance tracking)
     - AssertionUtilityModule (result validation)
     """
-    
+
     async def evaluate_core(
         self,
         agent: Any,

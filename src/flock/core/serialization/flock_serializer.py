@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, create_model
 
+from flock.core.logging.logging import get_logger
+
 # Need registry access
 from flock.core.registry import get_registry
-from flock.core.logging.logging import get_logger
 from flock.core.serialization.serialization_utils import (
     # Assuming this handles basic serialization needs
     extract_pydantic_models_from_type_string,
@@ -292,7 +293,7 @@ class FlockSerializer:
         from flock.core.flock import Flock  # Import the actual class
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
         from flock.core.mcp.flock_mcp_server import (
-            FlockMCPServerBase as ConcreteFlockMCPServer,
+            FlockMCPServer as ConcreteFlockMCPServer,
         )
 
         logger.debug(
