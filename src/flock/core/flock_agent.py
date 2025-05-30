@@ -33,8 +33,6 @@ T = TypeVar("T", bound="FlockAgent")
 SignatureType = (
     str
     | Callable[..., str]
-    | type[BaseModel]
-    | Callable[..., type[BaseModel]]
     | None
 )
 
@@ -67,11 +65,11 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         "",
         description="A human-readable description or a callable returning one.",
     )
-    input: SignatureType = Field(
+    input: str | Callable[..., str] | None = Field(
         None,
         description="Signature for input keys. Supports type hints (:) and descriptions (|).",
     )
-    output: SignatureType = Field(
+    output: str | Callable[..., str] | None = Field(
         None,
         description="Signature for output keys. Supports type hints (:) and descriptions (|).",
     )
