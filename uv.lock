@@ -1005,7 +1005,7 @@ wheels = [
 
 [[package]]
 name = "docling"
-version = "2.33.0"
+version = "2.34.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -1035,9 +1035,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/d8/76740f7d40a28794365e76029e7379f7d1b5994e24aaac899c3bb280e426/docling-2.33.0.tar.gz", hash = "sha256:40c27df6a7f90b8fb4279a4094ac26c48f3dbd38ceda0d3208e6d63eda2e8660", size = 132120 }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/42/33334eeaa3d42a4b3406adc7bbef8c655d026c1c41ad0a8fa858bbb7ef1b/docling-2.34.0.tar.gz", hash = "sha256:52ad3c79b7e56e978fcdd8f2040fe739584e25e1c2fd5f9519fe3d51002de0d2", size = 135016 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/23/6dddf454610c4dff5799f9becbbc752b8595169de57c02a1d39067f5f2b5/docling-2.33.0-py3-none-any.whl", hash = "sha256:6c0ee223c5da551adc5da15aae205aaebf78222780198cb5a21c85648da618ba", size = 169441 },
+    { url = "https://files.pythonhosted.org/packages/be/b6/b855f19ab37a6f92b60a31a7db57160048f88a980aef4b97a5c260860ed4/docling-2.34.0-py3-none-any.whl", hash = "sha256:a69c368382cc824a5a5ad21882b8772f85117a25c81257a57d54582bf38b2810", size = 173153 },
 ]
 
 [[package]]
@@ -1282,7 +1282,7 @@ wheels = [
 
 [[package]]
 name = "flock-core"
-version = "0.4.518"
+version = "0.4.519"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -1426,9 +1426,9 @@ requires-dist = [
     { name = "devtools", specifier = ">=0.12.2" },
     { name = "docker", marker = "extra == 'all-tools'", specifier = ">=7.1.0" },
     { name = "docker", marker = "extra == 'code-tools'", specifier = ">=7.1.0" },
-    { name = "docling", marker = "extra == 'all'", specifier = ">=2.18.0" },
-    { name = "docling", marker = "extra == 'all-tools'", specifier = ">=2.18.0" },
-    { name = "docling", marker = "extra == 'basic-tools'", specifier = ">=2.18.0" },
+    { name = "docling", marker = "extra == 'all'", specifier = ">=2.34.0" },
+    { name = "docling", marker = "extra == 'all-tools'", specifier = ">=2.34.0" },
+    { name = "docling", marker = "extra == 'basic-tools'", specifier = ">=2.34.0" },
     { name = "dspy", specifier = "==2.6.23" },
     { name = "duckduckgo-search", marker = "extra == 'all'", specifier = ">=7.3.2" },
     { name = "duckduckgo-search", marker = "extra == 'all-tools'", specifier = ">=7.3.2" },
@@ -1481,7 +1481,7 @@ requires-dist = [
     { name = "thefuzz", specifier = ">=0.22.1" },
     { name = "tiktoken", specifier = ">=0.8.0" },
     { name = "toml", specifier = ">=0.10.2" },
-    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "tqdm", specifier = ">=4.60.1" },
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "wd-di", specifier = ">=0.2.14" },
     { name = "websockets", specifier = ">=15.0.1" },
