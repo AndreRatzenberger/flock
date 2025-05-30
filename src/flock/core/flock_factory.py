@@ -18,11 +18,11 @@ from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.config.scheduled_agent_config import ScheduledAgentConfig
 from flock.core.flock_agent import FlockAgent, SignatureType
 from flock.core.logging.formatters.themes import OutputTheme
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 from flock.core.mcp.mcp_config import (
-    FlockMCPCachingConfigurationBase,
-    FlockMCPCallbackConfigurationBase,
-    FlockMCPFeatureConfigurationBase,
+    FlockMCPCachingConfiguration,
+    FlockMCPCallbackConfiguration,
+    FlockMCPFeatureConfiguration,
 )
 from flock.core.mcp.types.types import (
     FlockListRootsMCPCallback,
@@ -207,7 +207,7 @@ class FlockFactory:
         tool_result_cache_ttl=100,
         description: str | Callable[..., str] | None = None,
         alert_latency_threshold_ms: int = 30000,
-    ) -> FlockMCPServerBase:
+    ) -> FlockMCPServer:
         """Create a default MCP Server with common modules.
 
         Allows for creating one of the three default-implementations provided
@@ -246,19 +246,19 @@ class FlockFactory:
                     continue  # ignore
 
         # build generic configs
-        feature_config = FlockMCPFeatureConfigurationBase(
+        feature_config = FlockMCPFeatureConfiguration(
             roots_enabled=enable_roots_feature,
             tools_enabled=enable_tools_feature,
             prompts_enabled=enable_prompts_feature,
             sampling_enabled=enable_sampling_feature,
         )
-        callback_config = FlockMCPCallbackConfigurationBase(
+        callback_config = FlockMCPCallbackConfiguration(
             sampling_callback=sampling_callback,
             list_roots_callback=list_roots_callback,
             logging_callback=logging_callback,
             message_handler=message_handler,
         )
-        caching_config = FlockMCPCachingConfigurationBase(
+        caching_config = FlockMCPCachingConfiguration(
             tool_cache_max_size=tool_cache_size,
             tool_cache_max_ttl=tool_cache_ttl,
             resource_contents_cache_max_size=resource_contents_cache_size,
@@ -393,7 +393,7 @@ class FlockFactory:
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any] | Any] | None = None,
-        servers: list[str | FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServer] | None = None,
         use_cache: bool = True,
         enable_rich_tables: bool = False,
         output_theme: OutputTheme = OutputTheme.abernathy,
@@ -493,7 +493,7 @@ class FlockFactory:
         model: str | Callable[..., str] | None = None,
         output: SignatureType = None,  # Input might be implicit or none
         tools: list[Callable[..., Any] | Any] | None = None,
-        servers: list[str | FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServer] | None = None,
         use_cache: bool = False,  # Whether to cache results
         temperature: float = 0.7,  # Temperature for model responses
         # ... other common agent params from create_default_agent ...

@@ -12,15 +12,15 @@ from flock.core.agent.flock_agent_execution import FlockAgentExecution
 from flock.core.agent.flock_agent_integration import FlockAgentIntegration
 from flock.core.agent.flock_agent_serialization import FlockAgentSerialization
 from flock.core.component.agent_component_base import AgentComponent
-from flock.core.component.evaluation_component_base import (
-    EvaluationComponentBase,
+from flock.core.component.evaluation_component import (
+    EvaluationComponent,
 )
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component import RoutingModuleBase
 from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.context.context import FlockContext
 from flock.core.flock_router import HandOffRequest
 from flock.core.logging.logging import get_logger
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 # Mixins and Serialization components
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
@@ -80,7 +80,7 @@ class FlockAgentUnified(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         default=None,
         description="List of callable tools the agent can use. These must be registered.",
     )
-    servers: list[str | FlockMCPServerBase] | None = Field(
+    servers: list[str | FlockMCPServer] | None = Field(
         default=None,
         description="List of MCP Servers the agent can use to enhance its capabilities.",
     )
@@ -132,7 +132,7 @@ class FlockAgentUnified(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
-        servers: list[str | FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServer] | None = None,
         components: list[AgentComponent] | None = None,
         write_to_file: bool = False,
         wait_for_input: bool = False,
@@ -163,10 +163,10 @@ class FlockAgentUnified(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
     # These provide familiar access patterns while using the unified model
 
     @property
-    def evaluator(self) -> EvaluationComponentBase | None:
+    def evaluator(self) -> EvaluationComponent | None:
         """Get the primary evaluation component for this agent."""
         return next(
-            (c for c in self.components if isinstance(c, EvaluationComponentBase)),
+            (c for c in self.components if isinstance(c, EvaluationComponent)),
             None
         )
 

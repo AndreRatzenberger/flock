@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import Field, model_validator
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.routing_component_base import RoutingComponentBase
+from flock.core.component.routing_component import RoutingComponent
 from flock.core.context.context import FlockContext
-from flock.core.registry import flock_component, get_registry
+
 # HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
+from flock.core.registry import flock_component, get_registry
 
 if TYPE_CHECKING:
     from flock.core.flock_agent import FlockAgent
@@ -148,7 +149,7 @@ class ConditionalRoutingConfig(AgentComponentConfig):
 
 
 @flock_component(config_class=ConditionalRoutingConfig)
-class ConditionalRoutingComponent(RoutingComponentBase):
+class ConditionalRoutingComponent(RoutingComponent):
     """Routes workflow based on evaluating a condition against a value in the FlockContext.
     
     Supports various built-in checks (string, number, list, type, bool, existence)
@@ -436,7 +437,7 @@ class ConditionalRoutingComponent(RoutingComponentBase):
 
             next_agent = cfg.success_agent or None  # Stop chain if None
             logger.debug(f"Success route target: '{next_agent}'")
-            
+
             agent.next_agent = next_agent  # Set directly on agent
 
         else:
@@ -481,7 +482,7 @@ class ConditionalRoutingComponent(RoutingComponentBase):
                     logger.debug(
                         f"Failure route target (after retries): '{next_agent}'"
                     )
-                    
+
                     agent.next_agent = next_agent
             else:
                 # --- No Retry Logic ---
@@ -489,5 +490,5 @@ class ConditionalRoutingComponent(RoutingComponentBase):
                     cfg.failure_agent or None
                 )  # Use failure agent or stop
                 logger.debug(f"Failure route target (no retry): '{next_agent}'")
-                
+
                 agent.next_agent = next_agent

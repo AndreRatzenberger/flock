@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from flock.core.config.flock_agent_config import FlockAgentConfig
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 from flock.core.serialization.json_encoder import FlockJSONEncoder
 from flock.workflow.temporal_config import TemporalActivityConfig
 
@@ -97,7 +97,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             description="List of callable tools the agent can use. These must be registered.",
         )
     )
-    servers: list[str | FlockMCPServerBase] | None = Field(
+    servers: list[str | FlockMCPServer] | None = Field(
         default=None,
         description="List of MCP Servers the agent can use to enhance its capabilities. These must be registered.",
     )
@@ -151,7 +151,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
-        servers: list[str | FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServer] | None = None,
         evaluator: "FlockEvaluator | None" = None,
         handoff_router: "FlockRouter | None" = None,
         # Use dict for modules
@@ -364,9 +364,9 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
 
                     FlockRegistry = get_registry()  # Get the registry
                     for server in self.servers:
-                        registered_server: FlockMCPServerBase | None = None
+                        registered_server: FlockMCPServer | None = None
                         server_tools = []
-                        if isinstance(server, FlockMCPServerBase):
+                        if isinstance(server, FlockMCPServer):
                             # check if registered
                             server_name = server.config.name
                             registered_server = FlockRegistry.get_server(
@@ -825,7 +825,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             )
             serialized_servers = []
             for server in self.servers:
-                if isinstance(server, FlockMCPServerBase):
+                if isinstance(server, FlockMCPServer):
                     serialized_servers.append(server.config.name)
                 else:
                     # Write it down as a list of server names.
@@ -1088,7 +1088,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
                 if isinstance(server_name, str):
                     # Case 1 (default behavior): A server name is passe.
                     agent.servers.append(server_name)
-                elif isinstance(server_name, FlockMCPServerBase):
+                elif isinstance(server_name, FlockMCPServer):
                     # Case 2 (highly unlikely): If someone somehow manages to pass
                     # an instance of a server during the deserialization step (however that might be achieved)
                     # check the registry, if the server is already registered, if not, register it

@@ -30,10 +30,10 @@ from flock.adapter.faiss_adapter import FAISSAdapter
 from flock.adapter.pinecone_adapter import PineconeAdapter
 from flock.adapter.vector_base import VectorAdapter
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.utility_component_base import UtilityComponentBase
+from flock.core.component.utility_component import UtilityComponent
 from flock.core.context.context import FlockContext
-from flock.core.registry import flock_component
 from flock.core.logging.logging import get_logger
+from flock.core.registry import flock_component
 
 # Conditional import for MetricsUtilityComponent to avoid circular imports
 if TYPE_CHECKING:
@@ -423,7 +423,7 @@ class MemoryStore:
 
 
 @flock_component(config_class=MemoryUtilityConfig)
-class MemoryUtilityComponent(UtilityComponentBase):
+class MemoryUtilityComponent(UtilityComponent):
     """Enterprise-ready memory utility component using real datastores."""
 
     config: MemoryUtilityConfig = Field(

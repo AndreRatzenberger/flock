@@ -3,12 +3,14 @@
 
 from typing import TYPE_CHECKING
 
-from flock.core.flock_server_manager import FlockServerManager as InternalServerManager
+from flock.core.flock_server_manager import (
+    FlockServerManager as InternalServerManager,
+)
 from flock.core.logging.logging import get_logger
 
 if TYPE_CHECKING:
     from flock.core.flock import Flock
-    from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+    from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 logger = get_logger("flock.server_manager")
 
@@ -21,12 +23,12 @@ class FlockServerManager:
         # Use the existing internal server manager
         self._internal_mgr = InternalServerManager()
 
-    def add_server(self, server: "FlockMCPServerBase") -> "FlockMCPServerBase":
+    def add_server(self, server: "FlockMCPServer") -> "FlockMCPServer":
         """Adds a server instance to this Flock configuration and registry as well as set it up to be managed by internal manager."""
-        from flock.core.registry import get_registry
         from flock.core.mcp.flock_mcp_server import (
-            FlockMCPServerBase as ConcreteFlockMCPServer,
+            FlockMCPServer as ConcreteFlockMCPServer,
         )
+        from flock.core.registry import get_registry
 
         registry = get_registry()
 
@@ -60,6 +62,6 @@ class FlockServerManager:
         return await self._internal_mgr.__aexit__(exc_type, exc_val, exc_tb)
 
     @property
-    def servers(self) -> dict[str, "FlockMCPServerBase"]:
+    def servers(self) -> dict[str, "FlockMCPServer"]:
         """Returns the dictionary of servers managed by this Flock instance."""
         return self.flock._servers

@@ -13,7 +13,7 @@ from flock.components.utility.output_utility_component import (
 from flock.components.utility.metrics_utility_component import (
     MetricsUtilityComponent, MetricsUtilityConfig
 )
-from flock.core.component.routing_component_base import RoutingModuleBase
+from flock.core.component.routing_component import RoutingModuleBase
 from flock.core.component.agent_component_base import AgentComponentConfig
 from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent

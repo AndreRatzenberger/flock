@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.routing_component_base import RoutingComponentBase
+from flock.core.component.routing_component import RoutingComponent
 from flock.core.context.context import FlockContext
-from flock.core.registry import flock_component
 from flock.core.logging.logging import get_logger
+from flock.core.registry import flock_component
 
 if TYPE_CHECKING:
     from flock.core.flock_agent import FlockAgent
@@ -27,7 +27,7 @@ class DefaultRoutingConfig(AgentComponentConfig):
 
 
 @flock_component(config_class=DefaultRoutingConfig)
-class DefaultRoutingComponent(RoutingComponentBase):
+class DefaultRoutingComponent(RoutingComponent):
     """Default routing component implementation.
 
     This router simply uses the configured hand_off property to determine the next agent.

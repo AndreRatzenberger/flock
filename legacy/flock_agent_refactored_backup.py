@@ -20,7 +20,7 @@ from flock.core.context.context import FlockContext
 from flock.core.flock_evaluator import FlockEvaluator, FlockEvaluatorConfig
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.flock_router import FlockRouter, FlockRouterConfig
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 # Mixins and Serialization components
 from flock.core.mixin.dspy_integration import DSPyIntegrationMixin
@@ -82,7 +82,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
             description="List of callable tools the agent can use. These must be registered.",
         )
     )
-    servers: list[str | FlockMCPServerBase] | None = Field(
+    servers: list[str | FlockMCPServer] | None = Field(
         default=None,
         description="List of MCP Servers the agent can use to enhance its capabilities. These must be registered.",
     )
@@ -136,7 +136,7 @@ class FlockAgent(BaseModel, Serializable, DSPyIntegrationMixin, ABC):
         input: SignatureType = None,
         output: SignatureType = None,
         tools: list[Callable[..., Any]] | None = None,
-        servers: list[str | FlockMCPServerBase] | None = None,
+        servers: list[str | FlockMCPServer] | None = None,
         evaluator: FlockEvaluator | None = None,
         handoff_router: FlockRouter | None = None,
         # Use dict for modules

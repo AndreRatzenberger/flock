@@ -9,7 +9,7 @@ from flock.core.context.context import FlockContext
 from .agent_component_base import AgentComponent
 
 
-class EvaluationComponentBase(AgentComponent):
+class EvaluationComponent(AgentComponent):
     """Base class for evaluation components.
     
     Evaluation components implement the core intelligence/logic of an agent.
@@ -23,7 +23,7 @@ class EvaluationComponentBase(AgentComponent):
     - ScriptEvaluationComponent (Python script-based)
     - LLMEvaluationComponent (direct LLM API)
     """
-    
+
     @abstractmethod
     async def evaluate_core(
         self,

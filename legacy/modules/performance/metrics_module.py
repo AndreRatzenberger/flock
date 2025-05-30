@@ -15,7 +15,7 @@ from flock.core.context.context import FlockContext
 from flock.core.flock_agent import FlockAgent
 from flock.core.flock_module import FlockModule, FlockModuleConfig
 from flock.core.flock_registry import flock_component
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 
 class MetricPoint(BaseModel):
@@ -525,7 +525,7 @@ class MetricsModule(FlockModule):
 
     # --- MCP Server Lifecycle Hooks ---
     async def on_server_error(
-        self, server: FlockMCPServerBase, error: Exception
+        self, server: FlockMCPServer, error: Exception
     ) -> None:
         """Record server error metrics."""
         self._record_metric(
@@ -537,7 +537,7 @@ class MetricsModule(FlockModule):
             },
         )
 
-    async def on_pre_server_init(self, server: FlockMCPServerBase):
+    async def on_pre_server_init(self, server: FlockMCPServer):
         """Initialize metrics collection for server."""
         self._server_start_time = time.time()
 
@@ -549,7 +549,7 @@ class MetricsModule(FlockModule):
                 {"server": server.config.name, "phase": "pre_init"},
             )
 
-    async def on_post_server_init(self, server: FlockMCPServerBase):
+    async def on_post_server_init(self, server: FlockMCPServer):
         """Collect metrics after server starts."""
         if self.config.collect_memory:
             checkpoint_memory = psutil.Process().memory_info().rss
@@ -559,7 +559,7 @@ class MetricsModule(FlockModule):
                 {"server": server.config.name, "phase": "post_init"},
             )
 
-    async def on_pre_server_terminate(self, server: FlockMCPServerBase):
+    async def on_pre_server_terminate(self, server: FlockMCPServer):
         """Collect metrics before server terminates."""
         if self.config.collect_memory:
             checkpoint_memory = psutil.Process().memory_info().rss
@@ -569,7 +569,7 @@ class MetricsModule(FlockModule):
                 {"server": server.config.name, "phase": "pre_terminate"},
             )
 
-    async def on_post_server_terminate(self, server: FlockMCPServerBase):
+    async def on_post_server_terminate(self, server: FlockMCPServer):
         """Collect metrics after server terminates.
 
         Clean up and final metric recording.
@@ -600,7 +600,7 @@ class MetricsModule(FlockModule):
                 json.dump(summary, f, indent=2)
 
     async def on_pre_mcp_call(
-        self, server: FlockMCPServerBase, arguments: Any | None = None
+        self, server: FlockMCPServer, arguments: Any | None = None
     ):
         """Record pre-call metrics."""
         if self.config.collect_cpu:
@@ -630,7 +630,7 @@ class MetricsModule(FlockModule):
             )
 
     async def on_post_mcp_call(
-        self, server: FlockMCPServerBase, result: Any | None = None
+        self, server: FlockMCPServer, result: Any | None = None
     ):
         """Record post-call metrics."""
         if self.config.collect_timing and self._server_start_time:
@@ -661,7 +661,7 @@ class MetricsModule(FlockModule):
             )
 
     async def on_connect(
-        self, server: FlockMCPServerBase, additional_params: dict[str, Any]
+        self, server: FlockMCPServer, additional_params: dict[str, Any]
     ) -> dict[str, Any]:
         """Collect metrics during connect."""
         # We should track the refresh rate for clients

@@ -7,13 +7,15 @@ from typing import TYPE_CHECKING, Any
 from pydantic import Field
 
 from flock.core.component.agent_component_base import AgentComponentConfig
-from flock.core.component.utility_component_base import UtilityComponentBase
+from flock.core.component.utility_component import UtilityComponent
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_BATCH_SILENT_MODE
-from flock.core.registry import flock_component
-from flock.core.logging.formatters.themed_formatter import ThemedAgentResultFormatter
+from flock.core.logging.formatters.themed_formatter import (
+    ThemedAgentResultFormatter,
+)
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.core.logging.logging import get_logger
+from flock.core.registry import flock_component
 
 if TYPE_CHECKING:
     from flock.core.flock_agent import FlockAgent
@@ -58,7 +60,7 @@ class OutputUtilityConfig(AgentComponentConfig):
 
 
 @flock_component(config_class=OutputUtilityConfig)
-class OutputUtilityComponent(UtilityComponentBase):
+class OutputUtilityComponent(UtilityComponent):
     """Utility component that handles output formatting and display."""
 
     config: OutputUtilityConfig = Field(
@@ -97,7 +99,7 @@ class OutputUtilityComponent(UtilityComponentBase):
         """Format a dictionary with proper indentation."""
         if not d:
             return "{}"
-        
+
         items = []
         prefix = "  " * indent
         for key, value in d.items():
@@ -105,17 +107,17 @@ class OutputUtilityComponent(UtilityComponentBase):
                 value = value[:97] + "..."
             formatted_value = self._format_value(value, key)
             items.append(f"{prefix}  {key}: {formatted_value}")
-        
+
         return "{\n" + "\n".join(items) + f"\n{prefix}}}"
 
     def _format_list(self, lst: list[Any]) -> str:
         """Format a list with proper structure."""
         if not lst:
             return "[]"
-        
+
         if len(lst) <= 3:
             return str(lst)
-        
+
         # For longer lists, show first few items and count
         preview = [str(item) for item in lst[:3]]
         return f"[{', '.join(preview)}, ... ({len(lst)} total)]"
@@ -127,7 +129,7 @@ class OutputUtilityComponent(UtilityComponentBase):
             language = match.group(1) or "text"
             code = match.group(2)
             return f"[CODE:{language}]\n{code}\n[/CODE]"
-        
+
         # Replace markdown-style code blocks
         text = re.sub(
             r"```(\w+)?\n(.*?)\n```", replace_code_block, text, flags=re.DOTALL

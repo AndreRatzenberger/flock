@@ -13,7 +13,7 @@ from flock.core.logging.logging import get_logger
 logger = get_logger("mcp.tool")
 tracer = trace.get_tracer(__name__)
 
-T = TypeVar("T", bound="FlockMCPToolBase")
+T = TypeVar("T", bound="FlockMCPTool")
 
 TYPE_MAPPING = {
     "string": str,
@@ -25,7 +25,7 @@ TYPE_MAPPING = {
 }
 
 
-class FlockMCPToolBase(BaseModel):
+class FlockMCPTool(BaseModel):
     """Base Class for MCP Tools for Flock."""
 
     name: str = Field(..., description="Name of the tool")

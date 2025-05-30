@@ -17,7 +17,7 @@ from typing import (
 from box import Box
 from temporalio import workflow
 
-from flock.core.mcp.flock_mcp_server import FlockMCPServerBase
+from flock.core.mcp.flock_mcp_server import FlockMCPServer
 
 with workflow.unsafe.imports_passed_through():
     from datasets import Dataset  # type: ignore
@@ -125,7 +125,7 @@ class Flock(BaseModel, Serializable):
     _start_input: dict = {}  # For potential pre-configuration
 
     # Internal server storage - not part of the Pydantic model for direct serialization
-    _servers: dict[str, FlockMCPServerBase]
+    _servers: dict[str, FlockMCPServer]
 
     # Note: _mgr is now handled by the server manager helper
 
@@ -207,7 +207,7 @@ class Flock(BaseModel, Serializable):
         enable_temporal: bool = False,
         enable_opik: bool = False,
         agents: list[FlockAgent] | None = None,
-        servers: list[FlockMCPServerBase] | None = None,
+        servers: list[FlockMCPServer] | None = None,
         temporal_config: TemporalWorkflowConfig | None = None,
         temporal_start_in_process_worker: bool = True,
         **kwargs,
@@ -296,7 +296,7 @@ class Flock(BaseModel, Serializable):
 
 
 
-    def add_server(self, server: FlockMCPServerBase) -> FlockMCPServerBase:
+    def add_server(self, server: FlockMCPServer) -> FlockMCPServer:
         """Adds a server instance to this Flock configuration and registry."""
         return self._server_manager.add_server(server)
 
@@ -349,7 +349,7 @@ class Flock(BaseModel, Serializable):
         return self._agents
 
     @property
-    def servers(self) -> dict[str, FlockMCPServerBase]:
+    def servers(self) -> dict[str, FlockMCPServer]:
         """Returns the dictionary of servers managed by this Flock instance."""
         return self._server_manager.servers
 
@@ -361,7 +361,7 @@ class Flock(BaseModel, Serializable):
         run_id: str = "",
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
-        servers: list[FlockMCPServerBase] | None = None,
+        servers: list[FlockMCPServer] | None = None,
         memo: dict[str, Any] | None = None,
     ) -> Box | dict:
         """Synchronous execution wrapper."""
@@ -384,7 +384,7 @@ class Flock(BaseModel, Serializable):
         run_id: str = "",
         box_result: bool = True,
         agents: list[FlockAgent] | None = None,
-        servers: list[FlockMCPServerBase] | None = None,
+        servers: list[FlockMCPServer] | None = None,
         memo: dict[str, Any] | None = None,
     ) -> Box | dict:
         """Entry point for running an agent system asynchronously."""
