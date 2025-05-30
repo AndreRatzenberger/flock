@@ -1,7 +1,10 @@
 # src/flock/core/agent/flock_agent_integration.py
 """Tool and server integration functionality for FlockAgent."""
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from functools import wraps
+from inspect import Parameter, signature
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from flock.core.context.context import FlockContext
 from flock.core.logging.logging import get_logger
@@ -12,6 +15,66 @@ if TYPE_CHECKING:
 
 logger = get_logger("agent.integration")
 
+R = TypeVar("R", bound=str)
+
+
+def adapt(prop_name: str, fn: Callable[..., R]) -> Callable[[FlockContext], R]:
+    """Coerce *fn* into the canonical ``(ctx: FlockContext) -> str`` form.
+
+    Acceptable signatures
+    ---------------------
+    1. ``() -> str``                           (no parameters)
+    2. ``(ctx: FlockContext) -> str``          (exactly one positional parameter)
+
+    Anything else raises ``TypeError``.
+
+    The wrapper also enforces at runtime that the result is ``str``.
+    """
+    if not callable(fn):
+        raise TypeError(f"{prop_name} must be a callable, got {type(fn).__name__}")
+
+    sig = signature(fn)
+    params = list(sig.parameters.values())
+
+    def _validate_result(res: object) -> R:
+        if not isinstance(res, str):
+            raise TypeError(
+                f"{prop_name} callable must return str, got {type(res).__name__}"
+            )
+        return cast(R, res)
+
+    # ── Case 1: () -> str ────────────────────────────────────────────────────
+    if len(params) == 0:
+
+        @wraps(fn)
+        def _wrapped(ctx: FlockContext) -> R:
+            return _validate_result(fn())
+
+        return _wrapped
+
+    # ── Case 2: (ctx) -> str ────────────────────────────────────────────────
+    if len(params) == 1:
+        p: Parameter = params[0]
+        valid_kind = p.kind in (
+            Parameter.POSITIONAL_ONLY,
+            Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        valid_annotation = p.annotation in (Parameter.empty, FlockContext)
+        has_no_default = p.default is Parameter.empty
+
+        if valid_kind and valid_annotation and has_no_default:
+
+            @wraps(fn)
+            def _wrapped(ctx: FlockContext) -> R:
+                return _validate_result(fn(ctx))  # type: ignore[arg-type]
+
+            return _wrapped
+
+    # ── Anything else: reject ───────────────────────────────────────────────
+    raise TypeError(
+        f"{prop_name} callable must be () -> str or (ctx: FlockContext) -> str; "
+        f"got signature {sig}"
+    )
 
 class FlockAgentIntegration:
     """Handles tool and server integration for FlockAgent including MCP servers and callable tools."""
@@ -19,30 +82,26 @@ class FlockAgentIntegration:
     def __init__(self, agent: "FlockAgent"):
         self.agent = agent
 
-    def resolve_callables(self, context: FlockContext | None = None) -> None:
-        """Resolves callable fields (description, input, output) using context."""
-        if callable(self.agent.description):
-            self.agent.description = self.agent.description(
-                context
-            )  # Pass context if needed by callable
-        if callable(self.agent.input):
-            self.agent.input = self.agent.input(context)
-        if callable(self.agent.output):
-            self.agent.output = self.agent.output(context)
+    def _resolve(self, raw: str | Callable[..., str], name: str, ctx: FlockContext | None) -> str | None:
+        if callable(raw):
+            raw = adapt(name, raw)(ctx or FlockContext())
+        return raw
 
-    def resolve_description(self, context: FlockContext | None = None) -> str:
-        if callable(self.agent.description):
-            try:
-                # Attempt to call without context first.
-                return self.agent.description(context)
-            except Exception as e:
-                logger.error(
-                    f"Error resolving callable description for agent '{self.agent.name}': {e}"
-                )
-                return None
-        elif isinstance(self.agent.description, str):
-            return self.agent.description
-        return None
+    def resolve_description(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the agent's description, handling callable descriptions."""
+        return self._resolve(self.agent.description_spec, "description", context)
+
+    def resolve_input(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the agent's input, handling callable inputs."""
+        return self._resolve(self.agent.input_spec, "input", context)
+
+    def resolve_output(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the agent's output, handling callable outputs."""
+        return self._resolve(self.agent.output_spec, "output", context)
+
+    def resolve_next_agent(self, context: FlockContext | None = None) -> str | None:
+        """Resolve the next agent, handling callable next agents."""
+        return self._resolve(self.agent.next_agent_spec, "next_agent", context)
 
     async def get_mcp_tools(self) -> list[Any]:
         """Get tools from registered MCP servers."""

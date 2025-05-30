@@ -16,7 +16,7 @@ from flock.components.utility.metrics_utility_component import (
 # New unified components imported locally to avoid circular imports
 from flock.core.config.flock_agent_config import FlockAgentConfig
 from flock.core.config.scheduled_agent_config import ScheduledAgentConfig
-from flock.core.flock_agent import FlockAgent, SignatureType
+from flock.core.flock_agent import DynamicStr, FlockAgent
 from flock.core.logging.formatters.themes import OutputTheme
 from flock.core.mcp.flock_mcp_server import FlockMCPServer
 from flock.core.mcp.mcp_config import (
@@ -388,10 +388,10 @@ class FlockFactory:
     @staticmethod
     def create_default_agent(
         name: str,
-        description: str | Callable[..., str] | None = None,
+        description: DynamicStr| None = None,
         model: str | Callable[..., str] | None = None,
-        input: SignatureType = None,
-        output: SignatureType = None,
+        input: DynamicStr = None,
+        output: DynamicStr = None,
         tools: list[Callable[..., Any] | Any] | None = None,
         servers: list[str | FlockMCPServer] | None = None,
         use_cache: bool = True,
@@ -408,6 +408,7 @@ class FlockFactory:
         write_to_file: bool = False,
         stream: bool = False,
         include_thought_process: bool = False,
+        next_agent: DynamicStr | None = None,
         temporal_activity_config: TemporalActivityConfig | None = None,
     ) -> FlockAgent:
         """Creates a default FlockAgent using unified component architecture.
@@ -479,7 +480,7 @@ class FlockFactory:
             components=[evaluator, output_component, metrics_component],
             config=FlockAgentConfig(write_to_file=write_to_file,
                                     wait_for_input=wait_for_input),
-            next_agent=None,  # No next agent by default
+            next_agent=next_agent,
             temporal_activity_config=temporal_activity_config,
         )
 
@@ -489,14 +490,15 @@ class FlockFactory:
     def create_scheduled_agent(
         name: str,
         schedule_expression: str,  # e.g., "every 1h", "0 0 * * *"
-        description: str | Callable[..., str] | None = None,
-        model: str | Callable[..., str] | None = None,
-        output: SignatureType = None,  # Input might be implicit or none
+        description: DynamicStr | None = None,
+        model: str | None = None,
+        output: DynamicStr | None = None,  # Input might be implicit or none
         tools: list[Callable[..., Any] | Any] | None = None,
         servers: list[str | FlockMCPServer] | None = None,
         use_cache: bool = False,  # Whether to cache results
         temperature: float = 0.7,  # Temperature for model responses
         # ... other common agent params from create_default_agent ...
+        next_agent: DynamicStr | None = None,
         temporal_activity_config: TemporalActivityConfig
         | None = None,  # If you want scheduled tasks to be Temporal activities
         **kwargs,  # Forward other standard agent params
@@ -522,6 +524,7 @@ class FlockFactory:
                 temporal_activity_config=temporal_activity_config,
                 use_cache=use_cache,
                 temperature=temperature,
+                next_agent=next_agent,
                 **kwargs,
             )
         )

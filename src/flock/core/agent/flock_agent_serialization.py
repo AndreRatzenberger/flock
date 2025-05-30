@@ -68,20 +68,20 @@ class FlockAgentSerialization:
         is_output_callable = False
         is_next_agent_callable = False
         # if self.agent.description is a callable, exclude it
-        if callable(self.agent.description):
+        if callable(self.agent.description_spec):
             is_description_callable = True
-            exclude.append("description")
+            exclude.append("description_spec")
         # if self.agent.input is a callable, exclude it
-        if callable(self.agent.input):
+        if callable(self.agent.input_spec):
             is_input_callable = True
-            exclude.append("input")
+            exclude.append("input_spec")
         # if self.agent.output is a callable, exclude it
-        if callable(self.agent.output):
+        if callable(self.agent.output_spec):
             is_output_callable = True
-            exclude.append("output")
-        if callable(self.agent.next_agent):
+            exclude.append("output_spec")
+        if callable(self.agent.next_agent_spec):
             is_next_agent_callable = True
-            exclude.append("next_agent")
+            exclude.append("next_agent_spec")
 
         logger.debug(f"Serializing agent '{self.agent.name}' to dict.")
         # Use Pydantic's dump, exclude manually handled fields and runtime context
@@ -167,7 +167,7 @@ class FlockAgentSerialization:
                 )
 
         if is_description_callable:
-            path_str = registry.get_callable_path_string(self.agent.description)
+            path_str = registry.get_callable_path_string(self.agent.description_spec)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["description_callable"] = func_name
@@ -176,11 +176,11 @@ class FlockAgentSerialization:
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for description {self.agent.description} in agent '{self.agent.name}'. Skipping."
+                    f"Could not get path string for description {self.agent.description_spec} in agent '{self.agent.name}'. Skipping."
                 )
 
         if is_input_callable:
-            path_str = registry.get_callable_path_string(self.agent.input)
+            path_str = registry.get_callable_path_string(self.agent.input_spec)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["input_callable"] = func_name
@@ -189,11 +189,11 @@ class FlockAgentSerialization:
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for input {self.agent.input} in agent '{self.agent.name}'. Skipping."
+                    f"Could not get path string for input {self.agent.input_spec} in agent '{self.agent.name}'. Skipping."
                 )
 
         if is_output_callable:
-            path_str = registry.get_callable_path_string(self.agent.output)
+            path_str = registry.get_callable_path_string(self.agent.output_spec)
             if path_str:
                 func_name = path_str.split(".")[-1]
                 data["output_callable"] = func_name
@@ -202,20 +202,20 @@ class FlockAgentSerialization:
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for output {self.agent.output} in agent '{self.agent.name}'. Skipping."
+                    f"Could not get path string for output {self.agent.output_spec} in agent '{self.agent.name}'. Skipping."
                 )
 
         if is_next_agent_callable:
-            path_str = registry.get_callable_path_string(self.agent.next_agent)
+            path_str = registry.get_callable_path_string(self.agent.next_agent_spec)
             if path_str:
                 func_name = path_str.split(".")[-1]
-                data["next_agent"] = func_name
+                data["next_agent_callable"] = func_name
                 logger.debug(
                     f"Added next_agent '{func_name}' (from path '{path_str}') to agent '{self.agent.name}'"
                 )
             else:
                 logger.warning(
-                    f"Could not get path string for next_agent {self.agent.next_agent} in agent '{self.agent.name}'. Skipping."
+                    f"Could not get path string for next_agent {self.agent.next_agent_spec} in agent '{self.agent.name}'. Skipping."
                 )
 
 
@@ -245,6 +245,7 @@ class FlockAgentSerialization:
             "description_callable",
             "input_callable",
             "output_callable",
+            "next_agent_callable",
         ]
 
         for key in callable_keys:
@@ -373,6 +374,8 @@ class FlockAgentSerialization:
         resolve_and_assign("description", "description_callable")
         resolve_and_assign("input", "input_callable")
         resolve_and_assign("output", "output_callable")
+        resolve_and_assign("next_agent", "next_agent_callable")
+        # --- Finalize ---
 
         logger.info(f"Successfully deserialized agent '{agent.name}'.")
         return agent

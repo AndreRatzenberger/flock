@@ -7,10 +7,10 @@ from temporalio import activity
 
 from flock.core.context.context import FlockContext
 from flock.core.context.context_vars import FLOCK_CURRENT_AGENT, FLOCK_MODEL
-from flock.core.registry import get_registry
 
 # HandOffRequest removed - using agent.next_agent directly
 from flock.core.logging.logging import get_logger
+from flock.core.registry import get_registry
 from flock.core.util.input_resolver import resolve_inputs
 
 logger = get_logger("activities")
@@ -54,7 +54,7 @@ async def run_agent(context: FlockContext) -> dict:
         agent = registry.get_agent(current_agent_name)
         if agent.model is None or agent.evaluator.config.model is None:
             agent.set_model(context.get_variable(FLOCK_MODEL))
-        agent.resolve_callables(context=context)
+
         if not agent:
             logger.error("Agent not found", agent=current_agent_name)
             span.record_exception(
@@ -90,6 +90,13 @@ async def run_agent(context: FlockContext) -> dict:
                         exec_span.set_attribute("result", str(result))
                         logger.debug(
                             "Agent execution completed", agent=agent.name
+                        )
+                        context.record(
+                            agent.name,
+                            result,
+                            timestamp=datetime.now().isoformat(),
+                            hand_off=None,
+                            called_from=previous_agent_name,
                         )
                     except Exception as e:
                         logger.error(
@@ -140,13 +147,6 @@ async def run_agent(context: FlockContext) -> dict:
                         "No next agent found, completing chain",
                         agent=agent.name,
                     )
-                    context.record(
-                        agent.name,
-                        result,
-                        timestamp=datetime.now().isoformat(),
-                        hand_off=None,
-                        called_from=previous_agent_name,
-                    )
                     iter_span.add_event("chain completed")
                     return result
 
@@ -181,7 +181,7 @@ async def run_agent(context: FlockContext) -> dict:
                             "error": f"Next agent '{next_agent_name}' not found."
                         }
 
-                    agent.resolve_callables(context=context)
+
 
                     context.set_variable(FLOCK_CURRENT_AGENT, agent.name)
 
