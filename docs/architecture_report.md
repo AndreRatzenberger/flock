@@ -102,7 +102,7 @@ graph TB
     subgraph "FlockAgent (Minimal Core)"
         Agent[FlockAgent]
         ComponentsList[components: list]
-        NextAgent[next_agent: str | None]
+        NextAgent["next_agent: str | None"]
         Config[config: FlockAgentConfig]
     end
     
