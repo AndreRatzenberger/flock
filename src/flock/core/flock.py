@@ -279,7 +279,7 @@ class Flock(BaseModel, Serializable):
             agent_input = {self.benchmark_input_field: msg_content}
 
             result = await self.run_async(
-                start_agent=self.benchmark_agent_name,
+                agent=self.benchmark_agent_name,
                 input=agent_input,
                 box_result=False,
             )
@@ -355,7 +355,7 @@ class Flock(BaseModel, Serializable):
 
     def run(
         self,
-        start_agent: FlockAgent | str | None = None,
+        agent: FlockAgent | str | None = None,
         input: dict | None = None,
         context: FlockContext | None = None,
         run_id: str = "",
@@ -366,7 +366,7 @@ class Flock(BaseModel, Serializable):
     ) -> Box | dict:
         """Synchronous execution wrapper."""
         return self._execution.run(
-            start_agent=start_agent,
+            agent=agent,
             input=input,
             context=context,
             run_id=run_id,
@@ -378,7 +378,7 @@ class Flock(BaseModel, Serializable):
 
     async def run_async(
         self,
-        start_agent: FlockAgent | str | None = None,
+        agent: FlockAgent | str | None = None,
         input: dict | None = None,
         context: FlockContext | None = None,
         run_id: str = "",
@@ -389,7 +389,7 @@ class Flock(BaseModel, Serializable):
     ) -> Box | dict:
         """Entry point for running an agent system asynchronously."""
         return await self._execution.run_async(
-            start_agent=start_agent,
+            agent=agent,
             input=input,
             context=context,
             run_id=run_id,

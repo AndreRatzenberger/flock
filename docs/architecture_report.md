@@ -102,7 +102,7 @@ graph TB
     subgraph "FlockAgent (Minimal Core)"
         Agent[FlockAgent]
         ComponentsList[components: list]
-        NextAgent[next_agent: str | None]
+        NextAgent["next_agent: str | None"]
         Config[config: FlockAgentConfig]
     end
     
@@ -206,7 +206,7 @@ graph LR
     subgraph "Key Improvements"
         SRP[Single Responsibility Principle]
         Lazy[Lazy Loading]
-        Consistency[Consistent Naming (_helper)]
+        Consistency["Consistent Naming (_helper)"]
         Maintainability[Easier Maintenance]
     end
     

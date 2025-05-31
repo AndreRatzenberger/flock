@@ -89,7 +89,7 @@ def create_api_router() -> APIRouter:
                     typed_inputs = inputs_task # Simplified for now
 
                     result = await flock_instance.run_async(
-                        start_agent=agent_name_task, input=typed_inputs
+                        agent=agent_name_task, input=typed_inputs
                     )
                     run_store.update_run_result(run_id_task, result)
                 except Exception as e_task:

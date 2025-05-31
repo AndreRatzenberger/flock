@@ -356,7 +356,7 @@ async def test_run_async_temporal_uses_workflow_config(simple_agent, mocker):
 
     input_data = {"query": "test"}
     # 3. Run the flock
-    await flock_with_config.run_async(start_agent="agent1", input=input_data, box_result=False)
+    await flock_with_config.run_async(agent="agent1", input=input_data, box_result=False)
 
     # 4. Assert run_temporal_workflow was called correctly
     mock_temporal_exec.assert_awaited_once()
@@ -459,7 +459,7 @@ async def test_run_async_temporal_no_in_process_worker(basic_flock, simple_agent
     )
 
     # Run
-    await flock_no_worker.run_async(start_agent="agent1", input={"query": "test"}, box_result=False)
+    await flock_no_worker.run_async(agent="agent1", input={"query": "test"}, box_result=False)
 
     # Assert: setup_worker should NOT have been called
     mock_setup_worker.assert_not_awaited()

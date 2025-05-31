@@ -57,7 +57,7 @@ class FlockExecution:
 
     def run(
         self,
-        start_agent: "FlockAgent | str | None" = None,
+        agent: "FlockAgent | str | None" = None,
         input: dict | None = None,
         context: FlockContext | None = None,
         run_id: str = "",
@@ -69,7 +69,7 @@ class FlockExecution:
         """Synchronous execution wrapper."""
         return self._run_sync(
             self.run_async(
-                start_agent=start_agent,
+                agent=agent,
                 input=input,
                 context=context,
                 run_id=run_id,
@@ -82,7 +82,7 @@ class FlockExecution:
 
     async def run_async(
         self,
-        start_agent: "FlockAgent | str | None" = None,
+        agent: "FlockAgent | str | None" = None,
         input: dict | None = None,
         context: FlockContext | None = None,
         run_id: str = "",
@@ -120,7 +120,7 @@ class FlockExecution:
                         )
 
             # Determine starting agent name
-            start_agent_name = self._resolve_start_agent(start_agent)
+            start_agent_name = self._resolve_start_agent(agent)
 
             # Setup execution context and input
             run_input = input if input is not None else self.flock._start_input
@@ -179,7 +179,7 @@ class FlockExecution:
                 }
                 return Box(error_output) if box_result else error_output
 
-    def _resolve_start_agent(self, start_agent: "FlockAgent | str | None") -> str:
+    def _resolve_start_agent(self, agent: "FlockAgent | str | None") -> str:
         """Resolve the start agent name from various input types."""
         from flock.core.flock_agent import FlockAgent as ConcreteFlockAgent
         from flock.core.registry import get_registry
@@ -188,12 +188,12 @@ class FlockExecution:
 
         # Determine starting agent name
         start_agent_name: str | None = None
-        if isinstance(start_agent, ConcreteFlockAgent):
-            start_agent_name = start_agent.name
+        if isinstance(agent, ConcreteFlockAgent):
+            start_agent_name = agent.name
             if start_agent_name not in self.flock._agents:  # Add if not already present
-                self.flock.add_agent(start_agent)
-        elif isinstance(start_agent, str):
-            start_agent_name = start_agent
+                self.flock.add_agent(agent)
+        elif isinstance(agent, str):
+            start_agent_name = agent
         else:  # start_agent is None
             start_agent_name = self.flock._start_agent_name
 

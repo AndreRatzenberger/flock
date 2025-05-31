@@ -188,7 +188,7 @@ class EvaluationExecutor:
                 try:
                     # Run the agent/flock for this item
                     agent_output = await self.flock.run_async(
-                        start_agent=start_agent,  # Name or instance
+                        agent=start_agent,  # Name or instance
                         input=agent_inputs_with_static,
                         box_result=True,  # Use Box for easier access via dot notation
                         # context=... # Assuming isolated context for now
