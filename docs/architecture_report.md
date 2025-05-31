@@ -206,7 +206,7 @@ graph LR
     subgraph "Key Improvements"
         SRP[Single Responsibility Principle]
         Lazy[Lazy Loading]
-        Consistency[Consistent Naming (_helper)]
+        Consistency["Consistent Naming (_helper)"]
         Maintainability[Easier Maintenance]
     end
     
