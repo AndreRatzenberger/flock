@@ -40,6 +40,10 @@ class DeclarativeEvaluationConfig(AgentComponentConfig):
         default=False,
         description="Include the thought process in the output.",
     )
+    include_reasoning: bool = Field(
+        default=False,
+        description="Include the reasoning in the output.",
+    )
     kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -160,6 +164,9 @@ class DeclarativeEvaluationComponent(
             self._lm_history = lm_history
 
         console.print("\n")
+        result_dict = self.filter_reasoning(
+                    result_dict, self.config.include_reasoning
+                )
         return self.filter_thought_process(
             result_dict, self.config.include_thought_process
         )
@@ -174,6 +181,9 @@ class DeclarativeEvaluationComponent(
             result_dict, cost, lm_history = self._process_result(result_obj, inputs)
             self._cost = cost
             self._lm_history = lm_history
+            result_dict = self.filter_reasoning(
+                    result_dict, self.config.include_reasoning
+                )
             return self.filter_thought_process(
                 result_dict, self.config.include_thought_process
             )
@@ -196,3 +206,17 @@ class DeclarativeEvaluationComponent(
                 for k, v in result_dict.items()
                 if not (k.startswith("reasoning") or k.startswith("trajectory"))
             }
+
+    def filter_reasoning(
+        self, result_dict: dict[str, Any], include_reasoning: bool
+    ) -> dict[str, Any]:
+        """Filter out reasoning from the result dictionary."""
+        if include_reasoning:
+            return result_dict
+        else:
+            return {
+                k: v
+                for k, v in result_dict.items()
+                if not (k.startswith("reasoning"))
+            }
+
