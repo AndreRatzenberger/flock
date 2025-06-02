@@ -370,7 +370,7 @@ class FlockFactory:
 
         if not server_config:
             raise ValueError(
-                f"Unable to create server configuration for passed params."
+                "Unable to create server configuration for passed params."
             )
 
         server = concrete_server_cls(config=server_config)
@@ -408,6 +408,7 @@ class FlockFactory:
         write_to_file: bool = False,
         stream: bool = False,
         include_thought_process: bool = False,
+        include_reasoning: bool = False,
         next_agent: DynamicStr | None = None,
         temporal_activity_config: TemporalActivityConfig | None = None,
     ) -> FlockAgent:
@@ -444,6 +445,7 @@ class FlockFactory:
             max_retries=max_retries,
             stream=stream,
             include_thought_process=include_thought_process,
+            include_reasoning=include_reasoning,
         )
         evaluator = DeclarativeEvaluationComponent(
             name="default_evaluator", config=eval_config
